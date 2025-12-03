@@ -1,0 +1,31 @@
+# Stimma Upload Directory Security
+# SECURITY FIX: Prevent PHP execution in upload directory
+
+# Disable PHP execution
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+
+# Deny access to PHP files
+<FilesMatch "\.php$">
+    Require all denied
+</FilesMatch>
+
+# Deny access to PHP-like files
+<FilesMatch "\.(phtml|php3|php4|php5|phar|inc)$">
+    Require all denied
+</FilesMatch>
+
+# Deny access to hidden files (except this .htaccess)
+<FilesMatch "^\.[^h]">
+    Require all denied
+</FilesMatch>
+
+# Disable directory listing
+Options -Indexes
+
+# Remove handler for PHP files
+<IfModule mod_mime.c>
+    RemoveHandler .php .phtml .php3 .php4 .php5 .phar
+    RemoveType .php .phtml .php3 .php4 .php5 .phar
+</IfModule>

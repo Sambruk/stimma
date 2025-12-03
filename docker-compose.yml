@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  web:
+    image: php:8.2-apache
+    restart: always
+    ports:
+      - "172.17.0.1:13050:80"
+    volumes:
+      - /opt/app/stimma:/var/www/html
+      - /opt/app/stimma/upload:/var/www/html/upload
+    environment:
+      - APACHE_DOCUMENT_ROOT=/var/www/html
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      bash -c "
+        docker-php-ext-install pdo pdo_mysql mysqli &&
+        a2enmod rewrite &&
+        echo 'ServerName localhost' >> /etc/apache2/apache2.conf &&
+        apache2-foreground
+      "
+
+  db:
+    image: mariadb:10.11
+    restart: always
+    ports:
+      - "172.17.0.1:13306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: StimmaRoot2025!
+      MYSQL_DATABASE: stimma
+      MYSQL_USER: stimma_user
+      MYSQL_PASSWORD: StimmaSecure2025!
+    volumes:
+      - /opt/app/stimma/db:/var/lib/mysql
+      - /opt/app/stimma/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 5

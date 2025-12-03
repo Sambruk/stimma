@@ -1,0 +1,25 @@
+# Environment files with secrets
+.env
+
+# Uploaded files
+upload/*
+!upload/.htaccess
+!upload/.gitkeep
+
+# Log files
+logs/*
+!logs/.gitkeep
+
+# Database files
+db/*
+!db/.gitkeep
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
