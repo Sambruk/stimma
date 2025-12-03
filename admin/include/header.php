@@ -126,6 +126,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
             </ul>
             <ul class="nav flex-column mt-auto">
                 <li class="nav-item">
+                    <a href="user_guide.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'user_guide.php' ? 'active' : '' ?>">
+                        <i class="bi bi-book me-2"></i> Handbok
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a href="../index.php" class="nav-link text-white px-3 py-2 d-flex align-items-center">
                         <i class="bi bi-house-gear me-2"></i> Användarvyn
                     </a>
