@@ -20,8 +20,22 @@ if (!isLoggedIn()) {
     exit;
 }
 
+// Hämta aktuell användares information
+$currentUser = queryOne("SELECT id, email, role, is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
+$currentUserDomain = substr(strrchr($currentUser['email'], "@"), 1);
+$isSuperAdmin = $currentUser['role'] === 'super_admin';
+$isCurrentUserAdmin = $currentUser['is_admin'] == 1;
+
+// Kontrollera att användaren har behörighet att hantera användare
+if (!$isSuperAdmin && !$isCurrentUserAdmin) {
+    $_SESSION['message'] = 'Du har inte behörighet att hantera användare.';
+    $_SESSION['message_type'] = 'danger';
+    header('Location: index.php');
+    exit;
+}
+
 // Sätt sidtitel
-$page_title = 'Användarhantering';
+$page_title = $isSuperAdmin ? 'Användarhantering (alla organisationer)' : 'Användarhantering - ' . $currentUserDomain;
 
 // Hantera radering av användare (SECURITY FIX: Changed from GET to POST with CSRF validation)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' &&
@@ -47,7 +61,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' &&
     }
 
     // Hämta användarens e-postadress innan radering
-    $userEmail = queryOne("SELECT email FROM " . DB_DATABASE . ".users WHERE id = ?", [$userId])['email'] ?? 'Okänd e-post';
+    $targetUser = queryOne("SELECT email FROM " . DB_DATABASE . ".users WHERE id = ?", [$userId]);
+    $userEmail = $targetUser['email'] ?? 'Okänd e-post';
+    $targetUserDomain = $targetUser ? substr(strrchr($targetUser['email'], "@"), 1) : '';
+
+    // Kontrollera behörighet: Superadmin kan radera alla, Admin kan radera inom sin domän
+    if (!$isSuperAdmin && $targetUserDomain !== $currentUserDomain) {
+        $_SESSION['message'] = "Du kan endast radera användare i din egen organisation.";
+        $_SESSION['message_type'] = "danger";
+        header('Location: users.php');
+        exit;
+    }
 
     // Börja en transaktion för att säkerställa att både användare och framsteg raderas
     execute("START TRANSACTION");
@@ -86,20 +110,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' &&
 if (isset($_POST['action']) && $_POST['action'] === 'toggle_admin' && isset($_POST['user_id'])) {
     $userId = (int)$_POST['user_id'];
     $isAdmin = (int)$_POST['is_admin'];
-    
+
+    // Hämta målutbytarens domän för att kontrollera behörighet
+    $targetUser = queryOne("SELECT email FROM " . DB_DATABASE . ".users WHERE id = ?", [$userId]);
+    $targetUserDomain = $targetUser ? substr(strrchr($targetUser['email'], "@"), 1) : '';
+
+    // Kontrollera behörighet: Superadmin kan ändra alla, Admin kan ändra inom sin domän
+    if (!$isSuperAdmin && $targetUserDomain !== $currentUserDomain) {
+        $_SESSION['message'] = "Du kan endast ändra admin-status för användare i din egen organisation.";
+        $_SESSION['message_type'] = "danger";
+        header('Location: users.php');
+        exit;
+    }
+
     try {
         execute("UPDATE " . DB_DATABASE . ".users SET is_admin = ? WHERE id = ?", [$isAdmin, $userId]);
-        
+
         // Logga ändringen
         logActivity($_SESSION['user_email'], "Ändrade admin-status för användare med ID: " . $userId . " till " . ($isAdmin ? "admin" : "icke-admin"));
-        
+
         $_SESSION['message'] = "Användarens admin-status har uppdaterats.";
         $_SESSION['message_type'] = "success";
     } catch (Exception $e) {
         $_SESSION['message'] = "Ett fel uppstod vid uppdatering av admin-status: " . $e->getMessage();
         $_SESSION['message_type'] = "danger";
     }
-    
+
     // Omdirigera för att undvika omladdningsproblem
     header('Location: users.php');
     exit;
@@ -109,20 +145,32 @@ if (isset($_POST['action']) && $_POST['action'] === 'toggle_admin' && isset($_PO
 if (isset($_POST['action']) && $_POST['action'] === 'toggle_editor' && isset($_POST['user_id'])) {
     $userId = (int)$_POST['user_id'];
     $isEditor = (int)$_POST['is_editor'];
-    
+
+    // Hämta målutbytarens domän för att kontrollera behörighet
+    $targetUser = queryOne("SELECT email FROM " . DB_DATABASE . ".users WHERE id = ?", [$userId]);
+    $targetUserDomain = $targetUser ? substr(strrchr($targetUser['email'], "@"), 1) : '';
+
+    // Kontrollera behörighet: Superadmin kan ändra alla, Admin kan ändra inom sin domän
+    if (!$isSuperAdmin && $targetUserDomain !== $currentUserDomain) {
+        $_SESSION['message'] = "Du kan endast ändra redaktör-status för användare i din egen organisation.";
+        $_SESSION['message_type'] = "danger";
+        header('Location: users.php');
+        exit;
+    }
+
     try {
         execute("UPDATE " . DB_DATABASE . ".users SET is_editor = ? WHERE id = ?", [$isEditor, $userId]);
-        
+
         // Logga ändringen
         logActivity($_SESSION['user_email'], "Ändrade redaktör-status för användare med ID: " . $userId . " till " . ($isEditor ? "redaktör" : "icke-redaktör"));
-        
+
         $_SESSION['message'] = "Användarens redaktör-status har uppdaterats.";
         $_SESSION['message_type'] = "success";
     } catch (Exception $e) {
         $_SESSION['message'] = "Ett fel uppstod vid uppdatering av redaktör-status: " . $e->getMessage();
         $_SESSION['message_type'] = "danger";
     }
-    
+
     // Omdirigera för att undvika omladdningsproblem
     header('Location: users.php');
     exit;
@@ -130,52 +178,94 @@ if (isset($_POST['action']) && $_POST['action'] === 'toggle_editor' && isset($_P
 
 // Hantera skapande av ny användare
 if (isset($_POST['action']) && $_POST['action'] === 'create_user') {
-    $email = $_POST['email'] ?? '';
-    $isAdmin = isset($_POST['is_admin']) ? 1 : 0;
-    
-    if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    $inputValue = trim($_POST['email'] ?? '');
+
+    // För icke-superadmins: bygg e-postadressen från användarnamn + domän
+    if (!$isSuperAdmin) {
+        // Kontrollera att användarnamnet inte innehåller @
+        if (strpos($inputValue, '@') !== false) {
+            $error = 'Ange endast användarnamnet utan @' . $currentUserDomain . '. Domänen läggs till automatiskt.';
+        } elseif (empty($inputValue)) {
+            $error = 'Ange ett användarnamn.';
+        } elseif (!preg_match('/^[a-zA-Z0-9._-]+$/', $inputValue)) {
+            $error = 'Användarnamnet får endast innehålla bokstäver, siffror, punkt, bindestreck och understreck.';
+        } else {
+            $email = $inputValue . '@' . $currentUserDomain;
+        }
+    } else {
+        // Superadmin kan ange full e-postadress
+        $email = $inputValue;
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $error = 'Ange en giltig e-postadress.';
+        }
+    }
+
+    // Om ingen error, fortsätt med att skapa användaren
+    if (!isset($error) && isset($email)) {
         // Kontrollera om användaren redan finns
-        $user = queryOne("SELECT * FROM " . DB_DATABASE . ".users WHERE email = ?", [$email]);
-        
-        if ($user) {
-            $error = 'En användare med denna e-postadress finns redan.';
+        $existingUser = queryOne("SELECT * FROM " . DB_DATABASE . ".users WHERE email = ?", [$email]);
+
+        if ($existingUser) {
+            $error = 'En användare med e-postadressen ' . htmlspecialchars($email) . ' finns redan.';
         } else {
             // Skapa användaren automatiskt med endast de kolumner som finns i tabellen
-            execute("INSERT INTO " . DB_DATABASE . ".users (email, created_at) 
-                     VALUES (?, NOW())", 
+            execute("INSERT INTO " . DB_DATABASE . ".users (email, created_at)
+                     VALUES (?, NOW())",
                      [$email]);
-            
+
             // Logga skapandet av användaren
             logActivity($_SESSION['user_email'], "Skapade ny användare: " . $email);
-            
-            $_SESSION['message'] = 'Användaren har skapats.';
+
+            $_SESSION['message'] = 'Användaren ' . htmlspecialchars($email) . ' har skapats.';
             $_SESSION['message_type'] = 'success';
             header('Location: users.php');
             exit;
         }
-    } else {
-        $error = 'Ange en giltig e-postadress.';
     }
 }
 
-// Hämta det totala antalet lektioner i systemet
-$totalLessonsInSystem = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".lessons")['count'] ?? 0;
+// Hämta det totala antalet lektioner för organisationen
+if ($isSuperAdmin) {
+    $totalLessonsInSystem = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".lessons")['count'] ?? 0;
+} else {
+    $totalLessonsInSystem = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".lessons l
+        JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
+        WHERE c.organization_domain = ?", [$currentUserDomain])['count'] ?? 0;
+}
 
-// Hämta alla användare med statistik
-$users = queryAll("
-    SELECT u.*, 
-           COUNT(p.id) as completed_lessons
-    FROM " . DB_DATABASE . ".users u
-    LEFT JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id AND p.status = 'completed'
-    GROUP BY u.id
-    ORDER BY u.created_at DESC
-");
+// Hämta användare med statistik - filtrera på organisation om inte superadmin
+if ($isSuperAdmin) {
+    $users = queryAll("
+        SELECT u.*,
+               COUNT(p.id) as completed_lessons
+        FROM " . DB_DATABASE . ".users u
+        LEFT JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id AND p.status = 'completed'
+        GROUP BY u.id
+        ORDER BY u.created_at DESC
+    ");
+} else {
+    $users = queryAll("
+        SELECT u.*,
+               COUNT(p.id) as completed_lessons
+        FROM " . DB_DATABASE . ".users u
+        LEFT JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id AND p.status = 'completed'
+        WHERE u.email LIKE ?
+        GROUP BY u.id
+        ORDER BY u.created_at DESC
+    ", ['%@' . $currentUserDomain]);
+}
 
 // Inkludera header
 require_once 'include/header.php';
 ?>
 
 <div class="container-fluid">
+    <?php if (isset($error)): ?>
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i><?= $error ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Stäng"></button>
+    </div>
+    <?php endif; ?>
     <div class="row">
         <div class="col-12">
             <div class="card shadow mb-4">
@@ -233,6 +323,14 @@ require_once 'include/header.php';
                                                 <span class="badge <?= $roleInfo['class'] ?>"><?= $roleInfo['text'] ?></span>
                                             </td>
                                             <td>
+                                                <?php
+                                                // Visa admin-knapp endast om:
+                                                // - Superadmin kan ändra alla (förutom andra superadmins)
+                                                // - Admin kan ändra användare i sin organisation (förutom superadmins)
+                                                $targetIsSuperAdmin = ($user['role'] ?? '') === 'super_admin';
+                                                $canToggleAdmin = $isSuperAdmin || ($isCurrentUserAdmin && !$targetIsSuperAdmin);
+                                                ?>
+                                                <?php if ($canToggleAdmin): ?>
                                                 <form method="post" class="d-inline" onsubmit="return confirm('Är du säker på att du vill ändra admin-status för denna användare?');">
                                                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                                                     <input type="hidden" name="action" value="toggle_admin">
@@ -243,8 +341,14 @@ require_once 'include/header.php';
                                                         <?= $user['is_admin'] ? 'Admin' : 'Ej admin' ?>
                                                     </button>
                                                 </form>
+                                                <?php else: ?>
+                                                <span class="badge <?= $user['is_admin'] ? 'bg-success' : 'bg-secondary' ?>">
+                                                    <?= $user['is_admin'] ? 'Admin' : 'Ej admin' ?>
+                                                </span>
+                                                <?php endif; ?>
                                             </td>
                                             <td>
+                                                <?php if ($canToggleAdmin): ?>
                                                 <form method="post" class="d-inline" onsubmit="return confirm('Är du säker på att du vill ändra redaktör-status för denna användare?');">
                                                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                                                     <input type="hidden" name="action" value="toggle_editor">
@@ -255,6 +359,11 @@ require_once 'include/header.php';
                                                         <?= $user['is_editor'] ? 'Redaktör' : 'Ej redaktör' ?>
                                                     </button>
                                                 </form>
+                                                <?php else: ?>
+                                                <span class="badge <?= $user['is_editor'] ? 'bg-success' : 'bg-secondary' ?>">
+                                                    <?= $user['is_editor'] ? 'Redaktör' : 'Ej redaktör' ?>
+                                                </span>
+                                                <?php endif; ?>
                                             </td>
                                             <td>
                                                 <?php
@@ -271,11 +380,13 @@ require_once 'include/header.php';
                                                 </div>
                                             </td>
                                             <td>
-                                                <button type="button" class="btn btn-sm btn-danger delete-user" 
+                                                <?php if ($canToggleAdmin && $user['id'] !== $currentUser['id']): ?>
+                                                <button type="button" class="btn btn-sm btn-danger delete-user"
                                                         data-id="<?= $user['id'] ?>"
                                                         data-email="<?= htmlspecialchars($user['email']) ?>">
                                                     <i class="bi bi-trash"></i>
                                                 </button>
+                                                <?php endif; ?>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>
@@ -305,10 +416,24 @@ require_once 'include/header.php';
                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                 <div class="modal-body">
                     <input type="hidden" name="action" value="create_user">
+                    <?php if ($isSuperAdmin): ?>
                     <div class="mb-3">
                         <label for="email" class="form-label">E-postadress</label>
-                        <input type="email" class="form-control" id="email" name="email" required>
+                        <input type="email" class="form-control" id="email" name="email" placeholder="namn@domän.se" required>
+                        <div class="form-text">Som superadmin kan du skapa användare för alla organisationer.</div>
                     </div>
+                    <?php else: ?>
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Användarnamn</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="email" name="email" placeholder="fornamn.efternamn" required pattern="[a-zA-Z0-9._-]+">
+                            <span class="input-group-text">@<?= htmlspecialchars($currentUserDomain) ?></span>
+                        </div>
+                        <div class="form-text">
+                            Ange endast användarnamnet (delen före @). Domänen <strong><?= htmlspecialchars($currentUserDomain) ?></strong> läggs till automatiskt.
+                        </div>
+                    </div>
+                    <?php endif; ?>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>

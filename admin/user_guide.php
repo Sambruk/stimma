@@ -24,15 +24,36 @@ $page_title = 'Användarhandbok';
 $markdownFile = __DIR__ . '/../docs/USER_GUIDE.md';
 $markdownContent = file_exists($markdownFile) ? file_get_contents($markdownFile) : 'Handboken kunde inte hittas.';
 
+// Funktion för att skapa slug från rubriktext (matchar GitHub/markdown-style)
+function createSlug($text) {
+    $text = mb_strtolower($text, 'UTF-8');
+    // Ersätt mellanslag med bindestreck
+    $text = preg_replace('/\s+/', '-', trim($text));
+    // Ta bort allt utom bokstäver (inkl svenska), siffror och bindestreck
+    $text = preg_replace('/[^\p{L}\p{N}-]/u', '', $text);
+    // Normalisera multipla bindestreck till ett
+    $text = preg_replace('/-+/', '-', $text);
+    return $text;
+}
+
 // Enkel markdown till HTML-konvertering
 function convertMarkdownToHtml($markdown) {
     // Escapa HTML först
     $html = htmlspecialchars($markdown, ENT_QUOTES, 'UTF-8');
 
-    // Rubriker (måste göras före andra regler)
-    $html = preg_replace('/^### (.+)$/m', '<h5 class="mt-4 mb-3">$1</h5>', $html);
-    $html = preg_replace('/^## (.+)$/m', '<h4 class="mt-5 mb-3 text-primary">$1</h4>', $html);
-    $html = preg_replace('/^# (.+)$/m', '<h3 class="mb-4">$1</h3>', $html);
+    // Rubriker med id för ankarlänkar
+    $html = preg_replace_callback('/^### (.+)$/m', function($m) {
+        $id = createSlug($m[1]);
+        return '<h5 class="mt-4 mb-3" id="' . $id . '">' . $m[1] . '</h5>';
+    }, $html);
+    $html = preg_replace_callback('/^## (.+)$/m', function($m) {
+        $id = createSlug($m[1]);
+        return '<h4 class="mt-5 mb-3 text-primary" id="' . $id . '">' . $m[1] . '</h4>';
+    }, $html);
+    $html = preg_replace_callback('/^# (.+)$/m', function($m) {
+        $id = createSlug($m[1]);
+        return '<h3 class="mb-4" id="' . $id . '">' . $m[1] . '</h3>';
+    }, $html);
 
     // Horisontell linje
     $html = preg_replace('/^---$/m', '<hr class="my-4">', $html);
@@ -92,8 +113,8 @@ function convertMarkdownToHtml($markdown) {
 
     // Städa upp tomma p-taggar
     $html = preg_replace('/<p class="mb-3">\s*<\/p>/', '', $html);
-    $html = preg_replace('/<p class="mb-3">\s*(<h[3-5])/i', '$1', $html);
-    $html = preg_replace('/(<\/h[3-5]>)\s*<\/p>/i', '$1', $html);
+    $html = preg_replace('/<p class="mb-3">\s*(<h[3-6])/i', '$1', $html);
+    $html = preg_replace('/(<\/h[3-6]>)\s*<\/p>/i', '$1', $html);
     $html = preg_replace('/<p class="mb-3">\s*(<hr)/i', '$1', $html);
     $html = preg_replace('/(<\/ul>)\s*<\/p>/i', '$1', $html);
     $html = preg_replace('/<p class="mb-3">\s*(<ul)/i', '$1', $html);

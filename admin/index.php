@@ -23,11 +23,28 @@ $page_title = 'Admin';
 // Extra CSS för Chart.js
 $extra_head = '<script src="../include/js/chart.min.js"></script>';
 
-// Hämta statistik för dashboard
-$totalUsers = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".users")['count'] ?? 0;
-$totalCourses = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".courses")['count'] ?? 0;
-$totalLessons = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".lessons")['count'] ?? 0;
-$totalCompletions = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".progress WHERE status = 'completed'")['count'] ?? 0;
+// Hämta aktuell användares domän och roll
+$currentUser = queryOne("SELECT email, role, is_admin FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
+$currentUserDomain = substr(strrchr($currentUser['email'], "@"), 1);
+$isSuperAdmin = $currentUser['role'] === 'super_admin';
+
+// Hämta statistik för dashboard - filtrera på organisation om inte superadmin
+if ($isSuperAdmin) {
+    $totalUsers = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".users")['count'] ?? 0;
+    $totalCourses = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".courses")['count'] ?? 0;
+    $totalLessons = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".lessons")['count'] ?? 0;
+    $totalCompletions = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".progress WHERE status = 'completed'")['count'] ?? 0;
+} else {
+    // Filtrera på användarens domän
+    $totalUsers = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".users WHERE email LIKE ?", ['%@' . $currentUserDomain])['count'] ?? 0;
+    $totalCourses = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".courses WHERE organization_domain = ?", [$currentUserDomain])['count'] ?? 0;
+    $totalLessons = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".lessons l
+        JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
+        WHERE c.organization_domain = ?", [$currentUserDomain])['count'] ?? 0;
+    $totalCompletions = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".progress p
+        JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id
+        WHERE p.status = 'completed' AND u.email LIKE ?", ['%@' . $currentUserDomain])['count'] ?? 0;
+}
 
 // Hämta statistik per kurs
 $courseStats = query("SELECT 

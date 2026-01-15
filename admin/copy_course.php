@@ -127,6 +127,17 @@ function copyCourse($sourceCourseId, $targetDomain, $newAuthorId) {
         }
     }
 
+    // Lägg till användaren som redaktör på den nya kursen (om inte admin)
+    $copierUser = queryOne("SELECT is_admin, email FROM " . DB_DATABASE . ".users WHERE id = ?", [$newAuthorId]);
+    if ($copierUser && $copierUser['is_admin'] != 1) {
+        execute(
+            "INSERT INTO " . DB_DATABASE . ".course_editors (course_id, email, created_by)
+             VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE created_by = created_by",
+            [$newCourseId, $copierUser['email'], $newAuthorId]
+        );
+    }
+
     return [
         'success' => true,
         'message' => "Kursen '{$sourceCourse['title']}' har kopierats med {$lessonsCopied} lektioner.",

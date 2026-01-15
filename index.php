@@ -142,7 +142,7 @@ if (!$isLoggedIn) {
 // If not logged in - show email form
 if (!$isLoggedIn): 
     // Set page title
-    $page_title = $systemName . ' - Digitala verktyg för lärande';
+    $page_title = $systemName . ' - en nanolearningsplattform';
     // Include header
     require_once 'include/header.php';
 ?>
@@ -153,7 +153,7 @@ if (!$isLoggedIn):
                 <div class="card shadow-sm">
                     <div class="card-body text-center p-4">
                         <!-- Logo and system description -->
-                        <h1 class="display-4 mb-3"><img src="images/logo.png" height="50px" alt="<?= $systemName ?>"></h1>
+                        <h1 class="display-4 mb-3"><img src="images/stimma-logo.png" height="80px" alt="<?= $systemName ?>"></h1>
                         <?php if ($systemDescription): ?>
                             <p class="lead text-muted mb-4"><?= $systemDescription ?></p>
                         <?php endif; ?>
@@ -337,7 +337,7 @@ else:
     }
 
     // Set page title
-    $page_title = $systemName . ' - Digitala verktyg för lärande';
+    $page_title = $systemName . ' - en nanolearningsplattform';
     // Include header
     require_once 'include/header.php';
 ?>
@@ -413,13 +413,9 @@ else:
                                     $courseImageUrl = $firstLesson['course_image_url'] ?? null;
                                 ?>
                                 <?php if ($courseImageUrl): ?>
-                                    <div class="ratio ratio-16x9">
-                                        <img src="upload/<?= sanitize($courseImageUrl) ?>" class="card-img-top object-fit-cover max-height-150 max-height-md-none" alt="<?= sanitize($courseTitle) ?>">
-                                    </div>
+                                    <img src="upload/<?= sanitize($courseImageUrl) ?>" class="card-img-top course-image" alt="<?= sanitize($courseTitle) ?>">
                                 <?php else: ?>
-                                    <div class="ratio ratio-16x9">
-                                        <img src="images/placeholder.png" class="card-img-top object-fit-cover max-height-150 max-height-md-none" alt="<?= sanitize($courseTitle) ?>">
-                                    </div>
+                                    <img src="images/placeholder.png" class="card-img-top course-image" alt="<?= sanitize($courseTitle) ?>">
                                 <?php endif; ?>
                                 
                                 <div class="card-body d-flex flex-column px-3 py-3">
@@ -566,13 +562,9 @@ else:
                             <div class="col" data-tags="<?= htmlspecialchars(implode(',', $thisCourseTagIds)) ?>">
                                 <div class="card shadow-sm h-100">
                                     <?php if ($course['image_url']): ?>
-                                        <div class="ratio ratio-16x9">
-                                            <img src="upload/<?= sanitize($course['image_url']) ?>" class="card-img-top object-fit-cover max-height-150 max-height-md-none" alt="<?= sanitize($course['title']) ?>">
-                                        </div>
+                                        <img src="upload/<?= sanitize($course['image_url']) ?>" class="card-img-top course-image" alt="<?= sanitize($course['title']) ?>">
                                     <?php else: ?>
-                                        <div class="ratio ratio-16x9">
-                                            <img src="images/placeholder.png" class="card-img-top object-fit-cover max-height-150 max-height-md-none" alt="<?= sanitize($course['title']) ?>">
-                                        </div>
+                                        <img src="images/placeholder.png" class="card-img-top course-image" alt="<?= sanitize($course['title']) ?>">
                                     <?php endif; ?>
                                     
                                     <div class="card-body d-flex flex-column px-3 py-3">
