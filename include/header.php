@@ -57,10 +57,24 @@
                 <!-- Logo section with link to homepage -->
                 <h1 class="h3 mb-0">
                     <a href="index.php" aria-label="Hem">
-                        <img src="images/logo.png" height="50px" alt="<?= htmlspecialchars(SITE_NAME) ?>">
+                        <img src="images/stimma-logo.png" height="80px" alt="<?= htmlspecialchars(SITE_NAME) ?>">
                     </a>
                 </h1>
-                
+
+                <!-- Centered title with domain -->
+                <?php
+                $userDomain = '';
+                if (isset($_SESSION['user_email'])) {
+                    $emailParts = explode('@', $_SESSION['user_email']);
+                    $userDomain = isset($emailParts[1]) ? $emailParts[1] : '';
+                }
+                ?>
+                <div class="d-none d-md-block text-center">
+                    <span class="fw-bold text-dark" style="font-size: 1.4rem; letter-spacing: 0.5px;">
+                        Stimma - en nanolearningsplattform för <span class="text-primary"><?= htmlspecialchars($userDomain) ?></span>
+                    </span>
+                </div>
+
                 <!-- Right side section with user info and action buttons -->
                 <div class="d-flex align-items-center">
                     <!-- User email display with truncation for long addresses -->

@@ -73,7 +73,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
 <body>
     <div class="sidebar d-flex flex-column h-100">
         <div class="px-3 mb-4 text-center">
-            <h3 class="text-white"><img src="../images/logo.png" alt="Stimma" class="me-2 img-white" height="75"></h3>
+            <h3 class="text-white"><img src="../images/stimma-logo.png" alt="Stimma" class="me-2" height="75"></h3>
         </div>
         <div class="d-flex flex-column h-100">
             <ul class="nav flex-column">
@@ -104,12 +104,14 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     </a>
                 </li>
                 <?php endif; ?>
-                <?php if ($isAdmin): ?>
+                <?php if ($isAdmin || $isSuperAdmin): ?>
                 <li class="nav-item">
                     <a href="users.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'users.php' ? 'active' : '' ?>">
                         <i class="bi bi-people me-2"></i> Användare
                     </a>
                 </li>
+                <?php endif; ?>
+                <?php if ($isSuperAdmin): ?>
                 <li class="nav-item">
                     <a href="logs.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'logs.php' ? 'active' : '' ?>">
                         <i class="bi bi-clipboard-data me-2"></i> Loggar
@@ -117,6 +119,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 </li>
                 <?php endif; ?>
                 <?php if ($isSuperAdmin): ?>
+                <li class="nav-item">
+                    <a href="domains.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'domains.php' ? 'active' : '' ?>">
+                        <i class="bi bi-globe me-2"></i> Domäner
+                    </a>
+                </li>
                 <li class="nav-item">
                     <a href="ai_settings.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'ai_settings.php' ? 'active' : '' ?>">
                         <i class="bi bi-robot me-2"></i> AI-inställningar
@@ -142,7 +149,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     </div>
                 </li>
                 <li class="nav-item">
-                    <a href="logout.php" class="nav-link text-white px-3 py-2 d-flex align-items-center mb-3">
+                    <a href="../logout.php" class="nav-link text-white px-3 py-2 d-flex align-items-center mb-3">
                         <i class="bi bi-box-arrow-right me-2"></i> Logga ut
                     </a>
                 </li>

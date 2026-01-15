@@ -354,3 +354,17 @@ body {
     background-color: var(--light-gray);
     line-height: 1.6;
 }
+
+/* Course card images - show entire image without cropping */
+.card-img-top.course-image {
+    object-fit: contain;
+    background-color: var(--light-gray);
+    height: 180px;
+    width: 100%;
+}
+
+@media (max-width: 768px) {
+    .card-img-top.course-image {
+        height: 150px;
+    }
+}

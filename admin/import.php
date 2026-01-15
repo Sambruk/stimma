@@ -64,14 +64,18 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'
             if (!$user) {
                 throw new Exception('Kunde inte hitta användarinformation.');
             }
-            
+
+            // Hämta organization_domain från användarens e-post
+            $emailParts = explode('@', $_SESSION['user_email']);
+            $organizationDomain = isset($emailParts[1]) ? $emailParts[1] : '';
+
             // Skapa kursen
             $courseId = execute("
                 INSERT INTO " . DB_DATABASE . ".courses (
-                    title, description, difficulty_level, duration_minutes, 
-                    prerequisites, tags, image_url, status, sort_order, 
-                    featured, author_id, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                    title, description, difficulty_level, duration_minutes,
+                    prerequisites, tags, image_url, status, sort_order,
+                    featured, author_id, organization_domain, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
             ", [
                 $data['course']['title'],
                 $data['course']['description'],
@@ -83,7 +87,8 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'
                 'inactive', // Sätt alltid till inaktiv vid import
                 $data['course']['sort_order'] ?? 0,
                 $data['course']['featured'] ?? 0,
-                $user['id'] // Använd den inloggade användarens ID som author_id
+                $user['id'], // Använd den inloggade användarens ID som author_id
+                $organizationDomain // Sätt organization_domain från användarens e-postdomän
             ]);
 
             // Om användaren inte är admin, lägg till i course_editors

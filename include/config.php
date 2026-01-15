@@ -143,26 +143,36 @@ $allowedDomainsCache = null;
 
 /**
  * Check if a domain is allowed
- * 
+ *
  * @param string $domain The domain to check
  * @return bool True if domain is allowed, false otherwise
  */
 function isDomainAllowed($domain) {
     global $allowedDomainsCache;
-    
+
     // Use cached result if available
     if ($allowedDomainsCache !== null) {
         return in_array($domain, $allowedDomainsCache);
     }
-    
-    // Get allowed domains from configuration
-    $allowedDomainsStr = MAIL_ALLOWED_RECIPIENTS;
-    if (empty($allowedDomainsStr)) {
+
+    // Read allowed domains from file
+    $domainsFile = __DIR__ . '/../allowed_domains.txt';
+    if (!file_exists($domainsFile)) {
         $allowedDomainsCache = [];
         return false;
     }
-    
-    // Parse domains and cache the result
-    $allowedDomainsCache = array_map('trim', explode(',', $allowedDomainsStr));
+
+    $lines = file($domainsFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    $allowedDomainsCache = [];
+
+    foreach ($lines as $line) {
+        $line = trim($line);
+        // Skip comments and empty lines
+        if (empty($line) || $line[0] === '#') {
+            continue;
+        }
+        $allowedDomainsCache[] = $line;
+    }
+
     return in_array($domain, $allowedDomainsCache);
 }

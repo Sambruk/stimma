@@ -241,235 +241,344 @@ if ($selectedCourseId) {
     }
 }
 
+// Beräkna sammanfattande statistik
+$totalUsersCount = count($usersInDomain);
+$totalCompletedLessons = array_sum(array_column($usersInDomain, 'completed_lessons'));
+$totalCoursesCount = count($courseStats);
+$avgCompletionRate = 0;
+if (!empty($courseStats)) {
+    $totalPossibleCompletions = 0;
+    $actualCompletions = 0;
+    foreach ($courseStats as $stat) {
+        $totalPossibleCompletions += $stat['total_lessons'] * $stat['users_started'];
+        $actualCompletions += $stat['completed_count'];
+    }
+    $avgCompletionRate = $totalPossibleCompletions > 0 ? round(($actualCompletions / $totalPossibleCompletions) * 100) : 0;
+}
+
 // Inkludera header
 require_once 'include/header.php';
 ?>
 
+<?php if (empty($courses)): ?>
+<div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle me-2"></i>
+    Du har inga kurser att visa statistik för. Skapa en kurs eller bli tilldelad som redaktör för en befintlig kurs.
+</div>
+<?php else: ?>
+
+<!-- Dashboard Översiktskort -->
 <div class="row mb-4">
-    <div class="col-12">
-        <div class="card shadow mb-4">
-            <div class="card-header py-3 d-flex justify-content-between align-items-center">
-                <h6 class="m-0 font-weight-bold text-primary">
-                    <i class="bi bi-bar-chart me-2"></i><?= htmlspecialchars($statsTitle) ?>
-                </h6>
-                <div>
-                    <?php if ($isAdmin): ?>
-                    <span class="badge bg-primary me-2">Admin</span>
-                    <?php else: ?>
-                    <span class="badge bg-info me-2">Redaktör</span>
-                    <?php endif; ?>
-                    <span class="badge bg-secondary"><?= count($usersInDomain) ?> användare</span>
+    <div class="col-xl-3 col-md-6 mb-3">
+        <div class="card border-left-primary shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Användare</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $totalUsersCount ?></div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-people-fill text-primary" style="font-size: 2rem; opacity: 0.3;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6 mb-3">
+        <div class="card border-left-success shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Kurser</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $totalCoursesCount ?></div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-journal-text text-success" style="font-size: 2rem; opacity: 0.3;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6 mb-3">
+        <div class="card border-left-info shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Slutförda lektioner</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $totalCompletedLessons ?></div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-check-circle-fill text-info" style="font-size: 2rem; opacity: 0.3;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6 mb-3">
+        <div class="card border-left-warning shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Genomsnittlig slutförandegrad</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $avgCompletionRate ?>%</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-graph-up text-warning" style="font-size: 2rem; opacity: 0.3;"></i>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<?php if (empty($courses)): ?>
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="alert alert-warning">
-            <i class="bi bi-exclamation-triangle me-2"></i>
-            Du har inga kurser att visa statistik för. Skapa en kurs eller bli tilldelad som redaktör för en befintlig kurs.
-        </div>
-    </div>
-</div>
-<?php else: ?>
-
-<!-- Kursfilter -->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card shadow">
-            <div class="card-header py-3">
-                <h6 class="m-0 font-weight-bold text-primary">
-                    <i class="bi bi-funnel me-2"></i>Välj kurs för detaljerad statistik
+<!-- Kursval och användarframsteg -->
+<div class="card shadow mb-4">
+    <div class="card-header py-3 bg-primary text-white">
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <h6 class="m-0 font-weight-bold">
+                    <i class="bi bi-bar-chart-fill me-2"></i>Kursstatistik
                 </h6>
             </div>
-            <div class="card-body">
-                <form method="GET" class="row g-3 align-items-end">
-                    <div class="col-md-8">
-                        <label for="course_id" class="form-label">Kurs</label>
-                        <select name="course_id" id="course_id" class="form-select">
-                            <option value="">-- Välj en kurs --</option>
-                            <?php foreach ($courses as $course): ?>
-                            <option value="<?= $course['id'] ?>" <?= $selectedCourseId == $course['id'] ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($course['title']) ?>
-                            </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <button type="submit" class="btn btn-primary w-100">
-                            <i class="bi bi-search me-2"></i>Visa statistik
-                        </button>
-                    </div>
+            <div class="col-md-6">
+                <form method="GET" class="d-flex align-items-center justify-content-end gap-2 mb-0">
+                    <select name="course_id" id="course_id" class="form-select form-select-sm" style="max-width: 300px;" onchange="this.form.submit()">
+                        <option value="">-- Välj kurs --</option>
+                        <?php foreach ($courses as $course): ?>
+                        <option value="<?= $course['id'] ?>" <?= $selectedCourseId == $course['id'] ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($course['title']) ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <?php if ($selectedCourseId): ?>
+                    <a href="export_statistics.php?course_id=<?= $selectedCourseId ?>" class="btn btn-light btn-sm" title="Exportera till Excel">
+                        <i class="bi bi-file-earmark-excel"></i>
+                    </a>
+                    <?php endif; ?>
                 </form>
             </div>
         </div>
     </div>
-</div>
 
-<!-- Översikt per kurs -->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card shadow">
-            <div class="card-header py-3">
-                <h6 class="m-0 font-weight-bold text-primary">
-                    <i class="bi bi-journal-text me-2"></i>Kursöversikt
-                </h6>
+    <div class="card-body">
+        <?php if (!$selectedCourseId): ?>
+        <!-- Kursöversikt när ingen kurs är vald -->
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Kurs</th>
+                        <th class="text-center">Lektioner</th>
+                        <th class="text-center">Aktiva användare</th>
+                        <th class="text-center">Slutförda</th>
+                        <th style="width: 200px;">Slutförandegrad</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($courseStats as $stat):
+                        $completionRate = ($stat['total_lessons'] * $stat['users_started']) > 0
+                            ? round(($stat['completed_count'] / ($stat['total_lessons'] * $stat['users_started'])) * 100)
+                            : 0;
+                        $progressClass = $completionRate >= 75 ? 'bg-success' : ($completionRate >= 50 ? 'bg-info' : ($completionRate >= 25 ? 'bg-warning' : 'bg-danger'));
+                    ?>
+                    <tr style="cursor: pointer;" onclick="window.location='?course_id=<?= $stat['course_id'] ?>'">
+                        <td>
+                            <strong><?= htmlspecialchars($stat['course_title']) ?></strong>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-secondary"><?= $stat['total_lessons'] ?></span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-primary"><?= $stat['users_started'] ?></span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-success"><?= $stat['completed_count'] ?></span>
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="progress flex-grow-1 me-2" style="height: 8px;">
+                                    <div class="progress-bar <?= $progressClass ?>" style="width: <?= $completionRate ?>%;"></div>
+                                </div>
+                                <small class="text-muted"><?= $completionRate ?>%</small>
+                            </div>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <div class="text-center text-muted mt-3">
+            <small><i class="bi bi-info-circle me-1"></i>Klicka på en kurs för att se detaljerad användarstatistik</small>
+        </div>
+
+        <?php elseif ($courseDetails && !empty($userProgressGrouped)): ?>
+        <!-- Detaljerad användarframsteg för vald kurs -->
+        <div class="mb-3 d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="mb-1"><?= htmlspecialchars($courseDetails['title']) ?></h5>
+                <small class="text-muted">
+                    <?= count($userProgressGrouped) ?> användare ·
+                    <?= count($firstUser['lessons'] ?? []) ?> lektioner
+                </small>
             </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>Kurs</th>
-                                <th>Lektioner</th>
-                                <th>Användare påbörjat</th>
-                                <th>Slutförda lektioner</th>
-                                <th>Åtgärd</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($courseStats as $stat): ?>
-                            <tr>
-                                <td><?= htmlspecialchars($stat['course_title']) ?></td>
-                                <td><?= $stat['total_lessons'] ?></td>
-                                <td><?= $stat['users_started'] ?></td>
-                                <td><?= $stat['completed_count'] ?></td>
-                                <td>
-                                    <a href="?course_id=<?= $stat['course_id'] ?>" class="btn btn-sm btn-outline-primary">
-                                        <i class="bi bi-eye"></i> Detaljer
-                                    </a>
-                                </td>
-                            </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
+            <div class="d-flex gap-2">
+                <a href="export_statistics.php?course_id=<?= $selectedCourseId ?>" class="btn btn-success btn-sm">
+                    <i class="bi bi-file-earmark-excel me-1"></i>Exportera till Excel
+                </a>
+                <a href="?course_id=" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-arrow-left me-1"></i>Tillbaka
+                </a>
             </div>
         </div>
+
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="min-width: 220px; position: sticky; left: 0; background: #f8f9fa; z-index: 1;">Användare</th>
+                        <th style="min-width: 150px;">Framsteg</th>
+                        <?php
+                        $firstUser = reset($userProgressGrouped);
+                        if ($firstUser):
+                            $lessonNum = 1;
+                            foreach ($firstUser['lessons'] as $lesson):
+                        ?>
+                        <th class="text-center" style="min-width: 50px;" title="<?= htmlspecialchars($lesson['title']) ?>">
+                            <span class="badge bg-light text-dark"><?= $lessonNum++ ?></span>
+                        </th>
+                        <?php
+                            endforeach;
+                        endif;
+                        ?>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($userProgressGrouped as $userId => $userData):
+                        $percentage = $userData['total'] > 0 ? round(($userData['completed'] / $userData['total']) * 100) : 0;
+                        $progressClass = $percentage == 100 ? 'bg-success' : ($percentage >= 50 ? 'bg-info' : ($percentage > 0 ? 'bg-warning' : 'bg-secondary'));
+                    ?>
+                    <tr>
+                        <td style="position: sticky; left: 0; background: white; z-index: 1;">
+                            <div class="d-flex align-items-center">
+                                <div class="rounded-circle bg-<?= $percentage == 100 ? 'success' : 'primary' ?> text-white d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px; font-size: 12px;">
+                                    <?= strtoupper(substr($userData['email'], 0, 2)) ?>
+                                </div>
+                                <div>
+                                    <div class="fw-bold" style="font-size: 0.85rem;"><?= htmlspecialchars(explode('@', $userData['email'])[0]) ?></div>
+                                    <small class="text-muted"><?= htmlspecialchars(explode('@', $userData['email'])[1] ?? '') ?></small>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="progress flex-grow-1 me-2" style="height: 20px;">
+                                    <div class="progress-bar <?= $progressClass ?>" role="progressbar"
+                                         style="width: <?= $percentage ?>%;">
+                                        <?= $userData['completed'] ?>/<?= $userData['total'] ?>
+                                    </div>
+                                </div>
+                                <span class="badge <?= $progressClass ?>"><?= $percentage ?>%</span>
+                            </div>
+                        </td>
+                        <?php foreach ($userData['lessons'] as $lesson): ?>
+                        <td class="text-center align-middle">
+                            <?php if ($lesson['status'] === 'completed'): ?>
+                            <i class="bi bi-check-circle-fill text-success" style="font-size: 1.2rem;" title="Slutförd: <?= date('Y-m-d H:i', strtotime($lesson['completed_at'])) ?>"></i>
+                            <?php else: ?>
+                            <i class="bi bi-circle text-muted" style="font-size: 1.2rem;" title="Ej slutförd"></i>
+                            <?php endif; ?>
+                        </td>
+                        <?php endforeach; ?>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Lektionsförklaring -->
+        <div class="mt-3 p-3 bg-light rounded">
+            <h6 class="mb-2"><i class="bi bi-info-circle me-1"></i>Lektioner</h6>
+            <div class="row">
+                <?php
+                $lessonNum = 1;
+                foreach ($firstUser['lessons'] as $lesson):
+                ?>
+                <div class="col-md-4 col-lg-3 mb-1">
+                    <small><span class="badge bg-secondary me-1"><?= $lessonNum++ ?></span><?= htmlspecialchars($lesson['title']) ?></small>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+
+        <?php elseif ($selectedCourseId): ?>
+        <!-- Ingen data för vald kurs -->
+        <div class="text-center py-5">
+            <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
+            <h5 class="mt-3 text-muted">Inga användare har påbörjat denna kurs ännu</h5>
+            <a href="?course_id=" class="btn btn-outline-primary mt-2">
+                <i class="bi bi-arrow-left me-1"></i>Tillbaka till översikt
+            </a>
+        </div>
+        <?php endif; ?>
     </div>
 </div>
 
-<?php if ($courseDetails && !empty($userProgressGrouped)): ?>
-<!-- Detaljerad kursstatistik -->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card shadow">
-            <div class="card-header py-3 bg-primary text-white">
-                <h6 class="m-0 font-weight-bold">
-                    <i class="bi bi-person-lines-fill me-2"></i>Användarframsteg: <?= htmlspecialchars($courseDetails['title']) ?>
-                </h6>
-            </div>
-            <div class="card-body">
+<!-- Användaröversikt (dold bakom accordion för att spara plats) -->
+<?php if (!empty($usersInDomain) && !$selectedCourseId): ?>
+<div class="accordion mb-4" id="userAccordion">
+    <div class="accordion-item shadow">
+        <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#userList">
+                <i class="bi bi-people me-2"></i>
+                Alla användare i <?= htmlspecialchars($userDomain) ?>
+                <span class="badge bg-secondary ms-2"><?= count($usersInDomain) ?></span>
+            </button>
+        </h2>
+        <div id="userList" class="accordion-collapse collapse" data-bs-parent="#userAccordion">
+            <div class="accordion-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-bordered table-hover">
+                    <table class="table table-hover mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th style="min-width: 200px;">Användare</th>
-                                <th style="min-width: 120px;">Framsteg</th>
-                                <?php
-                                $firstUser = reset($userProgressGrouped);
-                                if ($firstUser):
-                                    foreach ($firstUser['lessons'] as $lesson):
-                                ?>
-                                <th class="text-center" style="min-width: 40px;" title="<?= htmlspecialchars($lesson['title']) ?>">
-                                    <small><?= mb_substr($lesson['title'], 0, 15) ?><?= mb_strlen($lesson['title']) > 15 ? '...' : '' ?></small>
-                                </th>
-                                <?php
-                                    endforeach;
-                                endif;
-                                ?>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($userProgressGrouped as $userId => $userData): ?>
-                            <tr>
-                                <td>
-                                    <strong><?= htmlspecialchars($userData['email']) ?></strong>
-                                    <?php if ($userData['name']): ?>
-                                    <br><small class="text-muted"><?= htmlspecialchars($userData['name']) ?></small>
-                                    <?php endif; ?>
-                                </td>
-                                <td>
-                                    <?php
-                                    $percentage = $userData['total'] > 0 ? round(($userData['completed'] / $userData['total']) * 100) : 0;
-                                    $progressClass = $percentage == 100 ? 'bg-success' : ($percentage > 50 ? 'bg-info' : ($percentage > 0 ? 'bg-warning' : 'bg-secondary'));
-                                    ?>
-                                    <div class="progress" style="height: 20px;">
-                                        <div class="progress-bar <?= $progressClass ?>" role="progressbar"
-                                             style="width: <?= $percentage ?>%;"
-                                             aria-valuenow="<?= $percentage ?>" aria-valuemin="0" aria-valuemax="100">
-                                            <?= $userData['completed'] ?>/<?= $userData['total'] ?>
-                                        </div>
-                                    </div>
-                                    <small class="text-muted"><?= $percentage ?>%</small>
-                                </td>
-                                <?php foreach ($userData['lessons'] as $lesson): ?>
-                                <td class="text-center">
-                                    <?php if ($lesson['status'] === 'completed'): ?>
-                                    <i class="bi bi-check-circle-fill text-success" title="Slutförd <?= $lesson['completed_at'] ?>"></i>
-                                    <?php else: ?>
-                                    <i class="bi bi-circle text-muted" title="Ej påbörjad"></i>
-                                    <?php endif; ?>
-                                </td>
-                                <?php endforeach; ?>
-                            </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-<?php elseif ($selectedCourseId && empty($userProgressGrouped)): ?>
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="alert alert-info">
-            <i class="bi bi-info-circle me-2"></i>Inga användare har påbörjat denna kurs ännu.
-        </div>
-    </div>
-</div>
-<?php endif; ?>
-
-<!-- Användaröversikt -->
-<?php if (!empty($usersInDomain)): ?>
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card shadow">
-            <div class="card-header py-3">
-                <h6 class="m-0 font-weight-bold text-primary">
-                    <i class="bi bi-people me-2"></i><?= htmlspecialchars($userListTitle) ?>
-                </h6>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>E-post</th>
-                                <th>Namn</th>
-                                <th>Registrerad</th>
-                                <th>Senaste inloggning</th>
-                                <th>Slutförda lektioner</th>
-                                <th>Kurser påbörjade</th>
+                                <th>Användare</th>
+                                <th class="text-center">Registrerad</th>
+                                <th class="text-center">Senast aktiv</th>
+                                <th class="text-center">Slutförda</th>
+                                <th class="text-center">Kurser</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($usersInDomain as $user): ?>
                             <tr>
-                                <td><?= htmlspecialchars($user['email']) ?></td>
-                                <td><?= htmlspecialchars($user['name'] ?? '-') ?></td>
-                                <td><?= $user['created_at'] ? date('Y-m-d', strtotime($user['created_at'])) : '-' ?></td>
-                                <td><?= $user['last_login_at'] ? date('Y-m-d H:i', strtotime($user['last_login_at'])) : 'Aldrig' ?></td>
                                 <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px; font-size: 12px;">
+                                            <?= strtoupper(substr($user['email'], 0, 2)) ?>
+                                        </div>
+                                        <div>
+                                            <div class="fw-bold"><?= htmlspecialchars(explode('@', $user['email'])[0]) ?></div>
+                                            <?php if ($user['name']): ?>
+                                            <small class="text-muted"><?= htmlspecialchars($user['name']) ?></small>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="text-center">
+                                    <small><?= $user['created_at'] ? date('Y-m-d', strtotime($user['created_at'])) : '-' ?></small>
+                                </td>
+                                <td class="text-center">
+                                    <?php if ($user['last_login_at']): ?>
+                                    <small><?= date('Y-m-d', strtotime($user['last_login_at'])) ?></small>
+                                    <?php else: ?>
+                                    <span class="badge bg-light text-muted">Aldrig</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="text-center">
                                     <span class="badge bg-<?= $user['completed_lessons'] > 0 ? 'success' : 'secondary' ?>">
                                         <?= $user['completed_lessons'] ?>
                                     </span>
                                 </td>
-                                <td>
+                                <td class="text-center">
                                     <span class="badge bg-<?= $user['courses_started'] > 0 ? 'info' : 'secondary' ?>">
                                         <?= $user['courses_started'] ?>
                                     </span>
