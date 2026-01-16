@@ -256,6 +256,96 @@ if (!empty($courseStats)) {
     $avgCompletionRate = $totalPossibleCompletions > 0 ? round(($actualCompletions / $totalPossibleCompletions) * 100) : 0;
 }
 
+// Beräkna antal fullt genomförda kurser (där användare slutfört ALLA lektioner)
+$fullyCompletedCourses = 0;
+$avgCoursesPerUser = 0;
+
+if (!empty($courseIds)) {
+    if ($isAdmin) {
+        $domainPattern = '%@' . $userDomain;
+        // Hämta antal användare som slutfört alla lektioner i varje kurs
+        $fullyCompletedResult = queryOne("
+            SELECT COUNT(*) as total_completions
+            FROM (
+                SELECT p.user_id, l.course_id,
+                       COUNT(DISTINCT CASE WHEN p.status = 'completed' THEN l.id END) as completed_lessons,
+                       (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l.course_id AND status = 'active') as total_lessons
+                FROM " . DB_DATABASE . ".progress p
+                JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
+                JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id
+                WHERE u.email LIKE ?
+                AND l.course_id IN ($courseIdsPlaceholder)
+                GROUP BY p.user_id, l.course_id
+                HAVING completed_lessons = total_lessons AND total_lessons > 0
+            ) as completed_courses
+        ", array_merge([$domainPattern], $courseIds));
+        $fullyCompletedCourses = $fullyCompletedResult['total_completions'] ?? 0;
+
+        // Beräkna genomsnittligt antal slutförda kurser per användare
+        $avgCoursesResult = queryOne("
+            SELECT AVG(courses_completed) as avg_courses
+            FROM (
+                SELECT u.id, COUNT(DISTINCT completed_courses.course_id) as courses_completed
+                FROM " . DB_DATABASE . ".users u
+                LEFT JOIN (
+                    SELECT p.user_id, l.course_id
+                    FROM " . DB_DATABASE . ".progress p
+                    JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
+                    WHERE l.course_id IN ($courseIdsPlaceholder)
+                    GROUP BY p.user_id, l.course_id
+                    HAVING COUNT(DISTINCT CASE WHEN p.status = 'completed' THEN l.id END) =
+                           (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l.course_id AND status = 'active')
+                           AND (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l.course_id AND status = 'active') > 0
+                ) as completed_courses ON u.id = completed_courses.user_id
+                WHERE u.email LIKE ?
+                GROUP BY u.id
+                HAVING courses_completed > 0
+            ) as user_courses
+        ", array_merge($courseIds, [$domainPattern]));
+        $avgCoursesPerUser = round($avgCoursesResult['avg_courses'] ?? 0, 1);
+    } else {
+        // För redaktörer
+        $fullyCompletedResult = queryOne("
+            SELECT COUNT(*) as total_completions
+            FROM (
+                SELECT p.user_id, l.course_id,
+                       COUNT(DISTINCT CASE WHEN p.status = 'completed' THEN l.id END) as completed_lessons,
+                       (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l.course_id AND status = 'active') as total_lessons
+                FROM " . DB_DATABASE . ".progress p
+                JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
+                WHERE l.course_id IN ($courseIdsPlaceholder)
+                GROUP BY p.user_id, l.course_id
+                HAVING completed_lessons = total_lessons AND total_lessons > 0
+            ) as completed_courses
+        ", $courseIds);
+        $fullyCompletedCourses = $fullyCompletedResult['total_completions'] ?? 0;
+
+        // Genomsnitt för redaktörer
+        $avgCoursesResult = queryOne("
+            SELECT AVG(courses_completed) as avg_courses
+            FROM (
+                SELECT p.user_id, COUNT(DISTINCT completed_courses.course_id) as courses_completed
+                FROM " . DB_DATABASE . ".progress p
+                JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
+                LEFT JOIN (
+                    SELECT p2.user_id, l2.course_id
+                    FROM " . DB_DATABASE . ".progress p2
+                    JOIN " . DB_DATABASE . ".lessons l2 ON p2.lesson_id = l2.id
+                    WHERE l2.course_id IN ($courseIdsPlaceholder)
+                    GROUP BY p2.user_id, l2.course_id
+                    HAVING COUNT(DISTINCT CASE WHEN p2.status = 'completed' THEN l2.id END) =
+                           (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l2.course_id AND status = 'active')
+                           AND (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l2.course_id AND status = 'active') > 0
+                ) as completed_courses ON p.user_id = completed_courses.user_id
+                WHERE l.course_id IN ($courseIdsPlaceholder)
+                GROUP BY p.user_id
+                HAVING courses_completed > 0
+            ) as user_courses
+        ", array_merge($courseIds, $courseIds));
+        $avgCoursesPerUser = round($avgCoursesResult['avg_courses'] ?? 0, 1);
+    }
+}
+
 // Inkludera header
 require_once 'include/header.php';
 ?>
@@ -266,70 +356,6 @@ require_once 'include/header.php';
     Du har inga kurser att visa statistik för. Skapa en kurs eller bli tilldelad som redaktör för en befintlig kurs.
 </div>
 <?php else: ?>
-
-<!-- Dashboard Översiktskort -->
-<div class="row mb-4">
-    <div class="col-xl-3 col-md-6 mb-3">
-        <div class="card border-left-primary shadow h-100 py-2">
-            <div class="card-body">
-                <div class="row no-gutters align-items-center">
-                    <div class="col mr-2">
-                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Användare</div>
-                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $totalUsersCount ?></div>
-                    </div>
-                    <div class="col-auto">
-                        <i class="bi bi-people-fill text-primary" style="font-size: 2rem; opacity: 0.3;"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-xl-3 col-md-6 mb-3">
-        <div class="card border-left-success shadow h-100 py-2">
-            <div class="card-body">
-                <div class="row no-gutters align-items-center">
-                    <div class="col mr-2">
-                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Kurser</div>
-                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $totalCoursesCount ?></div>
-                    </div>
-                    <div class="col-auto">
-                        <i class="bi bi-journal-text text-success" style="font-size: 2rem; opacity: 0.3;"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-xl-3 col-md-6 mb-3">
-        <div class="card border-left-info shadow h-100 py-2">
-            <div class="card-body">
-                <div class="row no-gutters align-items-center">
-                    <div class="col mr-2">
-                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Slutförda lektioner</div>
-                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $totalCompletedLessons ?></div>
-                    </div>
-                    <div class="col-auto">
-                        <i class="bi bi-check-circle-fill text-info" style="font-size: 2rem; opacity: 0.3;"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-xl-3 col-md-6 mb-3">
-        <div class="card border-left-warning shadow h-100 py-2">
-            <div class="card-body">
-                <div class="row no-gutters align-items-center">
-                    <div class="col mr-2">
-                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Genomsnittlig slutförandegrad</div>
-                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $avgCompletionRate ?>%</div>
-                    </div>
-                    <div class="col-auto">
-                        <i class="bi bi-graph-up text-warning" style="font-size: 2rem; opacity: 0.3;"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
 <!-- Kursval och användarframsteg -->
 <div class="card shadow mb-4">

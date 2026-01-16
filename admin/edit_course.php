@@ -77,6 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $title = trim($_POST['title'] ?? '');
     $description = trim($_POST['description'] ?? '');
     $status = isset($_POST['status']) && $_POST['status'] === 'active' ? 'active' : 'inactive';
+    $deadline = !empty($_POST['deadline']) ? $_POST['deadline'] : null;
     $imageUrl = $course['image_url'] ?? null;
     
     if (empty($title)) {
@@ -123,10 +124,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         title = ?,
                         description = ?,
                         status = ?,
+                        deadline = ?,
                         image_url = ?,
                         updated_at = NOW()
                         WHERE id = ?",
-                        [$title, $description, $status, $imageUrl, $_GET['id']]);
+                        [$title, $description, $status, $deadline, $imageUrl, $_GET['id']]);
 
                 // Uppdatera kursens taggar
                 // Ta bort befintliga taggar
@@ -160,9 +162,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 // Skapa ny kurs med nästa sort_order och organization_domain
                 execute("INSERT INTO " . DB_DATABASE . ".courses
-                        (title, description, status, sort_order, image_url, author_id, organization_domain, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
-                        [$title, $description, $status, $maxOrder + 1, $imageUrl, $authorId, $organizationDomain]);
+                        (title, description, status, deadline, sort_order, image_url, author_id, organization_domain, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                        [$title, $description, $status, $deadline, $maxOrder + 1, $imageUrl, $authorId, $organizationDomain]);
 
                 // Hämta det nya kurs-ID:t
                 $newCourseId = getDb()->lastInsertId();
@@ -271,6 +273,16 @@ require_once 'include/header.php';
                             <input class="form-check-input" type="checkbox" id="status" name="status"
                                    value="active" <?= ($course['status'] ?? '') === 'active' ? 'checked' : '' ?>>
                             <label class="form-check-label" for="status">Aktiv</label>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="deadline" class="form-label">Slutdatum</label>
+                            <input type="date" class="form-control" id="deadline" name="deadline"
+                                   value="<?= htmlspecialchars($course['deadline'] ?? '') ?>">
+                            <div class="form-text">
+                                Ange ett datum om kursen ska vara genomförd senast ett visst datum.
+                                Lämna tomt om inget slutdatum finns.
+                            </div>
                         </div>
 
                         <?php if (!empty($availableTags)): ?>

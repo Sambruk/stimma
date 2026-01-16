@@ -375,22 +375,36 @@ else:
                         <h2 class="h2 fs-5 fs-md-3 mb-0">Mina kurser</h2>
                     </div>
                     <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3 mx-2 mx-md-0">
-                        <?php 
+                        <?php
                         $hasStartedCourses = false;
-                        foreach ($groupedLessons as $courseTitle => $courseData): 
+                        // Hämta avslutade kurser för denna användare
+                        $abandonedCourses = query("SELECT course_id FROM " . DB_DATABASE . ".course_enrollments
+                                                   WHERE user_id = ? AND status = 'abandoned'", [$userId]);
+                        $abandonedCourseIds = array_column($abandonedCourses, 'course_id');
+
+                        foreach ($groupedLessons as $courseTitle => $courseData):
                             $courseLessons = $courseData['lessons'];
                             // Calculate course progress
                             $courseTotal = count($courseLessons);
                             $courseCompleted = 0;
                             $courseStarted = false;
-                            
+
+                            // Hämta kurs-ID från första lektionen
+                            $firstLessonInGroup = reset($courseLessons);
+                            $currentCourseId = $firstLessonInGroup['course_id'];
+
+                            // Hoppa över avslutade kurser
+                            if (in_array($currentCourseId, $abandonedCourseIds)) {
+                                continue;
+                            }
+
                             foreach ($courseLessons as $lesson) {
                                 if (isset($userProgress[$lesson['id']]) && $userProgress[$lesson['id']]['status'] === 'completed') {
                                     $courseCompleted++;
                                     $courseStarted = true;
                                 }
                             }
-                            
+
                             if (!$courseStarted) {
                                 continue; // Skip to next course if not started
                             }
@@ -473,8 +487,11 @@ else:
                                     
                                     <div class="mt-auto">
                                         <?php if ($nextLessonInCourse): ?>
-                                            <a href="lesson.php?id=<?= $nextLessonInCourse['id'] ?>" class="btn btn-primary btn-sm d-block w-100">
+                                            <a href="lesson.php?id=<?= $nextLessonInCourse['id'] ?>" class="btn btn-primary btn-sm d-block w-100 mb-2">
                                                 Fortsätt lära
+                                            </a>
+                                            <a href="abandon_course.php?course_id=<?= $firstLesson['course_id'] ?>" class="btn btn-outline-secondary btn-sm d-block w-100">
+                                                <i class="bi bi-x-circle me-1"></i>Avsluta kurs
                                             </a>
                                         <?php else: ?>
                                             <button class="btn btn-outline-primary btn-sm d-block w-100" disabled>Kursen är klar!</button>
