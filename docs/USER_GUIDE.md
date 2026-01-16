@@ -10,7 +10,11 @@ Denna handbok beskriver hur du använder Stimma e-learning plattform. Stimma är
 2. [Kom igång - Logga in](#kom-igång---logga-in)
 3. [Guide för studenter](#guide-för-studenter)
 4. [Guide för redaktörer](#guide-för-redaktörer)
+   - [Ange slutdatum för en kurs](#ange-slutdatum-för-en-kurs)
 5. [Guide för administratörer](#guide-för-administratörer)
+   - [Dashboard - Översikt](#dashboard---översikt)
+   - [Påminnelseinställningar](#påminnelseinställningar)
+   - [Skicka testmail](#skicka-testmail)
 6. [Guide för superadministratörer](#guide-för-superadministratörer)
 
 ---
@@ -113,8 +117,23 @@ Som redaktör kan du skapa och hantera utbildningsinnehåll.
    - **Längd** - Uppskattad tid i minuter
    - **Förkunskaper** - Vad deltagaren bör kunna innan
    - **Taggar** - Välj relevanta taggar
+   - **Slutdatum** - Ange ett datum om kursen ska vara genomförd senast ett visst datum (valfritt)
 4. Ladda upp en kursbild eller klicka **"Generera AI-bild"**
 5. Klicka **"Spara"**
+
+### Ange slutdatum för en kurs
+
+Du kan ange ett slutdatum för när en kurs ska vara genomförd:
+
+1. Öppna kursen för redigering
+2. Hitta fältet **"Slutdatum"**
+3. Välj ett datum i datumväljaren
+4. Klicka **"Spara"**
+
+**Tips:**
+- Lämna fältet tomt om inget slutdatum ska gälla
+- Slutdatumet visas i påminnelsemail till användare som inte slutfört kursen
+- Användare ser hur många dagar som återstår
 
 ### Skapa lektioner
 
@@ -211,14 +230,38 @@ Som admin har du utökade behörigheter inom din organisation.
 4. Klicka **"Lägg till"** för att tilldela dem
 5. Redaktörer kan nu redigera just den kursen
 
+### Dashboard - Översikt
+
+När du loggar in som admin ser du en dashboard med nyckeltal:
+
+**Rad 1:**
+- **Användare** - Antal registrerade användare i organisationen
+- **Kurser** - Antal tillgängliga kurser
+- **Slutförda lektioner** - Totalt antal lektioner som slutförts
+- **Genomsnittlig slutförandegrad** - Hur stor andel av påbörjade kurser som slutförs
+
+**Rad 2:**
+- **Fullt genomförda kurser** - Totalt antal gånger en användare slutfört alla lektioner i en kurs
+- **Genomförda kurser/användare** - Genomsnittligt antal slutförda kurser per aktiv användare
+- **Lektioner** - Totalt antal lektioner i systemet
+
+Dashboarden visar också:
+- Aktivitetsgraf för senaste 7 dagarna
+- Kursstatistik
+- Senaste aktiviteter
+
 ### Statistik
 
 1. Gå till **Statistik** i adminmenyn
-2. Du ser:
-   - Antal användare och slutförda lektioner
+2. Du ser detaljerad kursstatistik:
    - Progress per kurs
    - Aktivitet per användare
-3. Filtrera på specifik kurs för detaljerad vy
+   - Slutförandegrad per kurs
+3. Välj en specifik kurs för att se:
+   - Vilka användare som påbörjat kursen
+   - Vilka lektioner varje användare slutfört
+   - Procentuell progress per användare
+4. Klicka **"Exportera till Excel"** för att ladda ner statistiken
 
 ### Aktivitetsloggar
 
@@ -235,6 +278,43 @@ Som admin har du utökade behörigheter inom din organisation.
 2. Klicka på **"Ta bort"** för kursen
 3. Bekräfta att du vill ta bort kursen och alla dess lektioner
 4. Kursen och alla tillhörande lektioner raderas
+
+### Påminnelseinställningar
+
+Konfigurera automatiska påminnelser till användare som inte slutfört sina kurser:
+
+1. Gå till **Påminnelseinställningar** i adminmenyn
+2. Aktivera eller inaktivera påminnelser
+3. Konfigurera:
+   - **Dagar efter kursstart** - Antal dagar innan första påminnelsen skickas
+   - **Max antal påminnelser** - Hur många påminnelser som skickas totalt
+   - **Dagar mellan påminnelser** - Intervall mellan påminnelser
+4. Anpassa e-postämne och meddelandetext
+
+**Tillgängliga variabler i e-postmallen:**
+- `{{course_title}}` - Kursens titel
+- `{{completed_lessons}}` - Antal slutförda lektioner
+- `{{total_lessons}}` - Totalt antal lektioner
+- `{{course_url}}` - Länk till kursen
+- `{{abandon_url}}` - Länk för att avsluta kursen
+- `{{user_name}}` - Användarens namn
+- `{{user_email}}` - Användarens e-post
+- `{{deadline}}` - Slutdatum (t.ex. "15 februari 2026")
+- `{{days_remaining}}` - Antal dagar kvar till deadline
+- `{{deadline_info}}` - Komplett mening om deadline (t.ex. "Kursen ska vara genomförd senast 15 februari 2026 (14 dagar kvar).")
+
+### Skicka testmail
+
+Innan du aktiverar påminnelser, testa att e-postinställningarna fungerar:
+
+1. Gå till **Påminnelseinställningar**
+2. Hitta sektionen **"Skicka testmail"**
+3. Ange din e-postadress (din egen e-post är förifylld)
+4. Välj om du vill använda den sparade e-postmallen eller en enkel testmall
+5. Klicka **"Skicka testmail"**
+6. Kontrollera din inkorg (och skräppost)
+
+**Tips:** Testmailet visar exempelvärden för alla variabler så du kan se hur det slutgiltiga mailet kommer att se ut.
 
 ---
 

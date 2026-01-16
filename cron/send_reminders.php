@@ -1,401 +1,253 @@
 <?php
 /**
- * Stimma - Learn in small steps
+ * Stimma - Lär dig i små steg
  * Copyright (C) 2025 Christian Alfredsson
- * 
+ *
  * This program is free software; licensed under GPL v2.
  * See LICENSE and LICENSE-AND-TRADEMARK.md for details.
- * 
+ *
  * The name "Stimma" is a trademark and subject to restrictions.
+ *
+ * Cron-skript för att skicka påminnelser till användare som påbörjat kurser men inte slutfört dem.
+ *
+ * Kör detta skript dagligen via cron:
+ * 0 9 * * * /usr/bin/php /var/www/html/cron/send_reminders.php >> /var/log/stimma_reminders.log 2>&1
  */
 
-/**
- * Send reminders to users who haven't completed their daily tasks
- * 
- * This script runs as a cron job and sends email reminders to users
- * who haven't completed their daily tasks. It only uses the .env file
- * for configuration and is completely independent of other files.
- */
+// Sätt CLI-läge
+define('CLI_MODE', php_sapi_name() === 'cli');
 
-// Ensure script is run from command line
-if (php_sapi_name() !== 'cli') {
-    die("This script can only be run from command line.\n");
+// Säkerställ att vi kör i rätt katalog
+chdir(dirname(__DIR__));
+
+// Inkludera konfiguration
+require_once 'include/config.php';
+require_once 'include/database.php';
+require_once 'include/functions.php';
+require_once 'include/mail.php';
+
+// Loggfunktion för CLI
+function logMessage($message) {
+    $timestamp = date('Y-m-d H:i:s');
+    echo "[$timestamp] $message\n";
 }
 
-// Load environment variables from .env file
-function loadEnv($path) {
-    if (!file_exists($path)) {
-        die("Error: .env file not found at $path\n");
-    }
-    
-    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-    foreach ($lines as $line) {
-        // Skip comments
-        if (strpos(trim($line), '#') === 0) {
-            continue;
-        }
-        
-        // Parse line
-        list($name, $value) = explode('=', $line, 2);
-        $name = trim($name);
-        $value = trim($value);
-        
-        // Set as environment variable
-        putenv("$name=$value");
-        $_ENV[$name] = $value;
-    }
+// Funktion för att konvertera URLs till klickbara länkar
+function makeLinksClickable($text) {
+    $pattern = '/(https?:\/\/[^\s<>\[\]]+)/i';
+    return preg_replace_callback($pattern, function($matches) {
+        $url = rtrim($matches[1], '.,;:!?)');
+        return '<a href="' . $url . '" style="color: #007bff; text-decoration: underline;">' . $url . '</a>';
+    }, $text);
 }
 
-// Load environment variables
-loadEnv(__DIR__ . '/../.env');
+logMessage("Startar påminnelsejobb...");
 
-// Database configuration
-$dbHost = getenv('DB_HOST');
-$dbUser = getenv('DB_USERNAME');
-$dbPass = trim(getenv('DB_PASSWORD'), '"');
-$dbName = getenv('DB_DATABASE');
+// Hämta alla domäner med aktiverade påminnelser
+$activeSettings = query("SELECT * FROM " . DB_DATABASE . ".reminder_settings WHERE enabled = 1");
 
-// Site configuration
-$siteName = getenv('SITE_NAME');
-$siteUrl = getenv('SYSTEM_URL');
-$mailFrom = getenv('MAIL_FROM_ADDRESS');
-$mailFromName = getenv('MAIL_FROM_NAME') ?: $siteName;
-
-// SMTP configuration
-$smtpHost = getenv('MAIL_HOST') ?: 'localhost';
-$smtpPort = getenv('MAIL_PORT') ?: 25;
-$smtpUsername = getenv('MAIL_USERNAME') ?: '';
-$smtpPassword = getenv('MAIL_PASSWORD') ?: '';
-$smtpEncryption = getenv('MAIL_ENCRYPTION') ?: 'ssl';
-
-// Connect to database
-try {
-    $pdo = new PDO(
-        "mysql:host=$dbHost;dbname=$dbName;charset=utf8mb4",
-        $dbUser,
-        $dbPass
-    );
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
-    $pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-} catch (PDOException $e) {
-    die("Database connection failed: " . $e->getMessage() . "\n");
+if (empty($activeSettings)) {
+    logMessage("Inga aktiva påminnelseinställningar hittades. Avslutar.");
+    exit(0);
 }
 
-// Get users who haven't completed their daily tasks
-$sql = "SELECT DISTINCT u.id, u.email, u.name 
-        FROM users u 
-        WHERE u.email IS NOT NULL 
-        AND u.email != '' 
-        AND EXISTS (
-            SELECT 1 
-            FROM progress p
-            JOIN lessons l ON p.lesson_id = l.id
-            JOIN courses c ON l.course_id = c.id
-            WHERE p.user_id = u.id
-            AND c.status = 'active'
-        )
-        AND EXISTS (
-            SELECT 1 
-            FROM lessons l
-            JOIN courses c ON l.course_id = c.id
-            LEFT JOIN progress p ON l.id = p.lesson_id AND p.user_id = u.id
-            WHERE c.status = 'active'
+logMessage("Hittade " . count($activeSettings) . " domäner med aktiva påminnelser.");
+
+$totalSent = 0;
+$totalFailed = 0;
+
+foreach ($activeSettings as $settings) {
+    $domain = $settings['domain'];
+    logMessage("Behandlar domän: $domain");
+
+    $daysAfterStart = $settings['days_after_start'];
+    $maxReminders = $settings['max_reminders'];
+    $daysBetweenReminders = $settings['days_between_reminders'];
+    $emailSubject = $settings['email_subject'];
+    $emailBody = $settings['email_body'];
+
+    // Hitta användare som behöver påminnelse
+    // Villkor:
+    // 1. Användare från denna domän
+    // 2. Har påbörjat en kurs (har progress på minst en lektion)
+    // 3. Har inte slutfört alla lektioner i kursen
+    // 4. Har inte nått max antal påminnelser
+    // 5. Det har gått tillräckligt många dagar sedan kursstart eller senaste påminnelse
+    // 6. Har inte valt att avsluta kursen
+
+    $usersToRemind = query("
+        SELECT DISTINCT
+            u.id AS user_id,
+            u.email,
+            u.name,
+            c.id AS course_id,
+            c.title AS course_title,
+            c.deadline AS course_deadline,
+            (SELECT MIN(p2.created_at) FROM " . DB_DATABASE . ".progress p2
+             JOIN " . DB_DATABASE . ".lessons l2 ON p2.lesson_id = l2.id
+             WHERE p2.user_id = u.id AND l2.course_id = c.id) AS course_started_at,
+            (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = c.id AND status = 'active') AS total_lessons,
+            (SELECT COUNT(*) FROM " . DB_DATABASE . ".progress p3
+             JOIN " . DB_DATABASE . ".lessons l3 ON p3.lesson_id = l3.id
+             WHERE p3.user_id = u.id AND l3.course_id = c.id AND p3.status = 'completed') AS completed_lessons,
+            COALESCE(
+                (SELECT MAX(rl.sent_at) FROM " . DB_DATABASE . ".reminder_log rl
+                 WHERE rl.user_id = u.id AND rl.course_id = c.id),
+                '1970-01-01'
+            ) AS last_reminder_at,
+            COALESCE(
+                (SELECT MAX(rl.reminder_number) FROM " . DB_DATABASE . ".reminder_log rl
+                 WHERE rl.user_id = u.id AND rl.course_id = c.id),
+                0
+            ) AS reminder_count,
+            COALESCE(
+                (SELECT ce.opt_out_reminders FROM " . DB_DATABASE . ".course_enrollments ce
+                 WHERE ce.user_id = u.id AND ce.course_id = c.id),
+                0
+            ) AS opt_out_reminders,
+            COALESCE(
+                (SELECT ce.status FROM " . DB_DATABASE . ".course_enrollments ce
+                 WHERE ce.user_id = u.id AND ce.course_id = c.id),
+                'active'
+            ) AS enrollment_status
+        FROM " . DB_DATABASE . ".users u
+        JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id
+        JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
+        JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
+        WHERE u.email LIKE ?
+        AND c.status = 'active'
+        GROUP BY u.id, c.id
+        HAVING
+            completed_lessons < total_lessons
+            AND reminder_count < ?
+            AND opt_out_reminders = 0
+            AND enrollment_status = 'active'
+            AND (
+                (reminder_count = 0 AND DATEDIFF(NOW(), course_started_at) >= ?)
+                OR
+                (reminder_count > 0 AND DATEDIFF(NOW(), last_reminder_at) >= ?)
+            )
+    ", ['%@' . $domain, $maxReminders, $daysAfterStart, $daysBetweenReminders]);
+
+    logMessage("Hittade " . count($usersToRemind) . " användare att påminna i domän $domain");
+
+    foreach ($usersToRemind as $user) {
+        logMessage("Skickar påminnelse till {$user['email']} för kurs: {$user['course_title']}");
+
+        // Skapa kurs-URL
+        $systemUrl = rtrim(getenv('SYSTEM_URL') ?: 'https://stimma.sambruk.se', '/');
+
+        // Hitta nästa lektion att göra
+        $nextLesson = queryOne("
+            SELECT l.id FROM " . DB_DATABASE . ".lessons l
+            LEFT JOIN " . DB_DATABASE . ".progress p ON l.id = p.lesson_id AND p.user_id = ?
+            WHERE l.course_id = ? AND l.status = 'active'
             AND (p.status IS NULL OR p.status != 'completed')
-        )";
+            ORDER BY l.sort_order ASC
+            LIMIT 1
+        ", [$user['user_id'], $user['course_id']]);
 
-try {
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute();
-    $users = $stmt->fetchAll();
-} catch (PDOException $e) {
-    die("Error fetching users: " . $e->getMessage() . "\n");
-}
+        $courseUrl = $systemUrl . '/lesson.php?id=' . ($nextLesson['id'] ?? '');
+        $abandonUrl = $systemUrl . '/abandon_course.php?course_id=' . $user['course_id'] . '&token=' . hash('sha256', $user['user_id'] . $user['course_id'] . date('Y-m'));
 
-// Function to get next lesson for a user
-function getNextLesson($pdo, $userId) {
-    $sql = "SELECT l.*, c.title as course_title, c.description as course_description
-            FROM lessons l
-            JOIN courses c ON l.course_id = c.id
-            LEFT JOIN progress p ON l.id = p.lesson_id AND p.user_id = ?
-            WHERE c.status = 'active'
-            AND (p.status IS NULL OR p.status != 'completed')
-            ORDER BY c.title, l.sort_order
-            LIMIT 1";
-    
-    try {
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$userId]);
-        return $stmt->fetch();
-    } catch (PDOException $e) {
-        return null;
-    }
-}
+        // Hantera deadline-variabler
+        $deadline = '';
+        $daysRemaining = '';
+        $deadlineInfo = '';
 
-// Function to get completed lessons count
-function getCompletedLessonsCount($pdo, $userId) {
-    $sql = "SELECT COUNT(*) as count
-            FROM progress p
-            WHERE p.user_id = ?
-            AND p.status = 'completed'";
-    
-    try {
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$userId]);
-        return $stmt->fetch()['count'];
-    } catch (PDOException $e) {
-        return 0;
-    }
-}
+        if (!empty($user['course_deadline'])) {
+            $deadlineDate = new DateTime($user['course_deadline']);
+            $today = new DateTime('today');
+            $diff = $today->diff($deadlineDate);
+            $daysLeft = $diff->invert ? -$diff->days : $diff->days;
 
-// Function to send SMTP mail
-function sendSmtpMail($to, $subject, $message, $from = null, $fromName = null, $siteUrl = null) {
-    global $smtpHost, $smtpPort, $smtpUsername, $smtpPassword, $smtpEncryption, $mailFrom, $mailFromName;
-    
-    // Use defaults if not specified
-    $from = $from ?: $mailFrom;
-    $fromName = $fromName ?: $mailFromName;
-    
-    // Logga e-postförsök
-    $logMessage = "Cron e-post skickas till: $to | Ämne: $subject | Från: $fromName <$from>";
-    logActivity($to, $logMessage, [
-        'action' => 'cron_mail_send_attempt',
-        'to_email' => $to,
-        'from_email' => $from,
-        'from_name' => $fromName,
-        'subject' => $subject,
-        'message_length' => strlen($message)
-    ]);
-    
-    // Connect to SMTP server
-    if ($smtpEncryption == 'ssl') {
-        $socket = fsockopen("ssl://$smtpHost", $smtpPort, $errno, $errstr, 30);
-    } else {
-        $socket = fsockopen($smtpHost, $smtpPort, $errno, $errstr, 30);
-    }
-    
-    if (!$socket) {
-        // Logga misslyckad anslutning
-        logActivity($to, "Cron e-post misslyckades: Kunde inte ansluta till SMTP-server ($smtpHost:$smtpPort)", [
-            'action' => 'cron_mail_send_failed',
-            'error' => 'connection_failed',
-            'to_email' => $to,
-            'subject' => $subject
-        ]);
-        return false;
-    }
-    
-    // Read server greeting
-    $response = fgets($socket, 515);
-    
-    if (substr($response, 0, 3) != '220') {
-        fclose($socket);
-        return false;
-    }
-    
-    // Send EHLO
-    fputs($socket, "EHLO " . parse_url($siteUrl, PHP_URL_HOST) . "\r\n");
-    $response = fgets($socket, 515);
-    
-    // Read all server options
-    while (substr($response, 3, 1) == '-') {
-        $response = fgets($socket, 515);
-    }
-    
-    // Login if username and password are provided
-    if (!empty($smtpUsername) && !empty($smtpPassword)) {
-        // AUTH LOGIN
-        fputs($socket, "AUTH LOGIN\r\n");
-        $response = fgets($socket, 515);
-        
-        if (substr($response, 0, 3) != '334') {
-            fclose($socket);
-            return false;
+            // Formatera deadline på svenska
+            $months = ['januari', 'februari', 'mars', 'april', 'maj', 'juni',
+                       'juli', 'augusti', 'september', 'oktober', 'november', 'december'];
+            $deadline = $deadlineDate->format('j') . ' ' . $months[$deadlineDate->format('n') - 1] . ' ' . $deadlineDate->format('Y');
+
+            if ($daysLeft > 0) {
+                $daysRemaining = $daysLeft;
+                $deadlineInfo = "Kursen ska vara genomförd senast $deadline ($daysLeft dagar kvar).";
+            } elseif ($daysLeft == 0) {
+                $daysRemaining = '0';
+                $deadlineInfo = "Kursen ska vara genomförd senast idag ($deadline)!";
+            } else {
+                $daysRemaining = '0';
+                $deadlineInfo = "Kursen skulle ha varit genomförd senast $deadline (" . abs($daysLeft) . " dagar sedan).";
+            }
         }
-        
-        // Send username (base64 encoded)
-        fputs($socket, base64_encode($smtpUsername) . "\r\n");
-        $response = fgets($socket, 515);
-        
-        if (substr($response, 0, 3) != '334') {
-            fclose($socket);
-            return false;
-        }
-        
-        // Send password (base64 encoded)
-        fputs($socket, base64_encode($smtpPassword) . "\r\n");
-        $response = fgets($socket, 515);
-        
-        if (substr($response, 0, 3) != '235') {
-            fclose($socket);
-            return false;
-        }
-    }
-    
-    // FROM
-    fputs($socket, "MAIL FROM:<$from>\r\n");
-    $response = fgets($socket, 515);
-    
-    if (substr($response, 0, 3) != '250') {
-        fclose($socket);
-        return false;
-    }
-    
-    // TO
-    fputs($socket, "RCPT TO:<$to>\r\n");
-    $response = fgets($socket, 515);
-    
-    if (substr($response, 0, 3) != '250') {
-        fclose($socket);
-        return false;
-    }
-    
-    // DATA
-    fputs($socket, "DATA\r\n");
-    $response = fgets($socket, 515);
-    
-    if (substr($response, 0, 3) != '354') {
-        fclose($socket);
-        return false;
-    }
-    
-    // Prepare headers
-    $headers = "From: $fromName <$from>\r\n";
-    $headers .= "To: $to\r\n";
-    $headers .= "Subject: =?UTF-8?B?" . base64_encode($subject) . "?=\r\n";
-    $headers .= "MIME-Version: 1.0\r\n";
-    $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
-    $headers .= "X-Mailer: Stimma Mailer\r\n";
-    $headers .= "\r\n";
-    
-    // Send email content
-    fputs($socket, $headers . $message . "\r\n.\r\n");
-    $response = fgets($socket, 515);
-    
-    if (substr($response, 0, 3) != '250') {
-        fclose($socket);
-        // Logga misslyckad e-postleverans
-        logActivity($to, "Cron e-post misslyckades: Leverans misslyckades - $response", [
-            'action' => 'cron_mail_send_failed',
-            'error' => 'delivery_failed',
-            'to_email' => $to,
-            'subject' => $subject,
-            'server_response' => $response
-        ]);
-        return false;
-    }
-    
-    // QUIT
-    fputs($socket, "QUIT\r\n");
-    $response = fgets($socket, 515);
-    
-    // Close connection
-    fclose($socket);
-    
-    // Logga lyckad e-postleverans
-    logActivity($to, "Cron e-post skickat framgångsrikt till: $to | Ämne: $subject", [
-        'action' => 'cron_mail_send_success',
-        'to_email' => $to,
-        'from_email' => $from,
-        'from_name' => $fromName,
-        'subject' => $subject,
-        'message_length' => strlen($message)
-    ]);
-    
-    return true;
-}
 
-// Send reminders
-foreach ($users as $user) {
-    // Test filter - only send to christian@iteca.se
- //   if ($user['email'] !== 'christian@iteca.se') {
-  //      continue;
-  //  }
+        // Ersätt variabler i e-postmallen
+        $personalizedBody = str_replace(
+            ['{{course_title}}', '{{completed_lessons}}', '{{total_lessons}}', '{{course_url}}', '{{abandon_url}}', '{{user_name}}', '{{user_email}}', '{{deadline}}', '{{days_remaining}}', '{{deadline_info}}'],
+            [
+                $user['course_title'],
+                $user['completed_lessons'],
+                $user['total_lessons'],
+                $courseUrl,
+                $abandonUrl,
+                $user['name'] ?: 'användare',
+                $user['email'],
+                $deadline,
+                $daysRemaining,
+                $deadlineInfo
+            ],
+            $emailBody
+        );
 
-    // Get next lesson and completed count
-    $nextLesson = getNextLesson($pdo, $user['id']);
-    $completedCount = getCompletedLessonsCount($pdo, $user['id']);
-    
-    $to = $user['email'];
-    $subject = "Stimma: Lär dig mer om " . ($nextLesson ? $nextLesson['title'] : "din nästa lektion");
-    
-    $message = "
-        <html>
+        // Konvertera till HTML - först escape, sedan gör länkar klickbara, sedan newlines
+        $personalizedBodyHtml = htmlspecialchars($personalizedBody);
+        $personalizedBodyHtml = makeLinksClickable($personalizedBodyHtml);
+        $personalizedBodyHtml = nl2br($personalizedBodyHtml);
+
+        // Skapa HTML-mail
+        $htmlMessage = "
+        <!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">
+        <html xmlns=\"http://www.w3.org/1999/xhtml\">
         <head>
-            <style>
-                body { 
-                    font-family: Arial, sans-serif; 
-                    line-height: 1.6;
-                    color: #333;
-                    max-width: 600px;
-                    margin: 0 auto;
-                    padding: 20px;
-                }
-                .button { 
-                    display: inline-block; 
-                    padding: 12px 24px; 
-                    background-color: #0d6efd; 
-                    color: white; 
-                    text-decoration: none; 
-                    border-radius: 5px; 
-                    margin: 20px 0;
-                    font-weight: bold;
-                    text-align: center;
-                }
-                .highlight {
-                    color: #0d6efd;
-                    font-weight: bold;
-                }
-                .emoji {
-                    font-size: 1.2em;
-                }
-            </style>
+            <meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\" />
+            <title>Påminnelse</title>
         </head>
-        <body>
-            <h2>Hej {$user['name']}! <span class='emoji'>👋</span></h2>
-            
-            " . ($completedCount > 0 ? "
-            <p>Imponerande! Du har redan slutfört <span class='highlight'>$completedCount lektioner</span>. 
-            Varje steg du tar i din utbildning är en investering i din framtid. <span class='emoji'>💪</span></p>
-            " : "") . "
-            
-            " . ($nextLesson ? "
-            <p>Din nästa lektion väntar på dig i <span class='highlight'>{$nextLesson['course_title']}</span>:</p>
-            <h3>{$nextLesson['title']}</h3>
-            " . (!empty($nextLesson['content']) ? "<p>" . substr(strip_tags($nextLesson['content']), 0, 200) . "...</p>" : "") . "
-            " : "
-            <p>Din nästa lektion väntar på dig! Fortsätt din resa mot kunskap och utveckling.</p>
-            ") . "
-            
-            <div style='text-align: center;'>
-                <a href='$siteUrl' class='button'>
-                    Fortsätt din utbildning <span class='emoji'>🚀</span>
-                </a>
-            </div>
-            
+        <body style=\"font-family: Arial, sans-serif; line-height: 1.6; margin: 0; padding: 0;\">
+            <table cellpadding=\"0\" cellspacing=\"0\" border=\"0\" width=\"100%\" style=\"margin: 0; padding: 0;\">
+                <tr>
+                    <td style=\"padding: 20px;\">
+                        <p style=\"font-family: Arial, sans-serif; color: #000000;\">$personalizedBodyHtml</p>
+                    </td>
+                </tr>
+            </table>
         </body>
         </html>
-    ";
-    
-    if (sendSmtpMail($to, $subject, $message, null, null, $siteUrl)) {
-        echo "Reminder sent to {$user['email']}\n";
-        // Logga framgångsrik påminnelse
-        logActivity($user['email'], "Påminnelse skickat framgångsrikt", [
-            'action' => 'reminder_sent',
-            'email' => $user['email'],
-            'lesson_id' => $lesson['id'],
-            'course_id' => $lesson['course_id']
-        ]);
-    } else {
-        echo "Failed to send reminder to {$user['email']}\n";
-        // Logga misslyckad påminnelse
-        logActivity($user['email'], "Påminnelse misslyckades att skickas", [
-            'action' => 'reminder_failed',
-            'email' => $user['email'],
-            'lesson_id' => $lesson['id'],
-            'course_id' => $lesson['course_id']
-        ]);
+        ";
+
+        // Skicka e-post
+        $mailFrom = getenv('MAIL_FROM_ADDRESS') ?: 'noreply@tropheus.se';
+        $mailFromName = trim(getenv('MAIL_FROM_NAME'), '"\'') ?: 'Stimma';
+
+        $mailSent = sendSmtpMail($user['email'], $emailSubject, $htmlMessage, $mailFrom, $mailFromName);
+
+        // Logga påminnelsen i databasen
+        $reminderNumber = $user['reminder_count'] + 1;
+        $emailStatus = $mailSent ? 'sent' : 'failed';
+        $errorMessage = $mailSent ? null : 'E-post kunde inte skickas';
+
+        execute("INSERT INTO " . DB_DATABASE . ".reminder_log
+                 (user_id, course_id, reminder_number, email_status, error_message)
+                 VALUES (?, ?, ?, ?, ?)",
+                [$user['user_id'], $user['course_id'], $reminderNumber, $emailStatus, $errorMessage]);
+
+        if ($mailSent) {
+            $totalSent++;
+            logMessage("Påminnelse #{$reminderNumber} skickad till {$user['email']}");
+        } else {
+            $totalFailed++;
+            logMessage("FEL: Kunde inte skicka påminnelse till {$user['email']}");
+        }
+
+        // Undvik att överbelasta mailservern
+        usleep(100000); // 100ms delay mellan mail
     }
 }
 
-echo "Reminder process completed.\n"; 
+logMessage("Påminnelsejobb slutfört. Skickade: $totalSent, Misslyckade: $totalFailed");

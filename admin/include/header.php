@@ -106,6 +106,13 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <?php endif; ?>
                 <?php if ($isAdmin || $isSuperAdmin): ?>
                 <li class="nav-item">
+                    <a href="reminders.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'reminders.php' ? 'active' : '' ?>">
+                        <i class="bi bi-bell me-2"></i> Påminnelser
+                    </a>
+                </li>
+                <?php endif; ?>
+                <?php if ($isAdmin || $isSuperAdmin): ?>
+                <li class="nav-item">
                     <a href="users.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'users.php' ? 'active' : '' ?>">
                         <i class="bi bi-people me-2"></i> Användare
                     </a>
