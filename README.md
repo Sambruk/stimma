@@ -4,6 +4,7 @@ Stimma är en e-learning plattform för mikroutbildning, utvecklad för svenska 
 
 ## Funktioner
 
+### Kärnfunktioner
 - **AI-genererade kurser** - Skapa kurser automatiskt med hjälp av AI
 - **AI-bildgenerering** - Generera kurs- och lektionsbilder med DALL-E 3
 - **Kurs- och lektionshantering** - Drag-and-drop sortering, import/export
@@ -12,6 +13,14 @@ Stimma är en e-learning plattform för mikroutbildning, utvecklad för svenska 
 - **Taggbaserad organisation** - Organisera kurser med taggar
 - **Rollbaserad åtkomstkontroll** - Admin, redaktör och användarroller
 - **Organisationsbaserad separation** - Multi-tenant arkitektur baserad på e-postdomän
+
+### Nya funktioner (v1.1)
+- **Gamification** - XP-poäng, nivåer och achievements för ökad motivation
+- **Certifikat** - Automatisk certifikatgenerering vid slutförd kurs
+- **Dashboard** - Personlig översikt med framsteg och statistik
+- **AI-leverantörsstöd** - Stöd för OpenAI, Anthropic, Google, Azure och OpenRouter
+- **Förhandsvisning** - Testa lektioner utan att spara data
+- **PUB-dokumentation** - Personuppgiftsbiträdesavtal och instruktioner
 
 ## Installation
 

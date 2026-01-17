@@ -26,7 +26,79 @@ function redirect($url) {
  * @return string Sanerad inmatning
  */
 function sanitize($input) {
-    return htmlspecialchars($input, ENT_QUOTES, 'UTF-8');
+    return htmlspecialchars($input ?? '', ENT_QUOTES, 'UTF-8');
+}
+
+/**
+ * Kortform för HTML-escaping (XSS-skydd)
+ */
+function e($string) {
+    return htmlspecialchars($string ?? '', ENT_QUOTES, 'UTF-8');
+}
+
+/**
+ * Säker extern URL-hämtning med SSRF-skydd
+ */
+function secureUrlFetch($url, $allowedDomains = [], $timeout = 30) {
+    if (!filter_var($url, FILTER_VALIDATE_URL)) {
+        return false;
+    }
+    $parsed = parse_url($url);
+    if (!$parsed || !isset($parsed['host'])) {
+        return false;
+    }
+    $host = $parsed['host'];
+    $scheme = $parsed['scheme'] ?? 'http';
+    if (!in_array($scheme, ['http', 'https'])) {
+        return false;
+    }
+    if (!empty($allowedDomains)) {
+        $domainAllowed = false;
+        foreach ($allowedDomains as $allowed) {
+            if ($host === $allowed || str_ends_with($host, '.' . $allowed)) {
+                $domainAllowed = true;
+                break;
+            }
+        }
+        if (!$domainAllowed) {
+            return false;
+        }
+    }
+    $ip = gethostbyname($host);
+    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+        return false;
+    }
+    if ($ip === '127.0.0.1' || $ip === '::1' || $host === 'localhost') {
+        return false;
+    }
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => $timeout,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS => 3,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_PROTOCOLS => CURLPROTO_HTTPS | CURLPROTO_HTTP,
+    ]);
+    $content = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return ($httpCode === 200) ? $content : false;
+}
+
+/**
+ * Hämta standard API-URL baserat på leverantör
+ */
+function getDefaultApiUrl($provider) {
+    $urls = [
+        'openai' => 'https://api.openai.com/v1/chat/completions',
+        'anthropic' => 'https://api.anthropic.com/v1/messages',
+        'google' => 'https://generativelanguage.googleapis.com/v1beta/models',
+        'openrouter' => 'https://openrouter.ai/api/v1/chat/completions',
+        'azure' => '',
+        'custom' => ''
+    ];
+    return $urls[$provider] ?? $urls['openai'];
 }
 
 /**
@@ -100,7 +172,11 @@ function validateCsrfToken($token) {
 
 function sendOpenAIRequest($messages) {
     // Hämta API-konfiguration från .env
-    $apiServer = getenv('AI_SERVER') ?: 'https://greta.sambruk.se/api/chat/completions';
+    $provider = getenv('AI_PROVIDER') ?: 'openai';
+    $apiServer = getenv('AI_SERVER') ?: '';
+    if (empty($apiServer)) {
+        $apiServer = getDefaultApiUrl($provider);
+    }
     $apiKey = getenv('AI_API_KEY') ?: '';
     $model = getenv('AI_MODEL') ?: 'gpt-4';
     $maxTokens = (int)(getenv('AI_MAX_COMPLETION_TOKENS') ?: 4096);
@@ -113,7 +189,7 @@ function sendOpenAIRequest($messages) {
         throw new Exception('API-nyckel saknas i konfigurationen.');
     }
 
-    // Avgör om vi använder openroute eller greta
+    // Avgör API-typ baserat på URL
     $isOpenRoute = strpos($apiServer, 'openrouter.ai') !== false;
 
     // Skapa API-förfrågan baserat på API-typ
