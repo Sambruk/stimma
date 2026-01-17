@@ -9,13 +9,20 @@ Denna handbok beskriver hur du använder Stimma e-learning plattform. Stimma är
 1. [Översikt över användarroller](#översikt-över-användarroller)
 2. [Kom igång - Logga in](#kom-igång---logga-in)
 3. [Guide för studenter](#guide-för-studenter)
+   - [Din dashboard](#din-dashboard)
+   - [Gamification - XP och nivåer](#gamification---xp-och-nivåer)
+   - [Certifikat](#certifikat)
 4. [Guide för redaktörer](#guide-för-redaktörer)
    - [Ange slutdatum för en kurs](#ange-slutdatum-för-en-kurs)
+   - [Förhandsgranska lektioner](#förhandsgranska-lektioner)
 5. [Guide för administratörer](#guide-för-administratörer)
    - [Dashboard - Översikt](#dashboard---översikt)
+   - [Certifikathantering](#certifikathantering)
    - [Påminnelseinställningar](#påminnelseinställningar)
    - [Skicka testmail](#skicka-testmail)
 6. [Guide för superadministratörer](#guide-för-superadministratörer)
+   - [AI-leverantörskonfiguration](#ai-leverantörskonfiguration)
+   - [Testa AI-anslutning](#testa-ai-anslutning)
 
 ---
 
@@ -94,6 +101,66 @@ Vissa lektioner har en inbyggd AI-tutor som kan hjälpa dig:
   - Dina quiz-resultat
   - Senast besökta lektion
 
+### Din dashboard
+
+Efter inloggning kommer du till din personliga dashboard som ger en översikt över din utbildning:
+
+1. **Statistikpanelen** visar:
+   - Totalt antal XP-poäng
+   - Din nuvarande nivå
+   - Antal slutförda kurser
+   - Antal intjänade certifikat
+
+2. **Pågående kurser** - Se dina aktiva kurser med progressindikator
+
+3. **Senaste aktivitet** - Snabb åtkomst till senast besökta lektioner
+
+4. **Achievements** - Dina senaste utmärkelser och medaljer
+
+### Gamification - XP och nivåer
+
+Stimma belönar ditt lärande med XP-poäng och nivåer:
+
+**Tjäna XP genom att:**
+- **Slutföra lektioner** - Varje lektion ger XP baserat på längd
+- **Klara quiz** - Rätt svar ger bonus-XP
+- **Slutföra kurser** - Stor XP-bonus vid kursslut
+- **Daglig aktivitet** - Streak-bonus för regelbundet lärande
+
+**Nivåsystemet:**
+| Nivå | XP krävs | Titel |
+|------|----------|-------|
+| 1 | 0 | Nybörjare |
+| 2 | 100 | Lärling |
+| 3 | 300 | Student |
+| 4 | 600 | Utforskare |
+| 5 | 1000 | Expert |
+| 6+ | +500/nivå | Mästare |
+
+**Achievements (Utmärkelser):**
+- 🎯 **Första steget** - Slutför din första lektion
+- 📚 **Kursklart** - Slutför din första kurs
+- 🔥 **På rad** - 7 dagars streak
+- ⭐ **Quiz-mästare** - 10 rätta quiz-svar i rad
+- 🏆 **Certifierad** - Erhåll ditt första certifikat
+
+### Certifikat
+
+När du slutför en kurs får du automatiskt ett certifikat:
+
+1. Slutför alla lektioner i kursen
+2. Certifikatet genereras automatiskt
+3. Hitta dina certifikat på din dashboard under **"Mina certifikat"**
+4. Ladda ner certifikatet som PDF
+5. Dela eller skriv ut certifikatet
+
+**Certifikatet innehåller:**
+- Ditt namn
+- Kursens namn
+- Slutförandedatum
+- Unikt certifikatnummer
+- Organisationens logotyp
+
 ---
 
 ## Guide för redaktörer
@@ -166,6 +233,23 @@ Du kan ange ett slutdatum för när en kurs ska vara genomförd:
 2. Dra och släpp lektioner för att ändra ordningen
 3. Ändringen sparas automatiskt
 
+### Förhandsgranska lektioner
+
+Innan du publicerar kan du förhandsgranska hur en lektion ser ut för studenter:
+
+1. Gå till **Kurser** och välj en kurs
+2. I lektionslistan, klicka på **ögon-ikonen** (👁️) bredvid lektionen
+3. Lektionen öppnas i förhandsgranskningsläge
+4. En orange banner visas längst upp: "FÖRHANDSVISNING"
+5. Testa lektionen - quiz, innehåll, video etc.
+6. **Ingen data sparas** - din progress påverkas inte
+
+**Tips:** Använd förhandsgranskning för att:
+- Kontrollera att quiz fungerar korrekt
+- Verifiera att videolänkar fungerar
+- Se hur innehållet presenteras för studenter
+- Testa AI-tutorn om den är aktiverad
+
 ### Skapa AI-genererad kurs
 
 1. Gå till **Kurser**
@@ -229,6 +313,24 @@ Som admin har du utökade behörigheter inom din organisation.
 3. Sök efter användare med e-post
 4. Klicka **"Lägg till"** för att tilldela dem
 5. Redaktörer kan nu redigera just den kursen
+
+### Certifikathantering
+
+Hantera certifikat för din organisation:
+
+1. Gå till **Certifikat** i adminmenyn
+2. Se alla utfärdade certifikat i organisationen
+3. För varje certifikat kan du:
+   - Se vem som erhållit certifikatet
+   - Vilken kurs det gäller
+   - Datum för utfärdande
+   - Ladda ner certifikatet som PDF
+
+**Anpassa certifikatmall:**
+1. Gå till **Certifikat** > **Inställningar**
+2. Ladda upp organisationens logotyp
+3. Anpassa certifikattexten
+4. Förhandsgranska resultatet
 
 ### Dashboard - Översikt
 
@@ -322,10 +424,59 @@ Innan du aktiverar påminnelser, testa att e-postinställningarna fungerar:
 
 Superadministratörer har fullständig systemåtkomst.
 
-### AI-inställningar
+### AI-leverantörskonfiguration
+
+Stimma stödjer flera AI-leverantörer. Så här konfigurerar du:
 
 1. Gå till **AI-inställningar** i adminmenyn
-2. Konfigurera:
+2. Under **"AI-leverantör & API-konfiguration"**:
+   - **Leverantör** - Välj din AI-leverantör:
+     - OpenAI (GPT-4, GPT-4o, etc.)
+     - Anthropic (Claude)
+     - Google AI (Gemini)
+     - Azure OpenAI
+     - OpenRouter
+     - Anpassad/Lokal
+   - **API-nyckel** - Ange din API-nyckel från leverantören
+   - **Server-URL** - Sätts automatiskt baserat på leverantör (kan anpassas)
+   - **Modell** - Välj AI-modell från dropdown-listan
+   - **Max tokens** - Begränsa svarslängden
+   - **Temperatur** - Justera kreativitetsnivå (0.0-1.0)
+
+3. Klicka **"Spara inställningar"**
+
+**Tillgängliga modeller per leverantör:**
+
+| Leverantör | Modeller |
+|------------|----------|
+| OpenAI | GPT-4o, GPT-4o Mini, GPT-4 Turbo, GPT-4, GPT-3.5 Turbo |
+| Anthropic | Claude Sonnet 4, Claude 3.5 Sonnet, Claude 3 Opus, Claude 3 Haiku |
+| Google | Gemini 1.5 Pro, Gemini 1.5 Flash, Gemini 1.0 Pro |
+| Azure | Konfigureras manuellt |
+| OpenRouter | Alla tillgängliga modeller via OpenRouter |
+
+### Testa AI-anslutning
+
+Innan du börjar använda AI-funktioner, verifiera att anslutningen fungerar:
+
+1. Gå till **AI-inställningar**
+2. Scrolla till **"Testa AI-anslutning"**
+3. Klicka på **"Testa anslutning"**
+4. Systemet skickar en testförfrågan till AI-leverantören
+5. Resultatet visas:
+   - ✅ **Grön** - Anslutningen fungerar
+   - ❌ **Röd** - Fel uppstod (felmeddelande visas)
+
+**Vanliga fel:**
+- "API-nyckel saknas" - Ange API-nyckel och spara först
+- "Unauthorized" - Kontrollera att API-nyckeln är korrekt
+- "Rate limit exceeded" - Vänta och försök igen
+- "Model not found" - Välj en annan modell
+
+### AI-guardrails
+
+1. Gå till **AI-inställningar** i adminmenyn
+2. Under **"AI Guardrails & Promptinställningar"** konfigurera:
    - **Guardrails aktiverat** - Säkerhetsbegränsningar för AI-svar
    - **Systemprompt-prefix** - Text som läggs till före alla AI-förfrågningar
    - **Blockerade ämnen** - Ämnen AI:n inte får diskutera
@@ -339,6 +490,17 @@ Superadministratörer har fullständig systemåtkomst.
 - Definiera tydliga **blockerade ämnen** för er verksamhet
 - Använd **svarsriktlinjer** för att säkerställa lämplig ton
 - Testa AI-svar regelbundet
+
+### Domänhantering
+
+Hantera vilka e-postdomäner som får tillgång till systemet:
+
+1. Gå till **Domäner** i adminmenyn
+2. Se lista över tillåtna domäner
+3. Lägg till ny domän med **"Lägg till domän"**
+4. Ta bort domäner som inte längre ska ha tillgång
+
+**Tips:** Endast användare med e-postadresser från tillåtna domäner kan logga in.
 
 ---
 
