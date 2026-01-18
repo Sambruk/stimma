@@ -164,10 +164,14 @@ require_once 'include/header.php';
                                 <td><?= $lesson['sort_order'] ?></td>
                                 <td><?= date('Y-m-d', strtotime($lesson['created_at'])) ?></td>
                                 <td>
+                                    <a href="../lesson.php?id=<?= $lesson['id'] ?>&preview=1" target="_blank"
+                                       class="btn btn-sm btn-outline-info" title="Förhandsgranska">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
                                     <a href="edit_lesson.php?id=<?= $lesson['id'] ?>" class="btn btn-sm btn-primary">
                                         <i class="bi bi-pencil"></i>
                                     </a>
-                                    <a href="delete_lesson.php?id=<?= $lesson['id'] ?>&csrf_token=<?= htmlspecialchars($_SESSION['csrf_token']) ?>" 
+                                    <a href="delete_lesson.php?id=<?= $lesson['id'] ?>&csrf_token=<?= htmlspecialchars($_SESSION['csrf_token']) ?>"
                                        onclick="return confirm('Är du säker på att du vill radera denna lektion?')"
                                        class="btn btn-sm btn-outline-danger">
                                         <i class="bi bi-trash"></i>

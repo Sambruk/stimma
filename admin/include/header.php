@@ -103,6 +103,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
                         <i class="bi bi-bar-chart me-2"></i> Statistik
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a href="certificates.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'certificates.php' ? 'active' : '' ?>">
+                        <i class="bi bi-award me-2"></i> Certifikat
+                    </a>
+                </li>
                 <?php endif; ?>
                 <?php if ($isAdmin || $isSuperAdmin): ?>
                 <li class="nav-item">

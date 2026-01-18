@@ -47,10 +47,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $quiz_question = $_POST['quiz_question'] ?? '';
     
     // Hantera vanliga textfält
+    $quiz_type = $_POST['quiz_type'] ?? 'single_choice';
     $quiz_answer1 = trim($_POST['quiz_answer1'] ?? '');
     $quiz_answer2 = trim($_POST['quiz_answer2'] ?? '');
     $quiz_answer3 = trim($_POST['quiz_answer3'] ?? '');
+    $quiz_answer4 = trim($_POST['quiz_answer4'] ?? '');
+    $quiz_answer5 = trim($_POST['quiz_answer5'] ?? '');
     $quiz_correct_answer = (int)($_POST['quiz_correct_answer'] ?? 0);
+    $quiz_correct_answers = trim($_POST['quiz_correct_answers'] ?? '');
     
     // Hantera bilduppladdning
     // SECURITY FIX: Enhanced file upload validation
@@ -124,9 +128,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         if (isset($_GET['id'])) {
             // Uppdatera befintlig lektion
-            execute("UPDATE " . DB_DATABASE . ".lessons SET 
-                    title = ?, 
-                    content = ?, 
+            execute("UPDATE " . DB_DATABASE . ".lessons SET
+                    title = ?,
+                    content = ?,
                     course_id = ?,
                     image_url = ?,
                     video_url = ?,
@@ -134,16 +138,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ai_instruction = ?,
                     ai_prompt = ?,
                     quiz_question = ?,
+                    quiz_type = ?,
                     quiz_answer1 = ?,
                     quiz_answer2 = ?,
                     quiz_answer3 = ?,
+                    quiz_answer4 = ?,
+                    quiz_answer5 = ?,
                     quiz_correct_answer = ?,
-                    updated_at = NOW() 
-                    WHERE id = ?", 
-                    [$title, $content, $course_id, $image_url, $_POST['video_url'], $status, 
-                     $ai_instruction, $ai_prompt, $quiz_question,
-                     $quiz_answer1, $quiz_answer2, $quiz_answer3, $quiz_correct_answer,
-                     $_GET['id']]);
+                    quiz_correct_answers = ?,
+                    updated_at = NOW()
+                    WHERE id = ?",
+                    [$title, $content, $course_id, $image_url, $_POST['video_url'], $status,
+                     $ai_instruction, $ai_prompt, $quiz_question, $quiz_type,
+                     $quiz_answer1, $quiz_answer2, $quiz_answer3, $quiz_answer4, $quiz_answer5,
+                     $quiz_correct_answer, $quiz_correct_answers, $_GET['id']]);
             
             // Logga ändringen
             logActivity($_SESSION['user_email'], "Uppdaterade lektionen '" . $title . "' (ID: " . $_GET['id'] . ")");
@@ -158,15 +166,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $authorId = $author ? $author['id'] : null;
             
             // Skapa ny lektion
-            execute("INSERT INTO " . DB_DATABASE . ".lessons 
-                    (title, content, course_id, image_url, video_url, status, 
-                     ai_instruction, ai_prompt, quiz_question,
-                     quiz_answer1, quiz_answer2, quiz_answer3, quiz_correct_answer,
-                     sort_order, author_id, created_at, updated_at) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())", 
+            execute("INSERT INTO " . DB_DATABASE . ".lessons
+                    (title, content, course_id, image_url, video_url, status,
+                     ai_instruction, ai_prompt, quiz_question, quiz_type,
+                     quiz_answer1, quiz_answer2, quiz_answer3, quiz_answer4, quiz_answer5,
+                     quiz_correct_answer, quiz_correct_answers,
+                     sort_order, author_id, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
                     [$title, $content, $course_id, $image_url, $_POST['video_url'], $status,
-                     $ai_instruction, $ai_prompt, $quiz_question,
-                     $quiz_answer1, $quiz_answer2, $quiz_answer3, $quiz_correct_answer,
+                     $ai_instruction, $ai_prompt, $quiz_question, $quiz_type,
+                     $quiz_answer1, $quiz_answer2, $quiz_answer3, $quiz_answer4, $quiz_answer5,
+                     $quiz_correct_answer, $quiz_correct_answers,
                      $maxOrder + 1, $authorId]);
             
             $newId = getDb()->lastInsertId();
@@ -194,10 +204,14 @@ $videoUrl = '';
 $aiInstruction = '';
 $aiPrompt = '';
 $quizQuestion = '';
+$quizType = 'single_choice';
 $quizAnswer1 = '';
 $quizAnswer2 = '';
 $quizAnswer3 = '';
+$quizAnswer4 = '';
+$quizAnswer5 = '';
 $quizCorrectAnswer = 0;
+$quizCorrectAnswers = '';
 
 // Kontrollera om vi redigerar en befintlig lektion eller skapar en ny
 if (isset($_GET['id']) && is_numeric($_GET['id'])) {
@@ -214,10 +228,14 @@ if (isset($_GET['id']) && is_numeric($_GET['id'])) {
         $aiInstruction = $lesson['ai_instruction'] ?? '';
         $aiPrompt = $lesson['ai_prompt'] ?? '';
         $quizQuestion = $lesson['quiz_question'] ?? '';
+        $quizType = $lesson['quiz_type'] ?? 'single_choice';
         $quizAnswer1 = $lesson['quiz_answer1'] ?? '';
         $quizAnswer2 = $lesson['quiz_answer2'] ?? '';
         $quizAnswer3 = $lesson['quiz_answer3'] ?? '';
+        $quizAnswer4 = $lesson['quiz_answer4'] ?? '';
+        $quizAnswer5 = $lesson['quiz_answer5'] ?? '';
         $quizCorrectAnswer = (int)($lesson['quiz_correct_answer'] ?? 0);
+        $quizCorrectAnswers = $lesson['quiz_correct_answers'] ?? '';
     } else {
         $_SESSION['message'] = "Lektionen kunde inte hittas.";
         $_SESSION['message_type'] = "danger";
@@ -346,14 +364,24 @@ $courses = queryAll("SELECT * FROM " . DB_DATABASE . ".courses ORDER BY sort_ord
                         </div>
 
                         <div class="mb-3">
+                            <div class="form-floating">
+                                <select class="form-select" id="quiz_type" name="quiz_type" onchange="updateQuizTypeUI()">
+                                    <option value="single_choice" <?= $quizType === 'single_choice' ? 'selected' : '' ?>>Enkelval (en rätt)</option>
+                                    <option value="multiple_choice" <?= $quizType === 'multiple_choice' ? 'selected' : '' ?>>Flerval (flera rätta)</option>
+                                </select>
+                                <label for="quiz_type">Frågetyp</label>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
                             <label for="quiz_question" class="form-label fw-normal">Quiz-fråga</label>
                             <?php require_once 'include/editor.php'; renderEditor($quizQuestion ?? '', 'quiz_question', 'quizQuestionEditor'); ?>
                         </div>
 
-                        <div class="row">
+                        <div class="row" id="quiz-answers-container">
                             <div class="col-md-4 mb-3">
                                 <div class="form-floating">
-                                    <input type="text" class="form-control" id="quiz_answer1" name="quiz_answer1" 
+                                    <input type="text" class="form-control" id="quiz_answer1" name="quiz_answer1"
                                            value="<?= htmlspecialchars($quizAnswer1 ?? '') ?>">
                                     <label for="quiz_answer1">Svarsalternativ 1</label>
                                 </div>
@@ -361,7 +389,7 @@ $courses = queryAll("SELECT * FROM " . DB_DATABASE . ".courses ORDER BY sort_ord
 
                             <div class="col-md-4 mb-3">
                                 <div class="form-floating">
-                                    <input type="text" class="form-control" id="quiz_answer2" name="quiz_answer2" 
+                                    <input type="text" class="form-control" id="quiz_answer2" name="quiz_answer2"
                                            value="<?= htmlspecialchars($quizAnswer2 ?? '') ?>">
                                     <label for="quiz_answer2">Svarsalternativ 2</label>
                                 </div>
@@ -369,23 +397,59 @@ $courses = queryAll("SELECT * FROM " . DB_DATABASE . ".courses ORDER BY sort_ord
 
                             <div class="col-md-4 mb-3">
                                 <div class="form-floating">
-                                    <input type="text" class="form-control" id="quiz_answer3" name="quiz_answer3" 
+                                    <input type="text" class="form-control" id="quiz_answer3" name="quiz_answer3"
                                            value="<?= htmlspecialchars($quizAnswer3 ?? '') ?>">
                                     <label for="quiz_answer3">Svarsalternativ 3</label>
                                 </div>
                             </div>
+
+                            <div class="col-md-4 mb-3">
+                                <div class="form-floating">
+                                    <input type="text" class="form-control" id="quiz_answer4" name="quiz_answer4"
+                                           value="<?= htmlspecialchars($quizAnswer4 ?? '') ?>">
+                                    <label for="quiz_answer4">Svarsalternativ 4 (valfritt)</label>
+                                </div>
+                            </div>
+
+                            <div class="col-md-4 mb-3">
+                                <div class="form-floating">
+                                    <input type="text" class="form-control" id="quiz_answer5" name="quiz_answer5"
+                                           value="<?= htmlspecialchars($quizAnswer5 ?? '') ?>">
+                                    <label for="quiz_answer5">Svarsalternativ 5 (valfritt)</label>
+                                </div>
+                            </div>
                         </div>
 
-                        <div class="mb-3">
+                        <!-- Single choice: dropdown -->
+                        <div class="mb-3" id="single-choice-container">
                             <div class="form-floating">
                                 <select class="form-select" id="quiz_correct_answer" name="quiz_correct_answer">
                                     <option value="">Välj rätt svar...</option>
                                     <option value="1" <?= $quizCorrectAnswer === 1 ? 'selected' : '' ?>>Svar 1</option>
                                     <option value="2" <?= $quizCorrectAnswer === 2 ? 'selected' : '' ?>>Svar 2</option>
                                     <option value="3" <?= $quizCorrectAnswer === 3 ? 'selected' : '' ?>>Svar 3</option>
+                                    <option value="4" <?= $quizCorrectAnswer === 4 ? 'selected' : '' ?>>Svar 4</option>
+                                    <option value="5" <?= $quizCorrectAnswer === 5 ? 'selected' : '' ?>>Svar 5</option>
                                 </select>
                                 <label for="quiz_correct_answer">Rätt svar</label>
                             </div>
+                        </div>
+
+                        <!-- Multiple choice: checkboxes -->
+                        <div class="mb-3" id="multiple-choice-container" style="display: none;">
+                            <label class="form-label fw-normal">Rätta svar (välj alla som gäller)</label>
+                            <?php
+                            $correctAnswersArray = !empty($quizCorrectAnswers) ? explode(',', $quizCorrectAnswers) : [];
+                            for ($i = 1; $i <= 5; $i++):
+                            ?>
+                            <div class="form-check">
+                                <input class="form-check-input quiz-correct-checkbox" type="checkbox"
+                                       id="quiz_correct_<?= $i ?>" value="<?= $i ?>"
+                                       <?= in_array((string)$i, $correctAnswersArray) ? 'checked' : '' ?>>
+                                <label class="form-check-label" for="quiz_correct_<?= $i ?>">Svar <?= $i ?></label>
+                            </div>
+                            <?php endfor; ?>
+                            <input type="hidden" id="quiz_correct_answers" name="quiz_correct_answers" value="<?= htmlspecialchars($quizCorrectAnswers ?? '') ?>">
                         </div>
 
                         <div class="form-check form-switch mb-3">
@@ -528,4 +592,33 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Quiz type UI switching
+function updateQuizTypeUI() {
+    const quizType = document.getElementById('quiz_type').value;
+    const singleChoiceContainer = document.getElementById('single-choice-container');
+    const multipleChoiceContainer = document.getElementById('multiple-choice-container');
+
+    if (quizType === 'multiple_choice') {
+        singleChoiceContainer.style.display = 'none';
+        multipleChoiceContainer.style.display = 'block';
+    } else {
+        singleChoiceContainer.style.display = 'block';
+        multipleChoiceContainer.style.display = 'none';
+    }
+}
+
+// Update hidden field when checkboxes change
+document.querySelectorAll('.quiz-correct-checkbox').forEach(function(checkbox) {
+    checkbox.addEventListener('change', function() {
+        const checked = [];
+        document.querySelectorAll('.quiz-correct-checkbox:checked').forEach(function(cb) {
+            checked.push(cb.value);
+        });
+        document.getElementById('quiz_correct_answers').value = checked.join(',');
+    });
+});
+
+// Initialize UI on page load
+updateQuizTypeUI();
 </script>
