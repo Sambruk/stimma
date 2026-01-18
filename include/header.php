@@ -97,10 +97,25 @@
                         $isCourseEditor = $user ? (bool)$user['is_editor'] : false;
                     }
                     
-                    if ($isAdmin || $isCourseEditor): ?>
+                    ?>
+                    <!-- Dashboard link -->
+                    <a href="dashboard.php"
+                       class="btn btn-link p-1 me-2 d-inline-flex align-items-center justify-content-center"
+                       title="Min dashboard"
+                       aria-label="Dashboard">
+                        <i class="bi bi-speedometer2 text-dark" aria-hidden="true"></i>
+                    </a>
+                    <!-- Certificates link -->
+                    <a href="certificate.php"
+                       class="btn btn-link p-1 me-2 d-inline-flex align-items-center justify-content-center"
+                       title="Mina certifikat"
+                       aria-label="Certifikat">
+                        <i class="bi bi-award text-dark" aria-hidden="true"></i>
+                    </a>
+                    <?php if ($isAdmin || $isCourseEditor): ?>
                         <!-- Admin panel link (hidden on small screens) -->
-                        <a href="admin/index.php" 
-                           class="btn btn-link p-1 me-2 d-inline-flex align-items-center justify-content-center d-none d-sm-inline-flex" 
+                        <a href="admin/index.php"
+                           class="btn btn-link p-1 me-2 d-inline-flex align-items-center justify-content-center d-none d-sm-inline-flex"
                            title="Administrera"
                            aria-label="Administration panel">
                             <i class="bi bi-gear text-dark" aria-hidden="true"></i>

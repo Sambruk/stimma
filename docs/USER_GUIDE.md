@@ -8,6 +8,7 @@ Denna handbok beskriver hur du använder Stimma e-learning plattform. Stimma är
 
 1. [Översikt över användarroller](#översikt-över-användarroller)
 2. [Kom igång - Logga in](#kom-igång---logga-in)
+   - [Hur länge är jag inloggad?](#hur-länge-är-jag-inloggad)
 3. [Guide för studenter](#guide-för-studenter)
    - [Din dashboard](#din-dashboard)
    - [Gamification - XP och nivåer](#gamification---xp-och-nivåer)
@@ -53,7 +54,21 @@ Stimma använder e-postbaserad inloggning utan lösenord. Så här loggar du in:
 **Tips:**
 - Inloggningslänken är giltig i 15 minuter
 - Länken kan endast användas en gång
-- Välj "Kom ihåg mig" för att slippa logga in varje gång
+
+### Hur länge är jag inloggad?
+
+Hur länge du förblir inloggad beror på om du kryssar i **"Kom ihåg mig"** vid inloggning:
+
+| Alternativ | Beteende |
+|------------|----------|
+| **Utan "Kom ihåg mig"** | Du loggas ut när du stänger webbläsaren |
+| **Med "Kom ihåg mig"** | Du förblir inloggad i **30 dagar**, även om du stänger webbläsaren |
+
+**Rekommendation:**
+- **Personlig dator/mobil**: Kryssa i "Kom ihåg mig" för bekvämlighet
+- **Delad/offentlig dator**: Kryssa **inte** i "Kom ihåg mig" för säkerhetens skull
+
+**Obs:** Om du väljer "Kom ihåg mig" och använder Stimma regelbundet förnyas din inloggning automatiskt, så du behöver aldrig logga in igen så länge du besöker sidan inom 30 dagar.
 
 ---
 

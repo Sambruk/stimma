@@ -67,7 +67,7 @@ if (!isset($_GET['token']) || !isset($_GET['email'])) {
 
         // Skapa "kom ihåg mig" token om användaren valde det
         if (isset($_SESSION['pending_remember_me']) && $_SESSION['pending_remember_me']) {
-            createRememberToken($user['id'], 168); // 168 timmar = 7 dagar
+            createRememberToken($user['id']); // Använder REMEMBER_TOKEN_HOURS från .env (standard 30 dagar)
         }
         // Rensa pending_remember_me från sessionen
         unset($_SESSION['pending_remember_me']);
