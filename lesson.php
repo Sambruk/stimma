@@ -48,8 +48,21 @@ function isAjaxRequest() {
 // Get lesson ID from URL parameter
 $lessonId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
+// Check if preview mode is enabled
+$isPreviewMode = isset($_GET['preview']) && $_GET['preview'] == '1';
+
 // Get current user's ID from session
 $userId = $_SESSION['user_id'];
+
+// If preview mode, verify user has admin or editor privileges
+if ($isPreviewMode) {
+    $currentUser = queryOne("SELECT is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE id = ?", [$userId]);
+    if (!$currentUser || (!$currentUser['is_admin'] && !$currentUser['is_editor'])) {
+        // Not authorized for preview - redirect to normal lesson view
+        redirect("lesson.php?id=$lessonId");
+        exit;
+    }
+}
 
 // Fetch lesson information including course details
 $lesson = queryOne("
@@ -67,17 +80,54 @@ if (!$lesson) {
     exit;
 }
 
-// Get user's progress for this lesson
-$progress = queryOne("
-    SELECT * FROM " . DB_DATABASE . ".progress 
-    WHERE user_id = ? AND lesson_id = ?
-", [$userId, $lessonId]);
+// Get user's progress for this lesson (skip in preview mode)
+$progress = null;
+$isCompleted = false;
+if (!$isPreviewMode) {
+    $progress = queryOne("
+        SELECT * FROM " . DB_DATABASE . ".progress
+        WHERE user_id = ? AND lesson_id = ?
+    ", [$userId, $lessonId]);
 
-// Check if lesson is completed
-$isCompleted = $progress && $progress['status'] === 'completed';
+    // Check if lesson is completed
+    $isCompleted = $progress && $progress['status'] === 'completed';
+}
 
-// Handle form submission for quiz answers
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['answer'])) {
+// Handle preview mode quiz submission (no saving)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['answer']) && $isPreviewMode) {
+    // Validate CSRF token for security
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        if (isAjaxRequest()) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'Ogiltig förfrågan.']);
+            exit;
+        }
+    }
+
+    $userAnswer = (int)$_POST['answer'];
+    $correctAnswer = (int)$lesson['quiz_correct_answer'];
+    $isCorrect = ($userAnswer === $correctAnswer);
+
+    if (isAjaxRequest()) {
+        header('Content-Type: application/json');
+        if ($isCorrect) {
+            echo json_encode([
+                'success' => true,
+                'preview_mode' => true,
+                'message' => 'Rätt svar! (Förhandsgranskningsläge - framsteg sparas inte)'
+            ]);
+        } else {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Fel svar. Försök igen! (Förhandsgranskningsläge)'
+            ]);
+        }
+        exit;
+    }
+}
+
+// Handle form submission for quiz answers (skip in preview mode)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['answer']) && !$isPreviewMode) {
     // Validate CSRF token for security
     if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
         if (isAjaxRequest()) {
@@ -226,6 +276,18 @@ function convertYoutubeUrl($url) {
     return str_replace('youtube.com', 'youtube-nocookie.com', $url);
 }
 ?>
+
+<!-- Preview mode banner -->
+<?php if ($isPreviewMode): ?>
+<div class="alert alert-warning alert-dismissible mb-0 rounded-0 text-center" role="alert">
+    <i class="bi bi-eye-fill me-2"></i>
+    <strong>Förhandsgranskningsläge</strong> - Dina framsteg sparas inte.
+    <a href="admin/edit_lesson.php?id=<?= $lessonId ?>" class="alert-link ms-2">
+        <i class="bi bi-pencil"></i> Redigera lektion
+    </a>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Stäng"></button>
+</div>
+<?php endif; ?>
 
 <!-- Main content container -->
 <div class="container-sm py-4">
@@ -552,7 +614,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const formData = new FormData(quizForm);
             
-            fetch('lesson.php?id=<?= $lessonId ?>', {
+            fetch('lesson.php?id=<?= $lessonId ?><?= $isPreviewMode ? '&preview=1' : '' ?>', {
                 method: 'POST',
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest'
@@ -570,43 +632,60 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.success) {
                     // Visa framgångsmeddelande
                     const quizSection = document.querySelector('.quiz-section');
-                    quizSection.innerHTML = `
-                        <div class="text-center">
-                            <i class="bi bi-trophy-fill text-success" style="font-size: 3rem;"></i>
-                            <h3 class="mt-3">Bra jobbat!</h3>
-                            <p class="text-muted mb-3">Du har klarat denna lektion!</p>
-                            ${data.nextLesson ? `
-                                <div class="d-grid">
-                                    <a href="lesson.php?id=${data.nextLesson.id}" class="btn btn-success btn-lg">
-                                        <i class="bi bi-arrow-right-circle-fill me-2"></i> Fortsätt till nästa lektion: <strong>${data.nextLesson.title}</strong>
-                                    </a>
-                                </div>
-                            ` : '<p class="text-muted">Detta var sista lektionen i denna kurs!</p>'}
-                        </div>
-                    `;
-                    
-                    // Visa konfetti vid framgång
-                    setTimeout(() => {
-                        try {
-                            stimmaConfetti.show({
-                                particleCount: 600,
-                                gravity: 0.6,
-                                spread: 180,
-                                startY: 0.8,
-                                direction: 'up',
-                                colors: [
-                                    '#FFC700',
-                                    '#FF5252',
-                                    '#3377FF',
-                                    '#4CAF50',
-                                    '#9C27B0',
-                                    '#FF9800'
-                                ]
-                            });
-                        } catch (e) {
-                            // Tysta fel
-                        }
-                    }, 200);
+
+                    // Check if this is preview mode
+                    if (data.preview_mode) {
+                        quizSection.innerHTML = `
+                            <div class="text-center">
+                                <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
+                                <h3 class="mt-3">Rätt svar!</h3>
+                                <p class="text-warning mb-3">
+                                    <i class="bi bi-eye-fill"></i> Förhandsgranskningsläge - framsteg sparas inte
+                                </p>
+                                <a href="admin/edit_lesson.php?id=<?= $lessonId ?>" class="btn btn-primary">
+                                    <i class="bi bi-pencil me-1"></i> Tillbaka till redigering
+                                </a>
+                            </div>
+                        `;
+                    } else {
+                        quizSection.innerHTML = `
+                            <div class="text-center">
+                                <i class="bi bi-trophy-fill text-success" style="font-size: 3rem;"></i>
+                                <h3 class="mt-3">Bra jobbat!</h3>
+                                <p class="text-muted mb-3">Du har klarat denna lektion!</p>
+                                ${data.nextLesson ? `
+                                    <div class="d-grid">
+                                        <a href="lesson.php?id=${data.nextLesson.id}" class="btn btn-success btn-lg">
+                                            <i class="bi bi-arrow-right-circle-fill me-2"></i> Fortsätt till nästa lektion: <strong>${data.nextLesson.title}</strong>
+                                        </a>
+                                    </div>
+                                ` : '<p class="text-muted">Detta var sista lektionen i denna kurs!</p>'}
+                            </div>
+                        `;
+
+                        // Visa konfetti vid framgång (bara i normalt läge)
+                        setTimeout(() => {
+                            try {
+                                stimmaConfetti.show({
+                                    particleCount: 600,
+                                    gravity: 0.6,
+                                    spread: 180,
+                                    startY: 0.8,
+                                    direction: 'up',
+                                    colors: [
+                                        '#FFC700',
+                                        '#FF5252',
+                                        '#3377FF',
+                                        '#4CAF50',
+                                        '#9C27B0',
+                                        '#FF9800'
+                                    ]
+                                });
+                            } catch (e) {
+                                // Tysta fel
+                            }
+                        }, 200);
+                    }
                 } else {
                     // Visa felmeddelande
                     const errorDiv = document.createElement('div');
