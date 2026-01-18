@@ -160,6 +160,63 @@ function saveDomainsList($file, $domains) {
 $domains = getDomainsList($domainsFile);
 sort($domains);
 
+// Hämta filter från GET-parameter
+$showOnlyWithUsers = isset($_GET['filter']) && $_GET['filter'] === 'with_users';
+
+// Hämta användarstatistik per domän
+function getUserStatsByDomain() {
+    $stats = [];
+
+    // Hämta alla användare grupperat per domän
+    $result = query("
+        SELECT
+            LOWER(SUBSTRING_INDEX(email, '@', -1)) as domain,
+            COUNT(*) as total,
+            SUM(CASE WHEN is_admin = 1 OR role IN ('admin', 'super_admin') THEN 1 ELSE 0 END) as admins,
+            SUM(CASE WHEN is_editor = 1 AND is_admin = 0 AND role NOT IN ('admin', 'super_admin') THEN 1 ELSE 0 END) as editors,
+            SUM(CASE WHEN is_admin = 0 AND is_editor = 0 AND (role IS NULL OR role NOT IN ('admin', 'super_admin')) THEN 1 ELSE 0 END) as students
+        FROM " . DB_DATABASE . ".users
+        GROUP BY LOWER(SUBSTRING_INDEX(email, '@', -1))
+        ORDER BY total DESC
+    ", []);
+
+    foreach ($result as $row) {
+        $stats[$row['domain']] = [
+            'total' => (int)$row['total'],
+            'admins' => (int)$row['admins'],
+            'editors' => (int)$row['editors'],
+            'students' => (int)$row['students']
+        ];
+    }
+
+    return $stats;
+}
+
+$userStats = getUserStatsByDomain();
+
+// Filtrera domäner om filter är aktivt
+$filteredDomains = $domains;
+if ($showOnlyWithUsers) {
+    $filteredDomains = array_filter($domains, function($domain) use ($userStats) {
+        return isset($userStats[$domain]) && $userStats[$domain]['total'] > 0;
+    });
+}
+
+// Sortera domäner efter antal användare (flest först)
+usort($filteredDomains, function($a, $b) use ($userStats) {
+    $countA = isset($userStats[$a]) ? $userStats[$a]['total'] : 0;
+    $countB = isset($userStats[$b]) ? $userStats[$b]['total'] : 0;
+    if ($countB !== $countA) {
+        return $countB - $countA; // Flest användare först
+    }
+    return strcmp($a, $b); // Alfabetiskt vid lika antal
+});
+
+// Räkna domäner med användare
+$domainsWithUsers = count(array_filter($domains, function($domain) use ($userStats) {
+    return isset($userStats[$domain]) && $userStats[$domain]['total'] > 0;
+}));
+
 // Inkludera header
 require_once 'include/header.php';
 ?>
@@ -204,17 +261,31 @@ require_once 'include/header.php';
 
                 <!-- Lista över domäner -->
                 <div class="card">
-                    <div class="card-header">
+                    <div class="card-header d-flex justify-content-between align-items-center">
                         <h6 class="m-0">
                             <i class="bi bi-list-ul me-2"></i>Registrerade domäner
-                            <span class="badge bg-secondary ms-2"><?= count($domains) ?></span>
+                            <span class="badge bg-secondary ms-2"><?= count($filteredDomains) ?> av <?= count($domains) ?></span>
                         </h6>
+                        <!-- Filter -->
+                        <div class="btn-group" role="group">
+                            <a href="domains.php" class="btn btn-sm <?= !$showOnlyWithUsers ? 'btn-primary' : 'btn-outline-primary' ?>">
+                                <i class="bi bi-list me-1"></i>Alla (<?= count($domains) ?>)
+                            </a>
+                            <a href="domains.php?filter=with_users" class="btn btn-sm <?= $showOnlyWithUsers ? 'btn-primary' : 'btn-outline-primary' ?>">
+                                <i class="bi bi-people me-1"></i>Med användare (<?= $domainsWithUsers ?>)
+                            </a>
+                        </div>
                     </div>
                     <div class="card-body">
-                        <?php if (empty($domains)): ?>
+                        <?php if (empty($filteredDomains)): ?>
                             <div class="alert alert-warning mb-0">
                                 <i class="bi bi-exclamation-triangle me-2"></i>
-                                Inga domäner är vitlistade. Lägg till minst en domän för att tillåta användare att registrera sig.
+                                <?php if ($showOnlyWithUsers): ?>
+                                    Inga domäner med registrerade användare hittades.
+                                    <a href="domains.php" class="alert-link">Visa alla domäner</a>
+                                <?php else: ?>
+                                    Inga domäner är vitlistade. Lägg till minst en domän för att tillåta användare att registrera sig.
+                                <?php endif; ?>
                             </div>
                         <?php else: ?>
                             <div class="table-responsive">
@@ -222,19 +293,61 @@ require_once 'include/header.php';
                                     <thead class="table-light">
                                         <tr>
                                             <th>Domän</th>
+                                            <th class="text-center" style="width: 80px;" title="Administratörer">
+                                                <i class="bi bi-shield-fill text-danger"></i> Admin
+                                            </th>
+                                            <th class="text-center" style="width: 80px;" title="Redaktörer">
+                                                <i class="bi bi-pencil-fill text-warning"></i> Red.
+                                            </th>
+                                            <th class="text-center" style="width: 80px;" title="Studenter">
+                                                <i class="bi bi-person-fill text-info"></i> Stud.
+                                            </th>
+                                            <th class="text-center" style="width: 80px;" title="Totalt antal användare">
+                                                <i class="bi bi-people-fill text-primary"></i> Totalt
+                                            </th>
                                             <th class="text-end" style="width: 120px;">Åtgärd</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <?php foreach ($domains as $domain): ?>
+                                        <?php foreach ($filteredDomains as $domain):
+                                            $stats = $userStats[$domain] ?? ['total' => 0, 'admins' => 0, 'editors' => 0, 'students' => 0];
+                                        ?>
                                             <tr>
                                                 <td>
                                                     <i class="bi bi-globe2 text-primary me-2"></i>
                                                     <strong><?= htmlspecialchars($domain) ?></strong>
                                                 </td>
+                                                <td class="text-center">
+                                                    <?php if ($stats['admins'] > 0): ?>
+                                                        <span class="badge bg-danger"><?= $stats['admins'] ?></span>
+                                                    <?php else: ?>
+                                                        <span class="text-muted">-</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td class="text-center">
+                                                    <?php if ($stats['editors'] > 0): ?>
+                                                        <span class="badge bg-warning text-dark"><?= $stats['editors'] ?></span>
+                                                    <?php else: ?>
+                                                        <span class="text-muted">-</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td class="text-center">
+                                                    <?php if ($stats['students'] > 0): ?>
+                                                        <span class="badge bg-info"><?= $stats['students'] ?></span>
+                                                    <?php else: ?>
+                                                        <span class="text-muted">-</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td class="text-center">
+                                                    <?php if ($stats['total'] > 0): ?>
+                                                        <span class="badge bg-primary"><?= $stats['total'] ?></span>
+                                                    <?php else: ?>
+                                                        <span class="text-muted">0</span>
+                                                    <?php endif; ?>
+                                                </td>
                                                 <td class="text-end">
-                                                    <form method="POST" action="domains.php" class="d-inline"
-                                                          onsubmit="return confirm('Är du säker på att du vill ta bort domänen <?= htmlspecialchars($domain) ?>? Befintliga användare påverkas inte, men nya användare från denna domän kommer inte kunna registrera sig.');">
+                                                    <form method="POST" action="domains.php<?= $showOnlyWithUsers ? '?filter=with_users' : '' ?>" class="d-inline"
+                                                          onsubmit="return confirm('Är du säker på att du vill ta bort domänen <?= htmlspecialchars($domain) ?>?<?= $stats['total'] > 0 ? ' Det finns ' . $stats['total'] . ' registrerade användare från denna domän.' : '' ?> Befintliga användare påverkas inte, men nya användare från denna domän kommer inte kunna registrera sig.');">
                                                         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                                                         <input type="hidden" name="action" value="delete">
                                                         <input type="hidden" name="domain" value="<?= htmlspecialchars($domain) ?>">
@@ -246,6 +359,30 @@ require_once 'include/header.php';
                                             </tr>
                                         <?php endforeach; ?>
                                     </tbody>
+                                    <?php
+                                    // Beräkna totalsummor
+                                    $totalAdmins = 0;
+                                    $totalEditors = 0;
+                                    $totalStudents = 0;
+                                    $totalUsers = 0;
+                                    foreach ($filteredDomains as $domain) {
+                                        $stats = $userStats[$domain] ?? ['total' => 0, 'admins' => 0, 'editors' => 0, 'students' => 0];
+                                        $totalAdmins += $stats['admins'];
+                                        $totalEditors += $stats['editors'];
+                                        $totalStudents += $stats['students'];
+                                        $totalUsers += $stats['total'];
+                                    }
+                                    ?>
+                                    <tfoot class="table-light">
+                                        <tr class="fw-bold">
+                                            <td>Summa (<?= count($filteredDomains) ?> domäner)</td>
+                                            <td class="text-center"><?= $totalAdmins ?></td>
+                                            <td class="text-center"><?= $totalEditors ?></td>
+                                            <td class="text-center"><?= $totalStudents ?></td>
+                                            <td class="text-center"><?= $totalUsers ?></td>
+                                            <td></td>
+                                        </tr>
+                                    </tfoot>
                                 </table>
                             </div>
                         <?php endif; ?>
