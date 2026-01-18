@@ -8,6 +8,13 @@ _Inga pågående uppgifter_
 - [ ] Statistik per e-postkampanj
 
 ## Slutfört
+- [x] Lägg till behörighetsinformation i användarhandboken (user_guide.php)
+- [x] Lägg till informationsruta om behörigheter i användarvyn (index.php)
+- [x] Gör användarhandboken tillgänglig för alla inloggade användare
+- [x] Uppdatera version till 2.0 i footer
+- [x] Fixa kursfiltrering i admin/courses.php (admin ser endast egen organisation)
+- [x] Fixa redaktörsfiltrering i admin/courses.php (redaktör ser egna/tilldelade kurser)
+- [x] Verifiera att copy_course.php visar alla kurser från alla organisationer
 - [x] Skapa TODO.md för projektet
 - [x] Lägg till testmail-funktion i admin/reminders.php
 - [x] Skapa AJAX-endpoint för att skicka testmail (admin/ajax/send_test_reminder.php)

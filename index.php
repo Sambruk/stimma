@@ -641,6 +641,32 @@ else:
                         </div>
                         
                         <?php endif; ?>
+
+                    <!-- Information om behörigheter -->
+                    <div class="card border-0 bg-light mt-5">
+                        <div class="card-body p-4">
+                            <div class="d-flex align-items-start">
+                                <div class="me-3">
+                                    <span class="badge bg-success rounded-circle p-2">
+                                        <i class="bi bi-question-lg"></i>
+                                    </span>
+                                </div>
+                                <div>
+                                    <h6 class="mb-2">Vill du skapa egna kurser?</h6>
+                                    <p class="text-muted small mb-2">
+                                        Om du önskar få behörighet som <strong>Redaktör</strong> eller <strong>Admin</strong>
+                                        för den organisation du tillhör, skicka en förfrågan till:
+                                    </p>
+                                    <a href="mailto:hjalp@sambruksupport.se" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-envelope me-1"></i>hjalp@sambruksupport.se
+                                    </a>
+                                    <a href="admin/user_guide.php" class="btn btn-sm btn-outline-secondary ms-2">
+                                        <i class="bi bi-book me-1"></i>Användarhandbok
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </main>
             </div>
             <div class="col-lg-2 d-none d-lg-block"></div>

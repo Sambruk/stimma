@@ -77,6 +77,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
         </div>
         <div class="d-flex flex-column h-100">
             <ul class="nav flex-column">
+                <?php if ($isAdmin || $isEditor): ?>
                 <li class="nav-item">
                     <a href="index.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'index.php' ? 'active' : '' ?>">
                         <i class="bi bi-graph-up me-2"></i> Översikt
@@ -97,7 +98,6 @@ $current_page = basename($_SERVER['PHP_SELF']);
                         <i class="bi bi-tags me-2"></i> Taggar
                     </a>
                 </li>
-                <?php if ($isAdmin || $isEditor): ?>
                 <li class="nav-item">
                     <a href="statistics.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'statistics.php' ? 'active' : '' ?>">
                         <i class="bi bi-bar-chart me-2"></i> Statistik

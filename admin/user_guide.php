@@ -14,8 +14,16 @@ require_once '../include/database.php';
 require_once '../include/functions.php';
 require_once '../include/auth.php';
 
-// Include centralized authentication and authorization check
-require_once 'include/auth_check.php';
+// Användarhandboken är tillgänglig för alla inloggade användare
+if (!isLoggedIn()) {
+    redirect('../index.php');
+    exit;
+}
+
+// Sätt variabler för header (behövs för admin-menyn)
+$user = queryOne("SELECT is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE email = ?", [$_SESSION['user_email']]);
+$isAdmin = $user && $user['is_admin'] == 1;
+$isEditor = $user && $user['is_editor'] == 1;
 
 // Sätt sidtitel
 $page_title = 'Användarhandbok';
@@ -73,6 +81,12 @@ require_once 'include/header.php';
                         <a href="#superadmin" class="quick-nav-card superadmin">
                             <div class="icon"><i class="bi bi-stars"></i></div>
                             <div class="label">Superadmin</div>
+                        </a>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <a href="#behorigheter" class="quick-nav-card permissions">
+                            <div class="icon"><i class="bi bi-key-fill"></i></div>
+                            <div class="label">Behörigheter</div>
                         </a>
                     </div>
                 </div>
@@ -192,6 +206,45 @@ require_once 'include/header.php';
                                     <li>Kolla skräpposten om du inte hittar mailet</li>
                                     <li>Välj "Kom ihåg mig" för att slippa logga in varje gång</li>
                                 </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Session och Kom ihåg mig -->
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="card border-0 bg-light">
+                            <div class="card-body">
+                                <h5 class="mb-3"><i class="bi bi-clock-history me-2 text-primary"></i>Hur länge är jag inloggad?</h5>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="d-flex align-items-start mb-3">
+                                            <span class="badge bg-secondary rounded-circle p-2 me-3">
+                                                <i class="bi bi-hourglass-split"></i>
+                                            </span>
+                                            <div>
+                                                <strong>Utan "Kom ihåg mig"</strong>
+                                                <p class="text-muted small mb-0">Din session är aktiv i <strong>24 timmar</strong>. Efter det behöver du logga in igen med en ny e-postlänk.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="d-flex align-items-start mb-3">
+                                            <span class="badge bg-success rounded-circle p-2 me-3">
+                                                <i class="bi bi-check2-circle"></i>
+                                            </span>
+                                            <div>
+                                                <strong>Med "Kom ihåg mig"</strong>
+                                                <p class="text-muted small mb-0">Du förblir inloggad i <strong>30 dagar</strong>. Perfekt om du använder din egen dator eller mobil.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="alert alert-warning mb-0 mt-2">
+                                    <i class="bi bi-shield-exclamation me-2"></i>
+                                    <small><strong>Säkerhetstips:</strong> Använd inte "Kom ihåg mig" på delade eller offentliga datorer.</small>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -526,6 +579,57 @@ require_once 'include/header.php';
     </div>
 </div>
 
+<!-- Behörigheter Section -->
+<div class="row mb-5" id="behorigheter">
+    <div class="col-12">
+        <div class="section-header">
+            <span class="section-icon" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);"><i class="bi bi-key-fill"></i></span>
+            <h2>Utökade behörigheter</h2>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <div class="row align-items-center">
+                    <div class="col-lg-7">
+                        <h5><i class="bi bi-person-up me-2 text-success"></i>Bli Redaktör eller Admin</h5>
+                        <p class="text-muted mb-4">
+                            Som vanlig användare kan du ta kurser och följa din progress. Om du behöver skapa kurser
+                            eller hantera användare i din organisation behöver du utökade behörigheter.
+                        </p>
+
+                        <div class="tip-box info">
+                            <div class="tip-icon"><i class="bi bi-envelope-fill"></i></div>
+                            <div class="tip-content">
+                                <strong>Begär utökad behörighet</strong>
+                                <p class="mb-2 mt-2">
+                                    Om du önskar få behörighet som <strong>Redaktör</strong> eller <strong>Admin</strong>
+                                    för den organisation du tillhör, skicka en förfrågan till:
+                                </p>
+                                <a href="mailto:hjalp@sambruksupport.se" class="btn btn-primary btn-sm">
+                                    <i class="bi bi-envelope me-2"></i>hjalp@sambruksupport.se
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-5">
+                        <div class="permission-comparison">
+                            <h6 class="mb-3"><i class="bi bi-list-check me-2"></i>Vad får du tillgång till?</h6>
+                            <div class="permission-item">
+                                <span class="badge bg-warning text-dark me-2">Redaktör</span>
+                                <small class="text-muted">Skapa och redigera kurser, generera AI-innehåll</small>
+                            </div>
+                            <div class="permission-item mt-2">
+                                <span class="badge bg-info me-2">Admin</span>
+                                <small class="text-muted">Hantera användare, se statistik, konfigurera påminnelser</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Troubleshooting -->
 <div class="row mb-5">
     <div class="col-12">
@@ -634,6 +738,8 @@ require_once 'include/header.php';
 .quick-nav-card.admin:hover { border-color: #4facfe; }
 .quick-nav-card.superadmin { background: linear-gradient(135deg, rgba(250,112,154,0.1) 0%, rgba(254,225,64,0.1) 100%); color: #fa709a; }
 .quick-nav-card.superadmin:hover { border-color: #fa709a; }
+.quick-nav-card.permissions { background: linear-gradient(135deg, rgba(17,153,142,0.1) 0%, rgba(56,239,125,0.1) 100%); color: #11998e; }
+.quick-nav-card.permissions:hover { border-color: #11998e; }
 
 /* Section Header */
 .section-header {
@@ -860,6 +966,19 @@ require_once 'include/header.php';
     color: #6c757d;
 }
 .troubleshoot-card li { margin-bottom: 0.25rem; }
+
+/* Permission Comparison */
+.permission-comparison {
+    background: #f8f9fa;
+    border-radius: 12px;
+    padding: 1.25rem;
+}
+.permission-item {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
 </style>
 
 <?php require_once 'include/footer.php'; ?>

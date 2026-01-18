@@ -58,34 +58,38 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])
 // Sätt sidtitel
 $page_title = 'Kurshantering';
 
-// Hämta användarens e-post
+// Hämta användarens e-post och domän
 $userEmail = $_SESSION['user_email'];
+$userDomain = substr(strrchr($userEmail, "@"), 1);
 
 // Hämta användarens rättigheter
-$user = queryOne("SELECT is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE email = ?", [$userEmail]);
+$user = queryOne("SELECT id, is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE email = ?", [$userEmail]);
 $isAdmin = $user && $user['is_admin'] == 1;
+$userId = $user['id'] ?? 0;
 
 // Hämta kurser baserat på användarens behörighet
 if ($isAdmin) {
-    // Administratörer ser alla kurser
+    // Administratörer ser endast kurser från sin egen organisation
     $courses = queryAll("
-        SELECT c.*, COUNT(l.id) as lesson_count 
-        FROM " . DB_DATABASE . ".courses c 
-        LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id 
-        GROUP BY c.id 
+        SELECT c.*, COUNT(l.id) as lesson_count
+        FROM " . DB_DATABASE . ".courses c
+        LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id
+        WHERE c.organization_domain = ?
+        GROUP BY c.id
         ORDER BY c.sort_order ASC
-    ");
+    ", [$userDomain]);
 } else {
-    // Redaktörer ser bara sina tilldelade kurser
+    // Redaktörer ser kurser de skapat (author_id) ELLER tilldelats redaktörskap för
     $courses = queryAll("
-        SELECT c.*, COUNT(l.id) as lesson_count 
-        FROM " . DB_DATABASE . ".courses c 
-        LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id 
-        INNER JOIN " . DB_DATABASE . ".course_editors ce ON c.id = ce.course_id 
-        WHERE ce.email = ?
-        GROUP BY c.id 
+        SELECT DISTINCT c.*, COUNT(l.id) as lesson_count
+        FROM " . DB_DATABASE . ".courses c
+        LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id
+        LEFT JOIN " . DB_DATABASE . ".course_editors ce ON c.id = ce.course_id
+        WHERE c.organization_domain = ?
+          AND (c.author_id = ? OR ce.email = ?)
+        GROUP BY c.id
         ORDER BY c.sort_order ASC
-    ", [$userEmail]);
+    ", [$userDomain, $userId, $userEmail]);
 }
 
 // Inkludera header
