@@ -14,23 +14,41 @@ function isLoggedIn() {
 }
 
 /**
+ * Rensa utgångna tokens från databasen
+ * Anropas automatiskt vid nya inloggningsförfrågningar
+ */
+function cleanupExpiredTokens() {
+    $tokenExpiryMinutes = (int)getenv('AUTH_TOKEN_EXPIRY_MINUTES') ?: 15;
+
+    // Rensa tokens som har passerat giltighetstiden
+    execute("UPDATE " . DB_DATABASE . ".users
+             SET verification_token = NULL
+             WHERE verification_token IS NOT NULL
+             AND updated_at < DATE_SUB(NOW(), INTERVAL ? MINUTE)",
+             [$tokenExpiryMinutes]);
+}
+
+/**
  * Skicka inloggningstoken till användarens e-post
- * 
+ *
  * @param string $email Användarens e-post
  * @return bool True om det lyckades, false vid fel
  */
 function sendLoginToken($email) {
+    // Rensa gamla utgångna tokens
+    cleanupExpiredTokens();
+
     // Generera en unik token
     $token = bin2hex(random_bytes(32));
-    
+
     // Hämta inloggningstokenexpirering från konfiguration eller använd standardvärde (15 minuter)
     $tokenExpiryMinutes = (int)getenv('AUTH_TOKEN_EXPIRY_MINUTES') ?: 15;
-    
+
     // Uppdatera användaren med ny token
     $expires = date('Y-m-d H:i:s', strtotime("+{$tokenExpiryMinutes} minutes"));
-    execute("UPDATE " . DB_DATABASE . ".users 
-             SET verification_token = ?, verified_at = NULL 
-             WHERE email = ?", 
+    execute("UPDATE " . DB_DATABASE . ".users
+             SET verification_token = ?, verified_at = NULL
+             WHERE email = ?",
              [$token, $email]);
     
     // Skapa inloggningslänk med SYSTEM_URL från konfiguration
@@ -122,11 +140,10 @@ function verifyLoginToken($email, $token) {
     // Hämta inloggningstokenexpirering från konfiguration eller använd standardvärde (15 minuter)
     $tokenExpiryMinutes = (int)getenv('AUTH_TOKEN_EXPIRY_MINUTES') ?: 15;
 
-    // SECURITY FIX: Added expiry check in SQL query
     // Väljer användare där:
     // 1. E-posten matchar
     // 2. Verifieringstoken matchar
-    // 3. Token har uppdaterats inom expireringstiden
+    // 3. Token skapades inom expireringstiden (tillåter flera klick under hela giltighetstiden)
     $sql = "SELECT * FROM " . DB_DATABASE . ".users
             WHERE email = ?
             AND verification_token = ?
@@ -140,12 +157,13 @@ function verifyLoginToken($email, $token) {
         return false;
     }
 
-    // SECURITY FIX: Invalidate token after single use (one-time token)
-    execute("UPDATE " . DB_DATABASE . ".users
-             SET verification_token = NULL, verified_at = NOW()
-             WHERE id = ?", [$user['id']]);
+    // Sätt verified_at om det inte redan är satt
+    if ($user['verified_at'] === null) {
+        execute("UPDATE " . DB_DATABASE . ".users
+                 SET verified_at = NOW()
+                 WHERE id = ?", [$user['id']]);
+    }
 
-    // Logga lyckad tokenverifiering
     logActivity($email, "Lyckad inloggning med token");
 
     return $user;

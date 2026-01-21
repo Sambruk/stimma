@@ -49,7 +49,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'blocked_topics' => trim($_POST['blocked_topics'] ?? ''),
         'response_guidelines' => trim($_POST['response_guidelines'] ?? ''),
         'topic_restrictions' => trim($_POST['topic_restrictions'] ?? ''),
-        'custom_instructions' => trim($_POST['custom_instructions'] ?? '')
+        'custom_instructions' => trim($_POST['custom_instructions'] ?? ''),
+        'course_generation_prompt' => trim($_POST['course_generation_prompt'] ?? '')
     ];
 
     foreach ($settings as $key => $value) {
@@ -235,24 +236,73 @@ require_once 'include/header.php';
                         </div>
                     </div>
 
-                    <!-- Senast uppdaterad -->
-                    <?php
-                    $lastUpdate = $settings['system_prompt_prefix']['updated_at'] ?? null;
-                    $lastUpdatedBy = $settings['system_prompt_prefix']['updated_by'] ?? null;
-                    if ($lastUpdate && $lastUpdatedBy):
-                    ?>
-                    <div class="alert alert-secondary">
-                        <i class="bi bi-clock-history me-2"></i>
-                        Senast uppdaterad: <?= date('Y-m-d H:i', strtotime($lastUpdate)) ?>
-                        av <?= htmlspecialchars($lastUpdatedBy) ?>
-                    </div>
-                    <?php endif; ?>
+                </form>
+            </div>
+        </div>
 
-                    <!-- Spara-knapp -->
-                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                        <button type="submit" class="btn btn-primary btn-lg">
-                            <i class="bi bi-save me-2"></i>Spara Inställningar
-                        </button>
+        <!-- Kursgenerering (separat sektion) -->
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 bg-success text-white">
+                <h6 class="m-0 font-weight-bold">
+                    <i class="bi bi-magic me-2"></i>AI-kursgenerering
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Information:</strong> Denna prompt används när superadmin genererar nya kurser med AI.
+                    Prompten styr hur kursen struktureras, vilka frågetyper som används i quiz, och hur lektionsinnehållet formateras.
+                </div>
+
+                <form method="POST" action="ai_settings.php" id="courseGenerationForm">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                    <!-- Behåll guardrails-värdet -->
+                    <input type="hidden" name="guardrails_enabled" value="<?= ($settings['guardrails_enabled']['setting_value'] ?? '1') === '1' ? '1' : '' ?>">
+                    <input type="hidden" name="system_prompt_prefix" value="<?= htmlspecialchars($settings['system_prompt_prefix']['setting_value'] ?? '') ?>">
+                    <input type="hidden" name="blocked_topics" value="<?= htmlspecialchars($settings['blocked_topics']['setting_value'] ?? '') ?>">
+                    <input type="hidden" name="response_guidelines" value="<?= htmlspecialchars($settings['response_guidelines']['setting_value'] ?? '') ?>">
+                    <input type="hidden" name="topic_restrictions" value="<?= htmlspecialchars($settings['topic_restrictions']['setting_value'] ?? '') ?>">
+                    <input type="hidden" name="custom_instructions" value="<?= htmlspecialchars($settings['custom_instructions']['setting_value'] ?? '') ?>">
+
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="m-0"><i class="bi bi-file-earmark-code me-2"></i>Kursgeneringsprompt</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="course_generation_prompt" class="form-label">
+                                    Systemprompt för AI-kursgenerering
+                                </label>
+                                <textarea class="form-control font-monospace" id="course_generation_prompt" name="course_generation_prompt"
+                                    rows="20" placeholder="Ange prompten som används för att generera kurser..."><?= htmlspecialchars($settings['course_generation_prompt']['setting_value'] ?? '') ?></textarea>
+                                <small class="text-muted">
+                                    <strong>Tillgängliga platshållare:</strong><br>
+                                    <code>{{lesson_count}}</code> - Antal lektioner<br>
+                                    <code>{{difficulty_level}}</code> - Svårighetsgrad på svenska (nybörjare/mellannivå/avancerad)<br>
+                                    <code>{{difficulty}}</code> - Svårighetsgrad på engelska (beginner/intermediate/advanced)<br>
+                                    <code>{{ai_instruction_value}}</code> - Ersätts med null eller "Instruktion..." beroende på inställning<br>
+                                    <code>{{ai_prompt_value}}</code> - Ersätts med null eller "Prompt..." beroende på inställning
+                                </small>
+                            </div>
+
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle me-2"></i>
+                                <strong>Frågetyper som stöds:</strong>
+                                <ul class="mb-0 mt-2">
+                                    <li><code>single_choice</code> - Enkelval (ett rätt svar)</li>
+                                    <li><code>multiple_choice</code> - Flerval (flera rätta svar, ange i quiz_correct_answers)</li>
+                                </ul>
+                            </div>
+
+                            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                <button type="button" class="btn btn-outline-secondary" onclick="resetCoursePrompt()">
+                                    <i class="bi bi-arrow-counterclockwise me-2"></i>Återställ standardprompt
+                                </button>
+                                <button type="submit" class="btn btn-success">
+                                    <i class="bi bi-save me-2"></i>Spara Kursgeneringsprompt
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -261,6 +311,81 @@ require_once 'include/header.php';
 </div>
 
 <script>
+// Standardprompt för kursgenerering
+const defaultCoursePrompt = `Du är en expert på att skapa utbildningsmaterial. Du ska generera en komplett kurs i JSON-format.
+
+VIKTIGT: Svara ENDAST med giltig JSON, ingen annan text före eller efter.
+
+Kursen ska:
+- Ha exakt {{lesson_count}} lektioner
+- Vara på {{difficulty_level}}-nivå
+- Vara på svenska
+- Ha pedagogiskt strukturerat innehåll med tydliga rubriker och stycken
+- Innehållet ska vara i HTML-format med <h3>, <p>, <ul>, <li>, <strong> taggar
+
+VIKTIGT FÖR LEKTIONSINNEHÅLL:
+- Varje lektion ska ha MINST 400-600 ord med detaljerat och beskrivande innehåll
+- Inkludera praktiska exempel, tips och förklaringar
+- Använd underrubriker (<h3>) för att strukturera innehållet
+- Inkludera punktlistor (<ul><li>) för att sammanfatta viktiga punkter
+- Lägg till konkreta råd och steg-för-steg instruktioner där det passar
+- Gör innehållet engagerande och lätt att förstå
+- Avsluta varje lektion med en kort sammanfattning eller nyckelinsikter
+
+VIKTIGT FÖR QUIZ:
+För varje lektion ska du skapa ett quiz. VARIERA frågetyperna mellan lektionerna:
+- single_choice: Enkelval med 3-5 svarsalternativ (ett rätt svar)
+- multiple_choice: Flerval med 4-5 svarsalternativ (flera rätta svar, ange i quiz_correct_answers som "1,3" eller "2,4,5")
+
+Riktlinjer för quiz:
+- Sprid korrekta svar jämnt över positionerna (inte alltid samma position)
+- Gör distraktorer (felaktiga svar) rimliga och lärorika
+- Använd mestadels single_choice, men inkludera några multiple_choice för variation
+
+JSON-strukturen ska vara:
+{
+  "course": {
+    "title": "Kursnamn",
+    "description": "Kursbeskrivning",
+    "difficulty_level": "{{difficulty}}",
+    "duration_minutes": <total tid i minuter>,
+    "prerequisites": null,
+    "tags": null,
+    "status": "inactive",
+    "sort_order": 0,
+    "featured": 0
+  },
+  "lessons": [
+    {
+      "title": "Lektionsnamn",
+      "estimated_duration": <minuter>,
+      "content": "<h3>Rubrik</h3><p>Innehåll...</p>",
+      "video_url": null,
+      "resource_links": null,
+      "tags": null,
+      "status": "active",
+      "sort_order": <nummer>,
+      "ai_instruction": {{ai_instruction_value}},
+      "ai_prompt": {{ai_prompt_value}},
+      "quiz_type": "single_choice|multiple_choice",
+      "quiz_question": "Fråga om lektionens innehåll?",
+      "quiz_answer1": "Svarsalternativ 1",
+      "quiz_answer2": "Svarsalternativ 2",
+      "quiz_answer3": "Svarsalternativ 3",
+      "quiz_answer4": "Svarsalternativ 4 (valfritt)",
+      "quiz_answer5": "Svarsalternativ 5 (valfritt)",
+      "quiz_correct_answer": 2,
+      "quiz_correct_answers": null
+    }
+  ]
+}`;
+
+function resetCoursePrompt() {
+    if (confirm('Vill du återställa kursgeneringsprompten till standardvärdet? Detta kommer att skriva över dina ändringar.')) {
+        document.getElementById('course_generation_prompt').value = defaultCoursePrompt;
+    }
+}
+
 // Uppdatera förhandsvisning när fälten ändras
 function updatePreview() {
     const guardrailsEnabled = document.getElementById('guardrails_enabled').checked;

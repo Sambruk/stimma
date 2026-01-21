@@ -93,8 +93,42 @@ if (!$isPreviewMode) {
     $isCompleted = $progress && $progress['status'] === 'completed';
 }
 
+/**
+ * Check if quiz answer is correct based on quiz type
+ */
+function checkQuizAnswer($lesson, $post) {
+    $quizType = $lesson['quiz_type'] ?? 'single_choice';
+
+    switch ($quizType) {
+        case 'multiple_choice':
+            // Flerval - jämför valda svar med quiz_correct_answers
+            $userAnswers = $post['answers'] ?? [];
+            if (!is_array($userAnswers)) {
+                $userAnswers = [];
+            }
+            sort($userAnswers);
+            $correctAnswers = array_map('trim', explode(',', $lesson['quiz_correct_answers'] ?? ''));
+            sort($correctAnswers);
+            return $userAnswers == $correctAnswers;
+
+        case 'single_choice':
+        default:
+            // Enkelval - jämför med quiz_correct_answer
+            $userAnswer = (int)($post['answer'] ?? 0);
+            $correctAnswer = (int)$lesson['quiz_correct_answer'];
+            return $userAnswer === $correctAnswer;
+    }
+}
+
+/**
+ * Check if a quiz answer was submitted
+ */
+function hasQuizAnswer($post) {
+    return isset($post['answer']) || isset($post['text_answer']) || isset($post['answers']);
+}
+
 // Handle preview mode quiz submission (no saving)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['answer']) && $isPreviewMode) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasQuizAnswer($_POST) && $isPreviewMode) {
     // Validate CSRF token for security
     if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
         if (isAjaxRequest()) {
@@ -104,9 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['answer']) && $isPrevi
         }
     }
 
-    $userAnswer = (int)$_POST['answer'];
-    $correctAnswer = (int)$lesson['quiz_correct_answer'];
-    $isCorrect = ($userAnswer === $correctAnswer);
+    $isCorrect = checkQuizAnswer($lesson, $_POST);
 
     if (isAjaxRequest()) {
         header('Content-Type: application/json');
@@ -127,7 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['answer']) && $isPrevi
 }
 
 // Handle form submission for quiz answers (skip in preview mode)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['answer']) && !$isPreviewMode) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasQuizAnswer($_POST) && !$isPreviewMode) {
     // Validate CSRF token for security
     if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
         if (isAjaxRequest()) {
@@ -140,13 +172,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['answer']) && !$isPrev
         redirect("lesson.php?id=$lessonId");
         exit;
     }
-    
-    // Get and validate user's answer
-    $userAnswer = (int)$_POST['answer'];
-    $correctAnswer = (int)$lesson['quiz_correct_answer'];
-    
-    // Check if answer is correct
-    $isCorrect = ($userAnswer === $correctAnswer);
+
+    // Check if answer is correct based on quiz type
+    $isCorrect = checkQuizAnswer($lesson, $_POST);
     
     // Check if all previous lessons in the course are completed
     $previousLessons = query("SELECT id FROM " . DB_DATABASE . ".lessons 
@@ -418,15 +446,46 @@ function convertYoutubeUrl($url) {
                                 </div>
                                 <form method="post" class="quiz-form" id="quizForm">
                                     <input type="hidden" name="csrf_token" value="<?= generateCsrfToken() ?>">
+                                    <input type="hidden" name="quiz_type" value="<?= htmlspecialchars($lesson['quiz_type'] ?? 'single_choice') ?>">
                                     <div class="quiz-options">
                                         <?php
-                                        $answers = [
-                                            1 => $lesson['quiz_answer1'],
-                                            2 => $lesson['quiz_answer2'],
-                                            3 => $lesson['quiz_answer3']
-                                        ];
-                                        foreach ($answers as $key => $answer):
-                                            if (!empty($answer)):
+                                        $quizType = $lesson['quiz_type'] ?? 'single_choice';
+
+                                        if ($quizType === 'multiple_choice'):
+                                            // Flerval - visa checkboxar
+                                            $answers = [
+                                                1 => $lesson['quiz_answer1'],
+                                                2 => $lesson['quiz_answer2'],
+                                                3 => $lesson['quiz_answer3'],
+                                                4 => $lesson['quiz_answer4'] ?? null,
+                                                5 => $lesson['quiz_answer5'] ?? null
+                                            ];
+                                            foreach ($answers as $key => $answer):
+                                                if (!empty($answer)):
+                                        ?>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" name="answers[]" id="answer<?= $key ?>" value="<?= $key ?>">
+                                            <label class="form-check-label" for="answer<?= $key ?>">
+                                                <?= cleanHtml($answer) ?>
+                                            </label>
+                                        </div>
+                                        <?php
+                                                endif;
+                                            endforeach;
+                                        ?>
+                                        <small class="text-muted">Välj ett eller flera alternativ</small>
+                                        <?php
+                                        else:
+                                            // Enkelval (single_choice) - visa radioknappar
+                                            $answers = [
+                                                1 => $lesson['quiz_answer1'],
+                                                2 => $lesson['quiz_answer2'],
+                                                3 => $lesson['quiz_answer3'],
+                                                4 => $lesson['quiz_answer4'] ?? null,
+                                                5 => $lesson['quiz_answer5'] ?? null
+                                            ];
+                                            foreach ($answers as $key => $answer):
+                                                if (!empty($answer)):
                                         ?>
                                         <div class="form-check mb-2">
                                             <input class="form-check-input" type="radio" name="answer" id="answer<?= $key ?>" value="<?= $key ?>" required>
@@ -435,8 +494,9 @@ function convertYoutubeUrl($url) {
                                             </label>
                                         </div>
                                         <?php
-                                            endif;
-                                        endforeach;
+                                                endif;
+                                            endforeach;
+                                        endif;
                                         ?>
                                     </div>
                                     <button type="submit" class="btn btn-primary mt-3">Skicka svar</button>
