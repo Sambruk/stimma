@@ -190,10 +190,16 @@ if (!$isLoggedIn):
                         <?php endif; ?>
                     </div>
                 </div>
+                <!-- Info button -->
+                <div class="text-center mt-3">
+                    <a href="stimmainfo.html" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-info-circle me-1"></i>Information om Stimma och Kontakt
+                    </a>
+                </div>
             </div>
         </div>
     </div>
-<?php 
+<?php
     // Include footer
     require_once 'include/footer.php';
 else: 

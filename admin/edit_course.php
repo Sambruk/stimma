@@ -84,32 +84,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Titel är obligatoriskt.';
     } else {
         // Hantera bilduppladdning
-        if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
-            $allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
-            $maxSize = 5 * 1024 * 1024; // 5MB
-            
-            if (!in_array($_FILES['image']['type'], $allowedTypes)) {
-                $error = 'Endast JPG, PNG och GIF bilder är tillåtna.';
-            } elseif ($_FILES['image']['size'] > $maxSize) {
-                $error = 'Bilden får inte vara större än 5MB.';
+        if (isset($_FILES['image']) && $_FILES['image']['error'] !== UPLOAD_ERR_NO_FILE) {
+            // Kontrollera om det finns ett uppladdningsfel
+            if ($_FILES['image']['error'] !== UPLOAD_ERR_OK) {
+                $uploadErrors = [
+                    UPLOAD_ERR_INI_SIZE => 'Bilden är för stor (överskrider serverns maxgräns).',
+                    UPLOAD_ERR_FORM_SIZE => 'Bilden är för stor.',
+                    UPLOAD_ERR_PARTIAL => 'Bilden laddades endast upp delvis.',
+                    UPLOAD_ERR_NO_TMP_DIR => 'Serverfel: Temporär mapp saknas.',
+                    UPLOAD_ERR_CANT_WRITE => 'Serverfel: Kunde inte skriva filen.',
+                    UPLOAD_ERR_EXTENSION => 'Uppladdningen stoppades av servern.',
+                ];
+                $error = $uploadErrors[$_FILES['image']['error']] ?? 'Okänt uppladdningsfel (kod: ' . $_FILES['image']['error'] . ')';
             } else {
-                // Sökväg till upload-mappen
-                $uploadDir = __DIR__ . '/../upload/';
-                $fileName = uniqid() . '_' . basename($_FILES['image']['name']);
-                $targetPath = $uploadDir . $fileName;
-                
-                if (move_uploaded_file($_FILES['image']['tmp_name'], $targetPath)) {
-                    $imageUrl = $fileName;
-                    
-                    // Ta bort gammal bild om den finns
-                    if (isset($course['image_url']) && $course['image_url'] !== $imageUrl) {
-                        $oldImagePath = __DIR__ . '../upload/' . $course['image_url'];
-                        if (file_exists($oldImagePath)) {
-                            unlink($oldImagePath);
-                        }
-                    }
+                $allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+                $maxSize = 5 * 1024 * 1024; // 5MB
+
+                if (!in_array($_FILES['image']['type'], $allowedTypes)) {
+                    $error = 'Endast JPG, PNG och GIF bilder är tillåtna. Filtyp: ' . $_FILES['image']['type'];
+                } elseif ($_FILES['image']['size'] > $maxSize) {
+                    $error = 'Bilden får inte vara större än 5MB. Storlek: ' . round($_FILES['image']['size'] / 1024 / 1024, 2) . ' MB';
                 } else {
-                    $error = 'Kunde inte ladda upp bilden.';
+                    // Sökväg till upload-mappen
+                    $uploadDir = __DIR__ . '/../upload/';
+                    $fileName = uniqid() . '_' . basename($_FILES['image']['name']);
+                    $targetPath = $uploadDir . $fileName;
+
+                    if (move_uploaded_file($_FILES['image']['tmp_name'], $targetPath)) {
+                        $imageUrl = $fileName;
+
+                        // Ta bort gammal bild om den finns
+                        if (isset($course['image_url']) && !empty($course['image_url']) && $course['image_url'] !== $imageUrl) {
+                            $oldImagePath = __DIR__ . '/../upload/' . $course['image_url'];
+                            if (file_exists($oldImagePath)) {
+                                unlink($oldImagePath);
+                            }
+                        }
+                    } else {
+                        $error = 'Kunde inte ladda upp bilden. Kontrollera filrättigheter på servern.';
+                    }
                 }
             }
         }
@@ -384,22 +397,23 @@ document.addEventListener('DOMContentLoaded', function() {
             // Validera filstorlek (5MB)
             const maxSize = 5 * 1024 * 1024;
             if (file.size > maxSize) {
-                alert('Bilden får inte vara större än 5MB.');
+                alert('Bilden får inte vara större än 5MB. Din bild är ' + (file.size / 1024 / 1024).toFixed(2) + ' MB.');
                 e.target.value = '';
                 return;
             }
 
-            // Validera bilddimensioner
-            const img = new Image();
-            img.onload = function() {
-                const maxWidth = 1920;
-                const maxHeight = 1080;
-                if (this.width > maxWidth || this.height > maxHeight) {
-                    alert('Bilden är för stor. Max dimensioner är ' + maxWidth + 'x' + maxHeight + ' pixlar.');
-                    e.target.value = '';
-                }
+            // Visa förhandsvisning av vald bild
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const imageContainer = document.getElementById('current-image-container');
+                const currentImage = document.getElementById('current-image');
+                const imagePath = document.getElementById('image-path');
+
+                currentImage.src = event.target.result;
+                imagePath.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Ny bild vald: ' + file.name + ' (sparas när du klickar Spara)</span>';
+                imageContainer.style.display = 'block';
             };
-            img.src = URL.createObjectURL(file);
+            reader.readAsDataURL(file);
         });
     }
 

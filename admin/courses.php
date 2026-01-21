@@ -260,6 +260,9 @@ require_once 'include/header.php';
                         <i class="bi bi-info-circle me-2"></i>
                         <strong>OBS:</strong> Genereringen sker i bakgrunden och kan ta flera minuter beroende på antal lektioner och valda alternativ.
                         Du kommer att meddelas när kursen är klar. Kursen skapas som inaktiv så du kan granska den innan publicering.
+                        <br><br>
+                        Observera också att inga bilder läggs till i kursen och inte heller några länkar till eventuella filmer från Youtube.
+                        Alla eventuella bilder och filmer lägger redaktören till efter att AI har skapat kursens stomme.
                     </div>
                 </div>
                 <div class="modal-footer">

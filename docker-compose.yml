@@ -19,6 +19,9 @@ services:
         docker-php-ext-install pdo pdo_mysql mysqli &&
         a2enmod rewrite &&
         echo 'ServerName localhost' >> /etc/apache2/apache2.conf &&
+        echo 'upload_max_filesize = 10M' > /usr/local/etc/php/conf.d/uploads.ini &&
+        echo 'post_max_size = 12M' >> /usr/local/etc/php/conf.d/uploads.ini &&
+        echo 'max_file_uploads = 20' >> /usr/local/etc/php/conf.d/uploads.ini &&
         apache2-foreground
       "
 

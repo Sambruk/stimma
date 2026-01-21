@@ -97,6 +97,88 @@ function cleanupStuckJobs() {
 }
 
 /**
+ * Get custom course generation prompt from settings or use default
+ */
+function getCourseGenerationPrompt() {
+    $setting = queryOne(
+        "SELECT setting_value FROM " . DB_DATABASE . ".ai_settings WHERE setting_key = 'course_generation_prompt'"
+    );
+
+    if ($setting && !empty($setting['setting_value'])) {
+        return $setting['setting_value'];
+    }
+
+    // Default prompt with varied quiz types
+    return 'Du är en expert på att skapa utbildningsmaterial. Du ska generera en komplett kurs i JSON-format.
+
+VIKTIGT: Svara ENDAST med giltig JSON, ingen annan text före eller efter.
+
+Kursen ska:
+- Ha exakt {{lesson_count}} lektioner
+- Vara på {{difficulty_level}}-nivå
+- Vara på svenska
+- Ha pedagogiskt strukturerat innehåll med tydliga rubriker och stycken
+- Innehållet ska vara i HTML-format med <h3>, <p>, <ul>, <li>, <strong> taggar
+
+VIKTIGT FÖR LEKTIONSINNEHÅLL:
+- Varje lektion ska ha MINST 400-600 ord med detaljerat och beskrivande innehåll
+- Inkludera praktiska exempel, tips och förklaringar
+- Använd underrubriker (<h3>) för att strukturera innehållet
+- Inkludera punktlistor (<ul><li>) för att sammanfatta viktiga punkter
+- Lägg till konkreta råd och steg-för-steg instruktioner där det passar
+- Gör innehållet engagerande och lätt att förstå
+- Avsluta varje lektion med en kort sammanfattning eller nyckelinsikter
+
+VIKTIGT FÖR QUIZ:
+För varje lektion ska du skapa ett quiz. VARIERA frågetyperna mellan lektionerna:
+- single_choice: Enkelval med 3-5 svarsalternativ (ett rätt svar)
+- multiple_choice: Flerval med 4-5 svarsalternativ (flera rätta svar, ange i quiz_correct_answers som "1,3" eller "2,4,5")
+
+Riktlinjer för quiz:
+- Sprid korrekta svar jämnt över positionerna (inte alltid samma position)
+- Gör distraktorer (felaktiga svar) rimliga och lärorika
+- Använd mestadels single_choice, men inkludera några multiple_choice för variation
+
+JSON-strukturen ska vara:
+{
+  "course": {
+    "title": "Kursnamn",
+    "description": "Kursbeskrivning",
+    "difficulty_level": "{{difficulty}}",
+    "duration_minutes": <total tid i minuter>,
+    "prerequisites": null,
+    "tags": null,
+    "status": "inactive",
+    "sort_order": 0,
+    "featured": 0
+  },
+  "lessons": [
+    {
+      "title": "Lektionsnamn",
+      "estimated_duration": <minuter>,
+      "content": "<h3>Rubrik</h3><p>Innehåll...</p>",
+      "video_url": null,
+      "resource_links": null,
+      "tags": null,
+      "status": "active",
+      "sort_order": <nummer>,
+      "ai_instruction": {{ai_instruction_value}},
+      "ai_prompt": {{ai_prompt_value}},
+      "quiz_type": "single_choice|multiple_choice",
+      "quiz_question": "Fråga om lektionens innehåll?",
+      "quiz_answer1": "Svarsalternativ 1",
+      "quiz_answer2": "Svarsalternativ 2",
+      "quiz_answer3": "Svarsalternativ 3",
+      "quiz_answer4": "Svarsalternativ 4 (valfritt)",
+      "quiz_answer5": "Svarsalternativ 5 (valfritt)",
+      "quiz_correct_answer": 2,
+      "quiz_correct_answers": null
+    }
+  ]
+}';
+}
+
+/**
  * Process a single AI generation job
  */
 function processJob($job) {
@@ -119,66 +201,26 @@ function processJob($job) {
 
     $lessonCount = $job['lesson_count'];
 
-    // Create system prompt
-    $systemPrompt = "Du är en expert på att skapa utbildningsmaterial. Du ska generera en komplett kurs i JSON-format.
+    // Get custom prompt template or use default
+    $promptTemplate = getCourseGenerationPrompt();
 
-VIKTIGT: Svara ENDAST med giltig JSON, ingen annan text före eller efter.
+    // Replace placeholders
+    $aiInstructionValue = $job['include_ai_tutor'] ? '"Instruktion för AI-handledare..."' : 'null';
+    $aiPromptValue = $job['include_ai_tutor'] ? '"Prompt för AI-handledare..."' : 'null';
 
-Kursen ska:
-- Ha exakt {$lessonCount} lektioner
-- Vara på {$difficultyText}-nivå
-- Vara på svenska
-- Ha pedagogiskt strukturerat innehåll med tydliga rubriker och stycken
-- Innehållet ska vara i HTML-format med <h3>, <p>, <ul>, <li>, <strong> taggar
+    $systemPrompt = str_replace(
+        ['{{lesson_count}}', '{{difficulty_level}}', '{{difficulty}}', '{{ai_instruction_value}}', '{{ai_prompt_value}}'],
+        [$lessonCount, $difficultyText, $job['difficulty_level'], $aiInstructionValue, $aiPromptValue],
+        $promptTemplate
+    );
 
-VIKTIGT FÖR LEKTIONSINNEHÅLL:
-- Varje lektion ska ha MINST 400-600 ord med detaljerat och beskrivande innehåll
-- Inkludera praktiska exempel, tips och förklaringar
-- Använd underrubriker (<h3>) för att strukturera innehållet
-- Inkludera punktlistor (<ul><li>) för att sammanfatta viktiga punkter
-- Lägg till konkreta råd och steg-för-steg instruktioner där det passar
-- Gör innehållet engagerande och lätt att förstå
-- Avsluta varje lektion med en kort sammanfattning eller nyckelinsikter
-
-JSON-strukturen ska vara:
-{
-  \"course\": {
-    \"title\": \"Kursnamn\",
-    \"description\": \"Kursbeskrivning\",
-    \"difficulty_level\": \"{$job['difficulty_level']}\",
-    \"duration_minutes\": <total tid i minuter>,
-    \"prerequisites\": null,
-    \"tags\": null,
-    \"status\": \"inactive\",
-    \"sort_order\": 0,
-    \"featured\": 0
-  },
-  \"lessons\": [
-    {
-      \"title\": \"Lektionsnamn\",
-      \"estimated_duration\": <minuter>,
-      \"content\": \"<h3>Rubrik</h3><p>Innehåll...</p>\",
-      \"video_url\": null,
-      \"resource_links\": null,
-      \"tags\": null,
-      \"status\": \"active\",
-      \"sort_order\": <nummer>,
-      \"ai_instruction\": " . ($job['include_ai_tutor'] ? "\"Instruktion för AI-handledare...\"" : "null") . ",
-      \"ai_prompt\": " . ($job['include_ai_tutor'] ? "\"Prompt för AI-handledare...\"" : "null") . ",
-      \"quiz_question\": " . ($job['include_quiz'] ? "\"Fråga om lektionens innehåll?\"" : "null") . ",
-      \"quiz_answer1\": " . ($job['include_quiz'] ? "\"Svarsalternativ 1\"" : "null") . ",
-      \"quiz_answer2\": " . ($job['include_quiz'] ? "\"Svarsalternativ 2\"" : "null") . ",
-      \"quiz_answer3\": " . ($job['include_quiz'] ? "\"Svarsalternativ 3\"" : "null") . ",
-      \"quiz_correct_answer\": " . ($job['include_quiz'] ? "2" : "null") . "
-    }
-  ]
-}";
-
-    if ($job['include_quiz']) {
-        $systemPrompt .= "\n\nVIKTIGT FÖR QUIZ: För varje lektion, skapa ett quiz med en fråga och tre svarsalternativ. Det korrekta svaret ska VARIERA mellan lektionerna - använd INTE alltid samma position. Sätt quiz_correct_answer till 1, 2 eller 3 för att indikera vilket svar som är korrekt. Blanda så att ungefär lika många lektioner har rätt svar på position 1, 2 respektive 3.";
+    // Add quiz-specific instructions if not included in custom prompt
+    if ($job['include_quiz'] && strpos($systemPrompt, 'quiz_type') === false) {
+        $systemPrompt .= "\n\nVIKTIGT FÖR QUIZ: För varje lektion, skapa ett quiz. VARIERA frågetyperna (single_choice, multiple_choice). Sprid korrekta svar jämnt över positionerna.";
     }
 
-    if ($job['include_ai_tutor']) {
+    // Add AI tutor instructions if needed and not in custom prompt
+    if ($job['include_ai_tutor'] && strpos($systemPrompt, 'ai_instruction') === false) {
         $systemPrompt .= "\n\nFör varje lektion, skapa ai_instruction (instruktioner för AI-handledaren) och ai_prompt (startprompt för dialog med studenten).";
     }
 
@@ -529,13 +571,22 @@ function importCourse($courseData, $userId, $organizationDomain) {
         // Create lessons
         if (isset($courseData['lessons']) && is_array($courseData['lessons'])) {
             foreach ($courseData['lessons'] as $index => $lesson) {
+                // Determine quiz type, default to single_choice for backwards compatibility
+                $quizType = $lesson['quiz_type'] ?? 'single_choice';
+                // Validate quiz type
+                $validTypes = ['single_choice', 'multiple_choice', 'drag_drop', 'image_choice'];
+                if (!in_array($quizType, $validTypes)) {
+                    $quizType = 'single_choice';
+                }
+
                 execute(
                     "INSERT INTO " . DB_DATABASE . ".lessons
                      (course_id, title, estimated_duration, image_url, video_url, content,
                       resource_links, tags, status, sort_order, ai_instruction, ai_prompt,
-                      quiz_question, quiz_answer1, quiz_answer2, quiz_answer3, quiz_correct_answer,
+                      quiz_type, quiz_question, quiz_answer1, quiz_answer2, quiz_answer3, quiz_answer4, quiz_answer5,
+                      quiz_correct_answer, quiz_correct_answers,
                       author_id, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
                     [
                         $courseId,
                         $lesson['title'] ?? 'Lektion ' . ($index + 1),
@@ -549,11 +600,15 @@ function importCourse($courseData, $userId, $organizationDomain) {
                         $lesson['sort_order'] ?? $index,
                         $lesson['ai_instruction'] ?? null,
                         $lesson['ai_prompt'] ?? null,
+                        $quizType,
                         $lesson['quiz_question'] ?? null,
                         $lesson['quiz_answer1'] ?? null,
                         $lesson['quiz_answer2'] ?? null,
                         $lesson['quiz_answer3'] ?? null,
+                        $lesson['quiz_answer4'] ?? null,
+                        $lesson['quiz_answer5'] ?? null,
                         $lesson['quiz_correct_answer'] ?? null,
+                        $lesson['quiz_correct_answers'] ?? null,
                         $userId
                     ]
                 );
