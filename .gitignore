@@ -23,3 +23,5 @@ db/*
 # OS files
 .DS_Store
 Thumbs.db
+email_list.txt
+xstimmainfo.html
