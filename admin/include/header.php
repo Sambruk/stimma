@@ -21,6 +21,10 @@ $isAdmin = $user && $user['is_admin'] == 1;
 $isEditor = $user && $user['is_editor'] == 1;
 $isSuperAdmin = $user && $user['role'] === 'super_admin';
 
+// Hämta användarens domän och PUB-avtalsstatus
+$userDomain = getUserDomain($_SESSION['user_email']);
+$userHasPubAgreement = hasPubAgreement($userDomain);
+
 // Enkel session timeout (30 minuter)
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
     session_unset();
@@ -173,6 +177,17 @@ $current_page = basename($_SERVER['PHP_SELF']);
         <nav class="navbar navbar-expand-lg navbar-light bg-white py-3">
             <div class="container-fluid px-4">
                 <h5 class="mb-0"><?= $page_title ?? 'Administration' ?></h5>
+                <div class="d-flex align-items-center">
+                    <?php if ($userHasPubAgreement): ?>
+                        <span class="badge bg-success" title="PUB-avtal tecknat för <?= htmlspecialchars($userDomain) ?>">
+                            <i class="bi bi-file-earmark-check me-1"></i>PUB-avtal: Ja
+                        </span>
+                    <?php else: ?>
+                        <span class="badge bg-warning text-dark" title="Inget PUB-avtal för <?= htmlspecialchars($userDomain) ?>">
+                            <i class="bi bi-exclamation-triangle me-1"></i>PUB-avtal: Nej
+                        </span>
+                    <?php endif; ?>
+                </div>
             </div>
         </nav>
 

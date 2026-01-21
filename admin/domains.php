@@ -82,6 +82,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
+    } elseif ($action === 'update_pub') {
+        // Uppdatera PUB-avtalsstatus
+        $domainToUpdate = trim($_POST['domain'] ?? '');
+        $hasPub = isset($_POST['has_pub']) && $_POST['has_pub'] === '1';
+        $pubDate = !empty($_POST['pub_date']) ? $_POST['pub_date'] : null;
+        $pubNotes = trim($_POST['pub_notes'] ?? '');
+
+        if (!empty($domainToUpdate)) {
+            if (updatePubAgreement($domainToUpdate, $hasPub, $pubDate, $pubNotes)) {
+                $status = $hasPub ? 'aktiverat' : 'inaktiverat';
+                $_SESSION['message'] = "PUB-avtal för <strong>{$domainToUpdate}</strong> har {$status}.";
+                $_SESSION['message_type'] = 'success';
+
+                logActivity($_SESSION['user_email'], "Uppdaterade PUB-avtal för domän: {$domainToUpdate} ({$status})", [
+                    'action' => 'pub_agreement_update',
+                    'domain' => $domainToUpdate,
+                    'has_pub' => $hasPub
+                ]);
+            } else {
+                $_SESSION['message'] = 'Kunde inte uppdatera PUB-avtalsstatus.';
+                $_SESSION['message_type'] = 'danger';
+            }
+        }
     } elseif ($action === 'delete') {
         // Ta bort domän
         $domainToDelete = trim($_POST['domain'] ?? '');
@@ -194,6 +217,13 @@ function getUserStatsByDomain() {
 
 $userStats = getUserStatsByDomain();
 
+// Hämta PUB-avtalsstatus för alla domäner
+$pubSettings = [];
+$allPubSettings = getAllDomainSettings();
+foreach ($allPubSettings as $setting) {
+    $pubSettings[$setting['domain']] = $setting;
+}
+
 // Filtrera domäner om filter är aktivt
 $filteredDomains = $domains;
 if ($showOnlyWithUsers) {
@@ -293,6 +323,9 @@ require_once 'include/header.php';
                                     <thead class="table-light">
                                         <tr>
                                             <th>Domän</th>
+                                            <th class="text-center" style="width: 100px;" title="PUB-avtal tecknat">
+                                                <i class="bi bi-file-earmark-check text-success"></i> PUB
+                                            </th>
                                             <th class="text-center" style="width: 80px;" title="Administratörer">
                                                 <i class="bi bi-shield-fill text-danger"></i> Admin
                                             </th>
@@ -311,11 +344,29 @@ require_once 'include/header.php';
                                     <tbody>
                                         <?php foreach ($filteredDomains as $domain):
                                             $stats = $userStats[$domain] ?? ['total' => 0, 'admins' => 0, 'editors' => 0, 'students' => 0];
+                                            $pubInfo = $pubSettings[$domain] ?? ['has_pub_agreement' => 0, 'pub_agreement_date' => null];
+                                            $hasPub = $pubInfo['has_pub_agreement'] == 1;
                                         ?>
                                             <tr>
                                                 <td>
                                                     <i class="bi bi-globe2 text-primary me-2"></i>
                                                     <strong><?= htmlspecialchars($domain) ?></strong>
+                                                </td>
+                                                <td class="text-center">
+                                                    <form method="POST" action="domains.php<?= $showOnlyWithUsers ? '?filter=with_users' : '' ?>" class="d-inline">
+                                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                                                        <input type="hidden" name="action" value="update_pub">
+                                                        <input type="hidden" name="domain" value="<?= htmlspecialchars($domain) ?>">
+                                                        <input type="hidden" name="has_pub" value="<?= $hasPub ? '0' : '1' ?>">
+                                                        <button type="submit" class="btn btn-sm <?= $hasPub ? 'btn-success' : 'btn-outline-secondary' ?>"
+                                                                title="<?= $hasPub ? 'PUB-avtal tecknat' . ($pubInfo['pub_agreement_date'] ? ' (' . $pubInfo['pub_agreement_date'] . ')' : '') : 'Inget PUB-avtal' ?>">
+                                                            <?php if ($hasPub): ?>
+                                                                <i class="bi bi-check-circle-fill"></i>
+                                                            <?php else: ?>
+                                                                <i class="bi bi-x-circle"></i>
+                                                            <?php endif; ?>
+                                                        </button>
+                                                    </form>
                                                 </td>
                                                 <td class="text-center">
                                                     <?php if ($stats['admins'] > 0): ?>
@@ -365,17 +416,22 @@ require_once 'include/header.php';
                                     $totalEditors = 0;
                                     $totalStudents = 0;
                                     $totalUsers = 0;
+                                    $totalPub = 0;
                                     foreach ($filteredDomains as $domain) {
                                         $stats = $userStats[$domain] ?? ['total' => 0, 'admins' => 0, 'editors' => 0, 'students' => 0];
                                         $totalAdmins += $stats['admins'];
                                         $totalEditors += $stats['editors'];
                                         $totalStudents += $stats['students'];
                                         $totalUsers += $stats['total'];
+                                        if (isset($pubSettings[$domain]) && $pubSettings[$domain]['has_pub_agreement'] == 1) {
+                                            $totalPub++;
+                                        }
                                     }
                                     ?>
                                     <tfoot class="table-light">
                                         <tr class="fw-bold">
                                             <td>Summa (<?= count($filteredDomains) ?> domäner)</td>
+                                            <td class="text-center"><?= $totalPub ?></td>
                                             <td class="text-center"><?= $totalAdmins ?></td>
                                             <td class="text-center"><?= $totalEditors ?></td>
                                             <td class="text-center"><?= $totalStudents ?></td>

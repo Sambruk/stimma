@@ -50,8 +50,27 @@
 <body>
 
 <?php if (isLoggedIn()): ?>
+    <?php
+    // Kontrollera PUB-avtalsstatus för användarens domän
+    $userDomainForPub = getUserDomain($_SESSION['user_email']);
+    $userHasPubAgreementForBanner = hasPubAgreement($userDomainForPub);
+    ?>
+    <?php if (!$userHasPubAgreementForBanner): ?>
+    <!-- PUB-avtalsvarning -->
+    <div class="alert alert-danger mb-0 rounded-0 py-2" role="alert" style="z-index: 1031;">
+        <div class="container-fluid">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+                <div>
+                    <strong>Din domän (organisation) har inte tecknat ett PUB-avtal med Sambruk ännu.</strong>
+                    Stimma får därför bara nyttjas för att skapa utbildningar och att testa dem. Om Stimma ska nyttjas av er organisation för att medarbetare ska genomföra utbildningar så måste ett PUB-avtal tecknas. Kontakta <a href="mailto:hjalp@sambruksupport.se" class="alert-link">hjalp@sambruksupport.se</a>.
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
     <!-- Navigation bar for logged-in users with responsive design -->
-    <nav class="navbar navbar-expand-sm navbar-light bg-white shadow-sm" role="navigation" aria-label="Main navigation">
+    <nav class="navbar navbar-expand-sm navbar-light bg-white shadow-sm sticky-top" role="navigation" aria-label="Main navigation" style="z-index: 1030;">
         <div class="container-fluid">
             <div class="d-flex justify-content-between align-items-center w-100">
                 <!-- Logo section with link to homepage -->
