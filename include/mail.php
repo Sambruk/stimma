@@ -180,9 +180,12 @@ function sendSmtpMail($to, $subject, $message, $from = null, $fromName = null) {
     }
     
     // Förbered rubriker
+    $messageId = '<' . bin2hex(random_bytes(16)) . '@sambruk.se>';
     $headers = "From: $fromName <$from>\r\n";
     $headers .= "To: $to\r\n";
     $headers .= "Subject: $subject\r\n";
+    $headers .= "Date: " . date('r') . "\r\n";
+    $headers .= "Message-ID: $messageId\r\n";
     $headers .= "MIME-Version: 1.0\r\n";
     $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
     $headers .= "X-Mailer: Stimma Mailer\r\n";

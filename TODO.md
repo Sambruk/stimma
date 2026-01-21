@@ -8,6 +8,17 @@ _Inga pågående uppgifter_
 - [ ] Statistik per e-postkampanj
 
 ## Slutfört
+- [x] PUB-avtalsfunktion: Superadmin kan markera om domän/organisation har tecknat PUB-avtal
+- [x] PUB-avtal visas i admin/redaktörs-header (badge visar status)
+- [x] Varningsmeddelande i användarvyn för domäner utan PUB-avtal
+- [x] Migration 009_pub_agreements.sql för domain_settings-tabell
+- [x] Tillåt flera klick på inloggningslänkar under hela giltighetstiden (15 minuter)
+- [x] Ta bort stöd för fill_blank frågetyp (lucktext) - endast single_choice och multiple_choice stöds nu
+- [x] Lägg till varierande frågetyper i AI-kursgenerering (single_choice, multiple_choice)
+- [x] Gör AI-kursgeneringsprompt redigerbar av superadmin via GUI (admin/ai_settings.php)
+- [x] Skapa migration för course_generation_prompt (migrations/008_course_generation_prompt.sql)
+- [x] Uppdatera process_ai_jobs.php för att stödja nya frågetyper
+- [x] Lägg till informationssida (info.php) med knapp på inloggningssidan
 - [x] Lägg till behörighetsinformation i användarhandboken (user_guide.php)
 - [x] Lägg till informationsruta om behörigheter i användarvyn (index.php)
 - [x] Gör användarhandboken tillgänglig för alla inloggade användare
