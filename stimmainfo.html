@@ -1,0 +1,891 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>STIMMA – Nanoutbildning som fastnar</title>
+  <meta name="description" content="STIMMA är ett digitalt system för nanoutbildning med quiz, AI-tutor, gamification, certifikat, statistik och säkra organisationer via domänstyrning." />
+
+  <style>
+    :root{
+      --bg: #0b1020;
+      --panel: rgba(255,255,255,.08);
+      --panel2: rgba(255,255,255,.06);
+      --text: rgba(255,255,255,.92);
+      --muted: rgba(255,255,255,.72);
+      --muted2: rgba(255,255,255,.56);
+      --border: rgba(255,255,255,.12);
+      --shadow: 0 18px 55px rgba(0,0,0,.35);
+      --accent: #58A618;     /* brandfärg */
+      --accent2: #38bdf8;
+      --radius: 18px;
+      --radius2: 28px;
+      --max: 1180px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+
+    @media (prefers-color-scheme: light){
+      :root{
+        --bg: #f7f8fb;
+        --panel: rgba(18,24,40,.06);
+        --panel2: rgba(18,24,40,.045);
+        --text: rgba(18,24,40,.92);
+        --muted: rgba(18,24,40,.70);
+        --muted2: rgba(18,24,40,.56);
+        --border: rgba(18,24,40,.12);
+        --shadow: 0 18px 50px rgba(18,24,40,.12);
+      }
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:var(--sans);
+      color:var(--text);
+      background:
+        radial-gradient(1200px 700px at 15% 0%, rgba(88,166,24,.25), transparent 55%),
+        radial-gradient(900px 600px at 85% 10%, rgba(56,189,248,.22), transparent 55%),
+        radial-gradient(900px 600px at 50% 110%, rgba(99,102,241,.16), transparent 55%),
+        var(--bg);
+      line-height:1.35;
+    }
+
+    a{color:inherit; text-decoration:none}
+    a:hover{opacity:.92}
+    .wrap{max-width:var(--max); margin:0 auto; padding:26px 22px 70px}
+
+    /* Topbar */
+    .topbar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:14px;
+      padding:10px 0 18px;
+      flex-wrap:wrap;
+    }
+    .brand{
+      display:flex; align-items:center; gap:12px;
+    }
+
+    /* NYTT: logga istället för symbol */
+    .logo{
+      width:44px;
+      height:44px;
+      border-radius: 14px;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.06);
+      box-shadow: 0 12px 30px rgba(0,0,0,.18);
+      overflow:hidden;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .logo img{
+      width:100%;
+      height:100%;
+      object-fit:contain; /* behåll proportioner */
+      display:block;
+      padding:6px; /* lite luft så loggan inte klibbar mot kanten */
+    }
+
+    .brand h1{
+      margin:0;
+      font-size: 15px;
+      letter-spacing:.18px;
+    }
+    .brand p{
+      margin:2px 0 0 0;
+      font-size: 12.5px;
+      color: var(--muted);
+    }
+    .nav{
+      display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+    }
+    .link{
+      padding:8px 10px;
+      border:1px solid transparent;
+      border-radius: 14px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .link:hover{border-color: var(--border); background: rgba(255,255,255,.06); color: var(--text)}
+    .cta{
+      display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+    }
+    .btn{
+      appearance:none;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.07);
+      color: var(--text);
+      padding:10px 12px;
+      border-radius: 14px;
+      font-weight:650;
+      font-size: 13px;
+      cursor:pointer;
+      transition: transform .06s ease, background .2s ease, border-color .2s ease;
+      backdrop-filter: blur(10px);
+      display:inline-flex; align-items:center; gap:8px;
+    }
+    .btn:hover{background: rgba(255,255,255,.10)}
+    .btn:active{transform: translateY(1px)}
+    .btn.primary{
+      border-color: rgba(88,166,24,.35);
+      background: linear-gradient(135deg, rgba(88,166,24,.20), rgba(56,189,248,.10));
+    }
+
+    /* Hero */
+    .hero{
+      border:1px solid var(--border);
+      background: linear-gradient(135deg, rgba(88,166,24,.16), rgba(56,189,248,.12));
+      border-radius: var(--radius2);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+      position:relative;
+    }
+    .hero::after{
+      content:"";
+      position:absolute;
+      inset:-2px;
+      background:
+        radial-gradient(800px 320px at 20% 10%, rgba(255,255,255,.14), transparent 60%),
+        radial-gradient(650px 280px at 85% 15%, rgba(255,255,255,.10), transparent 60%);
+      pointer-events:none;
+      mix-blend-mode: overlay;
+    }
+    .heroGrid{
+      display:grid;
+      grid-template-columns: 1.05fr .95fr;
+      gap:0;
+      align-items:stretch;
+    }
+    @media (max-width: 980px){
+      .heroGrid{grid-template-columns: 1fr}
+    }
+    .heroText{
+      padding:26px 22px 22px;
+      position:relative;
+      z-index:1;
+    }
+    .kicker{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:7px 10px;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.07);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 12.5px;
+      backdrop-filter: blur(10px);
+    }
+    .dot{
+      width:8px; height:8px; border-radius:99px;
+      background: var(--accent);
+      box-shadow: 0 0 0 3px rgba(88,166,24,.18);
+    }
+    .heroText h2{
+      margin:14px 0 0 0;
+      font-size: 28px;
+      letter-spacing:.2px;
+      line-height:1.15;
+      max-width: 26ch;
+    }
+    .heroText .lead{
+      margin:12px 0 0 0;
+      color: var(--muted);
+      font-size: 15px;
+      max-width: 72ch;
+    }
+    .bullets{
+      margin:16px 0 0 0;
+      padding:0;
+      list-style:none;
+      display:grid;
+      grid-template-columns: 1fr;
+      gap:10px;
+      max-width: 76ch;
+    }
+    .bullets li{
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.06);
+      border-radius: 16px;
+      padding:10px 12px;
+      display:flex; gap:10px; align-items:flex-start;
+    }
+    .bullets .ic{
+      width:26px; height:26px;
+      border-radius: 10px;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.06);
+      display:flex; align-items:center; justify-content:center;
+      flex:0 0 26px;
+    }
+    .bullets strong{display:block; font-size: 13.5px}
+    .bullets span{display:block; color: var(--muted); font-size: 13px; margin-top:2px}
+
+    .heroActions{
+      margin-top:16px;
+      display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+    }
+
+    .heroArt{
+      border-left:1px solid var(--border);
+      background: rgba(255,255,255,.05);
+      position:relative;
+      z-index:1;
+      min-height: 360px;
+    }
+    @media (max-width: 980px){
+      .heroArt{border-left:none; border-top:1px solid var(--border); min-height: 280px}
+    }
+    .heroArt figure{
+      margin:0;
+      height:100%;
+      display:flex;
+      align-items:stretch;
+    }
+    .heroArt img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      display:block;
+      filter: saturate(1.02) contrast(1.02);
+    }
+    .heroArt .caption{
+      position:absolute;
+      left:14px; bottom:14px;
+      right:14px;
+      border:1px solid var(--border);
+      background: rgba(0,0,0,.22);
+      color: rgba(255,255,255,.86);
+      padding:10px 12px;
+      border-radius: 16px;
+      backdrop-filter: blur(10px);
+      font-size: 12.5px;
+    }
+    @media (prefers-color-scheme: light){
+      .heroArt .caption{
+        background: rgba(255,255,255,.55);
+        color: rgba(18,24,40,.86);
+      }
+    }
+
+    /* Sections */
+    .section{
+      margin-top:16px;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.05);
+      border-radius: var(--radius2);
+      box-shadow: var(--shadow);
+      padding:18px 16px;
+      backdrop-filter: blur(10px);
+    }
+    .sectionHead{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+      flex-wrap:wrap;
+      padding:2px 4px 10px;
+    }
+    .sectionHead h3{
+      margin:0;
+      font-size: 14px;
+      letter-spacing:.18px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .sectionHead p{
+      margin:6px 0 0 0;
+      color: var(--muted);
+      font-size: 13.5px;
+      max-width: 84ch;
+    }
+
+    .cards{
+      display:grid;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      gap:10px;
+    }
+    @media (max-width: 980px){
+      .cards{grid-template-columns: 1fr}
+    }
+    .card{
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.06);
+      border-radius: 18px;
+      padding:12px 12px;
+      display:flex;
+      gap:12px;
+      align-items:flex-start;
+      min-height: 92px;
+    }
+    .card .ic{
+      width:34px; height:34px;
+      border-radius: 12px;
+      border:1px solid var(--border);
+      background: linear-gradient(135deg, rgba(56,189,248,.16), rgba(88,166,24,.12));
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      flex:0 0 34px;
+      box-shadow: 0 10px 22px rgba(0,0,0,.18);
+    }
+    .card h4{margin:0; font-size: 14.5px; letter-spacing:.1px}
+    .card p{margin:6px 0 0 0; color: var(--muted); font-size: 13px}
+
+    /* Demo / Contact */
+    .demoGrid{
+      display:grid;
+      grid-template-columns: 1.05fr .95fr;
+      gap:10px;
+      align-items:stretch;
+    }
+    @media (max-width: 980px){
+      .demoGrid{grid-template-columns: 1fr}
+    }
+    .demoBox{
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.06);
+      border-radius: 18px;
+      padding:14px;
+    }
+    .demoBox h4{margin:0; font-size:16px}
+    .demoBox p{margin:8px 0 0 0; color: var(--muted); font-size: 13.5px; max-width: 80ch}
+    .demoActions{
+      margin-top:12px;
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .demoList{
+      margin:10px 0 0 0;
+      padding:0;
+      list-style:none;
+      display:grid;
+      gap:8px;
+    }
+    .demoList li{
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.05);
+      border-radius: 16px;
+      padding:10px 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .demoList .mini{
+      width:26px; height:26px;
+      border-radius: 10px;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.05);
+      display:flex; align-items:center; justify-content:center;
+      flex:0 0 26px;
+      color: var(--text);
+    }
+    .mono{font-family: var(--mono)}
+
+    /* Catalog tools + features */
+    .catalogTools{
+      margin-top:10px;
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .search{
+      flex: 1 1 340px;
+      display:flex;
+      gap:10px;
+      align-items:center;
+      padding:10px 12px;
+      border-radius: 14px;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.07);
+      backdrop-filter: blur(10px);
+    }
+    .search input{
+      width:100%;
+      border:none;
+      outline:none;
+      background: transparent;
+      color: var(--text);
+      font-size: 14px;
+    }
+    .search input::placeholder{color:var(--muted2)}
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:8px 10px;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.06);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 12.5px;
+      backdrop-filter: blur(8px);
+    }
+    .pill strong{color: var(--text)}
+    .cat{
+      margin-top:12px;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.05);
+      border-radius: var(--radius);
+      padding:14px;
+    }
+    .catHead{
+      display:flex; align-items:flex-start; justify-content:space-between;
+      gap:12px; flex-wrap:wrap;
+      margin-bottom: 12px;
+    }
+    .catHead h4{
+      margin:0;
+      font-size: 13px;
+      letter-spacing:.18px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .catHead p{
+      margin:6px 0 0 0;
+      color: var(--muted2);
+      font-size: 13px;
+      max-width: 80ch;
+    }
+    .grid2{
+      display:grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap:10px;
+    }
+    @media (max-width: 760px){
+      .grid2{grid-template-columns: 1fr}
+    }
+    .f{
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.06);
+      border-radius: 16px;
+      padding:12px;
+      display:flex; gap:12px;
+      align-items:flex-start;
+      min-height: 84px;
+    }
+    .f .ic{
+      width:32px; height:32px; border-radius: 12px;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.05);
+      display:flex; align-items:center; justify-content:center;
+      flex:0 0 32px;
+    }
+    .f h5{margin:0; font-size: 14.5px}
+    .f p{margin:6px 0 0 0; color: var(--muted); font-size: 13px}
+
+    /* Footer */
+    footer{
+      margin-top:16px;
+      color: var(--muted2);
+      font-size: 12.5px;
+      text-align:center;
+    }
+
+    @media print{
+      .topbar, .heroArt .caption, .catalogTools, .demoActions{display:none !important}
+      body{background:white}
+      .hero, .section, .cat{box-shadow:none; background:white}
+      a{color:black}
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+      <div class="brand">
+        <!-- ÄNDRAD: stimma-logo.png -->
+        <div class="logo" aria-hidden="true">
+          <img src="images/stimma-logo.png" alt="STIMMA logotyp" />
+        </div>
+
+        <div>
+          <h1>STIMMA</h1>
+          <p>Nanoutbildning med AI-stöd, quiz och motivation som håller i längden</p>
+        </div>
+      </div>
+
+      <div class="nav" aria-label="Navigering">
+        <a class="link" href="#value">Värde</a>
+        <a class="link" href="#audience">Målgrupper</a>
+        <a class="link" href="#flow">Flöde</a>
+        <a class="link" href="#highlights">Höjdpunkter</a>
+        <a class="link" href="#demo">Boka demo</a>
+        <a class="link" href="#catalog">Funktionskatalog</a>
+      </div>
+
+      <div class="cta">
+        <a class="btn" href="index.php">
+          <span aria-hidden="true">←</span> Tillbaka till inloggning
+        </a>
+        <a class="btn primary" href="#demo">Boka demo <span aria-hidden="true">→</span></a>
+        <a class="btn" href="mailto:info@sambruk.se?subject=STIMMA%20%E2%80%93%20Boka%20demo%20/%20Kontakta%20oss">
+          Kontakta oss
+        </a>
+      </div>
+    </div>
+
+    <!-- HERO -->
+    <section class="hero" aria-label="Hero">
+      <div class="heroGrid">
+        <div class="heroText">
+          <div class="kicker"><span class="dot" aria-hidden="true"></span> Plattform för nanoutbildning</div>
+          <h2>Små lektioner. Snabba quiz. Tydlig progression.</h2>
+          <p class="lead">
+            STIMMA är byggt för att göra lärande lätt att starta – och ännu lättare att fortsätta.
+            Kombinera korta lektioner med quiz, AI-tutor och gamification, och få statistik, certifikat och påminnelser på köpet.
+          </p>
+
+          <ul class="bullets">
+            <li>
+              <div class="ic" aria-hidden="true">⚡</div>
+              <div>
+                <strong>Hög genomströmning utan att tumma på kvalitet</strong>
+                <span>Nanolektioner + quiz gör det enkelt att lära i små steg och säkra kunskapen direkt.</span>
+              </div>
+            </li>
+            <li>
+              <div class="ic" aria-hidden="true">🧠</div>
+              <div>
+                <strong>AI som förstärker – inte stör</strong>
+                <span>AI-tutor och AI-generering med guardrails, plus stöd för flera leverantörer.</span>
+              </div>
+            </li>
+            <li>
+              <div class="ic" aria-hidden="true">🛡️</div>
+              <div>
+                <strong>Organisation och säkerhet inbyggt</strong>
+                <span>Domänbaserad registrering, rate limiting och skydd mot vanliga webbangrepp.</span>
+              </div>
+            </li>
+          </ul>
+
+          <div class="heroActions">
+            <a class="btn primary" href="#flow">Se nyckelflödet <span aria-hidden="true">→</span></a>
+            <a class="btn" href="#catalog">Se funktioner</a>
+          </div>
+        </div>
+
+        <div class="heroArt" aria-label="Illustration">
+          <figure>
+            <!-- Valfritt: din fisk-illustration -->
+            <img src="images/Stimma illustration.png" alt="Illustration av fiskar som snappar upp informationsbitar och en medalj för den som samlar mest." />
+          </figure>
+          <div class="caption">
+            <strong>Varför heter det Stimma?</strong><br>
+            Namnet kommer från att vi lär oss tillsammans – som fiskar i ett stim.
+            Det blir roligare när man delar på kunskapen, snappar upp nya insikter och rör sig framåt som grupp.
+            Precis som i ett stim drar vi nytta av varandra och belönar de som bidrar mest (XP, badges, certifikat).
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VALUE -->
+    <section class="section" id="value">
+      <div class="sectionHead">
+        <div>
+          <h3>Värdeerbjudande</h3>
+          <p>
+            STIMMA kombinerar innehåll, uppföljning och motivation i ett och samma flöde.
+            Resultatet är kortare ledtider från “vi borde utbilda” till “det är gjort – och verifierat”.
+          </p>
+        </div>
+      </div>
+
+      <div class="cards">
+        <div class="card">
+          <div class="ic" aria-hidden="true">🎯</div>
+          <div>
+            <h4>Fokus på beteende och genomförande</h4>
+            <p>Streaks, nivåer och badges gör att utbildning blir något som faktiskt händer – inte något som planeras.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ic" aria-hidden="true">📏</div>
+          <div>
+            <h4>Verifierbarhet och spårbarhet</h4>
+            <p>Automatiska certifikat med unika ID:n och publik verifiering via URL.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ic" aria-hidden="true">🧰</div>
+          <div>
+            <h4>Produktiv kursproduktion</h4>
+            <p>WYSIWYG, videostöd och import/export i JSON – plus AI för att generera hela kurser.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- AUDIENCE -->
+    <section class="section" id="audience">
+      <div class="sectionHead">
+        <div>
+          <h3>Målgrupper & roller</h3>
+          <p>
+            Plattformen är designad för att skala i flera organisationer med tydliga roller:
+            student, redaktör, admin och super admin.
+          </p>
+        </div>
+      </div>
+
+      <div class="cards">
+        <div class="card">
+          <div class="ic" aria-hidden="true">👤</div>
+          <div>
+            <h4>Student</h4>
+            <p>Tar kurser, gör quiz och får stöd via AI-tutor – med tydlig progression (XP, nivåer, streaks).</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ic" aria-hidden="true">✍️</div>
+          <div>
+            <h4>Redaktör</h4>
+            <p>Skapar och förbättrar kursinnehåll, återanvänder kurser och samarbetar via flera redaktörer per kurs.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ic" aria-hidden="true">⚙️</div>
+          <div>
+            <h4>Admin / Super Admin</h4>
+            <p>Hanterar användare, statistik, påminnelser och domäner – samt AI-inställningar på systemnivå.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FLOW -->
+    <section class="section" id="flow">
+      <div class="sectionHead">
+        <div>
+          <h3>Nyckelflöde</h3>
+          <p>
+            Ett typiskt flöde från inloggning till verifierbart resultat – utan onödiga steg.
+          </p>
+        </div>
+      </div>
+
+      <div class="cards">
+        <div class="card">
+          <div class="ic" aria-hidden="true">🔐</div>
+          <div>
+            <h4>1) Inloggning</h4>
+            <p>E-postlänk (lösenordsfritt), domänstyrd registrering och rate limiting.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ic" aria-hidden="true">🧩</div>
+          <div>
+            <h4>2) Lärande</h4>
+            <p>Nanolektioner med text, bilder och video – redigerat i WYSIWYG och förhandsvisning.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ic" aria-hidden="true">✅</div>
+          <div>
+            <h4>3) Quiz</h4>
+            <p>Enkelval, flerval, fyll-i-lucka, dra-och-släpp och bildfrågor.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HIGHLIGHTS -->
+    <section class="section" id="highlights">
+      <div class="sectionHead">
+        <div>
+          <h3>Funktionshöjdpunkter</h3>
+          <p>Det här är de funktioner som brukar göra störst skillnad i praktiken när man vill få utbildning att “sitta”.</p>
+        </div>
+      </div>
+
+      <div class="cards">
+        <div class="card">
+          <div class="ic" aria-hidden="true">🤖</div>
+          <div>
+            <h4>AI-kursgenerering + AI-tutor</h4>
+            <p>Skapa kurser snabbt och ge deltagare stöd – med guardrails och leverantörsval.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ic" aria-hidden="true">🏅</div>
+          <div>
+            <h4>Gamification</h4>
+            <p>XP, nivåer, streaks och badges gör att lärande blir en vana, inte ett projekt.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ic" aria-hidden="true">📜</div>
+          <div>
+            <h4>Certifikat och verifiering</h4>
+            <p>Automatiskt certifikat med unikt ID och publik verifiering via URL.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- NYTT: DEMO / KONTAKT -->
+    <section class="section" id="demo">
+      <div class="sectionHead">
+        <div>
+          <h3>Boka demo / Kontakta oss</h3>
+          <p>
+            Vill du se hur STIMMA kan användas i din organisation? Hör av dig så sätter vi upp en kort demo och pratar upplägg,
+            roller, innehållsarbete och hur ni kommer igång snabbt.
+          </p>
+        </div>
+      </div>
+
+      <div class="demoGrid">
+        <div class="demoBox">
+          <h4>Snabb väg till demo</h4>
+          <p>
+            Skicka ett mail så återkommer vi med förslag på tid. Om du vill kan du ange antal användare, domän(er) och vilka kursområden ni vill börja med.
+          </p>
+          <div class="demoActions">
+            <a class="btn primary" href="mailto:info@sambruk.se?subject=STIMMA%20%E2%80%93%20Boka%20demo&body=Hej!%0A%0AVi%20vill%20boka%20en%20demo%20av%20STIMMA.%0A%0AOrganisation:%0AUngef%C3%A4r%20antal%20anv%C3%A4ndare:%0AE-postdom%C3%A4n(er):%0AVilka%20kurser%20eller%20omr%C3%A5den:%0A%0AF%C3%B6rslag%20p%C3%A5%20tider:%0A%0AV%C3%A4nliga%20h%C3%A4lsningar,%0A">
+              Boka demo via e-post <span aria-hidden="true">→</span>
+            </a>
+            <a class="btn" href="mailto:info@sambruk.se?subject=STIMMA%20%E2%80%93%20Fr%C3%A5ga%20/%20Kontakt">
+              Kontakta oss
+            </a>
+          </div>
+          <p style="margin-top:10px;color:var(--muted2);font-size:12.5px;">
+            E-post: <span class="mono">info@sambruk.se</span>
+          </p>
+        </div>
+
+        <div class="demoBox">
+          <h4>Vad vi kan visa i demon</h4>
+          <ul class="demoList">
+            <li><span class="mini" aria-hidden="true">🔐</span> Inloggning: lösenordsfritt, domänstyrt, “kom ihåg mig”.</li>
+            <li><span class="mini" aria-hidden="true">📚</span> Kurs/lektion: WYSIWYG, video, förhandsvisning, redaktörssamarbete.</li>
+            <li><span class="mini" aria-hidden="true">✅</span> Quiz: flera frågetyper + resultat och progression.</li>
+            <li><span class="mini" aria-hidden="true">🏅</span> Gamification: XP, nivåer, streaks och badges.</li>
+            <li><span class="mini" aria-hidden="true">📜</span> Certifikat: unikt ID och publik verifiering.</li>
+            <li><span class="mini" aria-hidden="true">📊</span> Statistik: kurs- och användarnivå + CSV-export.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- CATALOG -->
+    <section class="section" id="catalog">
+      <div class="sectionHead">
+        <div>
+          <h3>Funktionskatalog</h3>
+          <p>Fullständig lista. Använd sökfältet för att filtrera på ord som “certifikat”, “domän”, “quiz”, “OpenAI” osv.</p>
+        </div>
+      </div>
+
+      <div class="catalogTools" role="region" aria-label="Sök och räknare">
+        <div class="search" role="search">
+          <span aria-hidden="true">🔎</span>
+          <label for="q" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">Sök i funktionskatalogen</label>
+          <input id="q" type="search" placeholder="Sök i funktioner…" autocomplete="off" />
+          <button class="btn" id="clearBtn" type="button">Rensa</button>
+        </div>
+        <span class="pill"><strong id="featureCount">–</strong> funktioner</span>
+        <span class="pill">Uppdaterad: <strong id="updated">–</strong></span>
+      </div>
+
+      <!-- FUNKTIONER (oförändrat innehåll från tidigare version) -->
+      <div class="cat" data-cat>
+        <div class="catHead">
+          <div>
+            <h4>Autentisering & Inloggning</h4>
+            <p>Säkra och användarvänliga inloggningsflöden, med skydd mot missbruk och kontroll över registrering.</p>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="f" data-feature><div class="ic" aria-hidden="true">🔐</div><div><h5>Lösenordsfri inloggning</h5><p>Logga in via e-postlänk istället för lösenord – enkelt och säkert.</p></div></div>
+          <div class="f" data-feature><div class="ic" aria-hidden="true">🕒</div><div><h5>Kom ihåg mig</h5><p>Välj att förbli inloggad i 30 dagar på betrodda enheter.</p></div></div>
+          <div class="f" data-feature><div class="ic" aria-hidden="true">🛡️</div><div><h5>Rate limiting</h5><p>Skydd mot brute-force-attacker med max 5 inloggningsförsök per 15 minuter.</p></div></div>
+          <div class="f" data-feature><div class="ic" aria-hidden="true">🏷️</div><div><h5>Domänbaserad registrering</h5><p>Endast användare från vitlistade e-postdomäner kan registrera sig.</p></div></div>
+        </div>
+      </div>
+
+      <div class="cat" data-cat>
+        <div class="catHead">
+          <div><h4>Användarroller</h4><p>Rollstyrd behörighet för kursdeltagande, redigering, administration och systeminställningar.</p></div>
+        </div>
+        <div class="grid2">
+          <div class="f" data-feature><div class="ic" aria-hidden="true">👤</div><div><h5>Student</h5><p>Grundroll för att ta kurser, svara på quiz och chatta med AI-tutorn.</p></div></div>
+          <div class="f" data-feature><div class="ic" aria-hidden="true">✍️</div><div><h5>Redaktör</h5><p>Kan skapa och redigera kurser samt lektioner inom sin organisation.</p></div></div>
+          <div class="f" data-feature><div class="ic" aria-hidden="true">⚙️</div><div><h5>Admin</h5><p>Hanterar användare, statistik och påminnelser för sin organisation.</p></div></div>
+          <div class="f" data-feature><div class="ic" aria-hidden="true">🧿</div><div><h5>Super Admin</h5><p>Full systemåtkomst inklusive AI-inställningar och domänhantering.</p></div></div>
+        </div>
+      </div>
+
+      <!-- (Resten av funktionskatalogen kan ligga kvar exakt som du redan har i din fil.
+           Om du vill kan jag klistra in hela resterande block här också, men jag har inte ändrat det.) -->
+
+    </section>
+
+    <footer>
+      <span>STIMMA · Produktsida + funktionsöversikt (single-file HTML). </span>
+      <span style="margin-left:6px;">Kontakt: <a href="mailto:info@sambruk.se">info@sambruk.se</a></span>
+    </footer>
+  </div>
+
+  <script>
+    (function(){
+      const $ = (sel, el=document) => el.querySelector(sel);
+      const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
+      const q = $("#q");
+      const clearBtn = $("#clearBtn");
+      const updated = $("#updated");
+      const featureCountEl = $("#featureCount");
+      const cats = $$("[data-cat]");
+      const features = $$("[data-feature]");
+
+      try{
+        updated.textContent = new Date().toLocaleDateString("sv-SE", {year:"numeric", month:"long", day:"numeric"});
+      }catch(e){
+        updated.textContent = new Date().toISOString().slice(0,10);
+      }
+
+      featureCountEl.textContent = features.length;
+
+      function normalize(str){
+        return (str||"").toLowerCase().replace(/\s+/g," ").trim();
+      }
+
+      function applyFilter(query){
+        const nq = normalize(query);
+        if(!nq){
+          cats.forEach(cat => cat.style.display = "");
+          features.forEach(f => f.style.display = "");
+          return;
+        }
+        features.forEach(f => {
+          const hit = normalize(f.textContent).includes(nq);
+          f.style.display = hit ? "" : "none";
+        });
+        cats.forEach(cat => {
+          const anyVisible = $$("[data-feature]", cat).some(f => f.style.display !== "none");
+          const titleHit = normalize(cat.textContent).includes(nq);
+          cat.style.display = (anyVisible || titleHit) ? "" : "none";
+        });
+      }
+
+      q && q.addEventListener("input", () => applyFilter(q.value));
+      clearBtn && clearBtn.addEventListener("click", () => {
+        q.value = "";
+        applyFilter("");
+        q.focus();
+      });
+    })();
+  </script>
+</body>
+</html>
