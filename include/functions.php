@@ -576,3 +576,69 @@ function force_balance_tags($html) {
     
     return $html;
 }
+
+/**
+ * Kontrollera om en domän har PUB-avtal
+ * 
+ * @param string $domain Domännamnet att kontrollera
+ * @return bool True om domänen har PUB-avtal, false annars
+ */
+function hasPubAgreement($domain) {
+    $setting = queryOne("SELECT has_pub_agreement FROM " . DB_DATABASE . ".domain_settings WHERE domain = ?", [$domain]);
+    return $setting && $setting['has_pub_agreement'] == 1;
+}
+
+/**
+ * Hämta PUB-avtalsinformation för en domän
+ * 
+ * @param string $domain Domännamnet
+ * @return array|null Domäninställningar eller null om domänen inte finns
+ */
+function getDomainSettings($domain) {
+    return queryOne("SELECT * FROM " . DB_DATABASE . ".domain_settings WHERE domain = ?", [$domain]);
+}
+
+/**
+ * Uppdatera PUB-avtalsstatus för en domän
+ * 
+ * @param string $domain Domännamnet
+ * @param bool $hasPubAgreement Om domänen har PUB-avtal
+ * @param string|null $agreementDate Datum för avtalstecknande (YYYY-MM-DD)
+ * @param string|null $notes Anteckningar om avtalet
+ * @return bool True om uppdateringen lyckades
+ */
+function updatePubAgreement($domain, $hasPubAgreement, $agreementDate = null, $notes = null) {
+    $existing = getDomainSettings($domain);
+    
+    if ($existing) {
+        return execute("UPDATE " . DB_DATABASE . ".domain_settings 
+                        SET has_pub_agreement = ?, pub_agreement_date = ?, pub_agreement_notes = ? 
+                        WHERE domain = ?", 
+                        [$hasPubAgreement ? 1 : 0, $agreementDate, $notes, $domain]) !== null;
+    } else {
+        return execute("INSERT INTO " . DB_DATABASE . ".domain_settings 
+                        (domain, has_pub_agreement, pub_agreement_date, pub_agreement_notes) 
+                        VALUES (?, ?, ?, ?)", 
+                        [$domain, $hasPubAgreement ? 1 : 0, $agreementDate, $notes]) !== null;
+    }
+}
+
+/**
+ * Hämta alla domäner med PUB-avtalsstatus
+ * 
+ * @return array Lista med domäner och deras PUB-status
+ */
+function getAllDomainSettings() {
+    return query("SELECT * FROM " . DB_DATABASE . ".domain_settings ORDER BY domain");
+}
+
+/**
+ * Hämta användarens domän från e-postadress
+ * 
+ * @param string $email E-postadress
+ * @return string Domännamnet
+ */
+function getUserDomain($email) {
+    $parts = explode('@', $email);
+    return isset($parts[1]) ? strtolower($parts[1]) : '';
+}
