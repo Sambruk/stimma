@@ -8,6 +8,9 @@ _Inga pågående uppgifter_
 - [ ] Statistik per e-postkampanj
 
 ## Slutfört
+- [x] Domänväljare i användarvyn för superadmin + sortering på domän/e-post
+- [x] E-postnotifikation vid rättighetsändringar (admin/redaktör)
+- [x] Fixa domänfiltrering i admin/index.php (admin ser endast sin organisations statistik)
 - [x] PUB-avtalsfunktion: Superadmin kan markera om domän/organisation har tecknat PUB-avtal
 - [x] PUB-avtal visas i admin/redaktörs-header (badge visar status)
 - [x] Varningsmeddelande i användarvyn för domäner utan PUB-avtal
