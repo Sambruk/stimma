@@ -46,39 +46,77 @@ if ($isSuperAdmin) {
         WHERE p.status = 'completed' AND u.email LIKE ?", ['%@' . $currentUserDomain])['count'] ?? 0;
 }
 
-// Hämta statistik per kurs
-$courseStats = query("SELECT 
-    c.id, 
-    c.title, 
-    c.status,
-    COUNT(DISTINCT l.id) as total_lessons,
-    COUNT(DISTINCT p.id) as total_completions,
-    COUNT(DISTINCT p.user_id) as unique_users
-FROM " . DB_DATABASE . ".courses c
-LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id
-LEFT JOIN " . DB_DATABASE . ".progress p ON l.id = p.lesson_id AND p.status = 'completed'
-GROUP BY c.id, c.title, c.status
-ORDER BY total_completions DESC");
+// Hämta statistik per kurs - filtrera på domän om inte superadmin
+if ($isSuperAdmin) {
+    $courseStats = query("SELECT
+        c.id,
+        c.title,
+        c.status,
+        COUNT(DISTINCT l.id) as total_lessons,
+        COUNT(DISTINCT p.id) as total_completions,
+        COUNT(DISTINCT p.user_id) as unique_users
+    FROM " . DB_DATABASE . ".courses c
+    LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id
+    LEFT JOIN " . DB_DATABASE . ".progress p ON l.id = p.lesson_id AND p.status = 'completed'
+    GROUP BY c.id, c.title, c.status
+    ORDER BY total_completions DESC");
+} else {
+    $courseStats = query("SELECT
+        c.id,
+        c.title,
+        c.status,
+        COUNT(DISTINCT l.id) as total_lessons,
+        COUNT(DISTINCT p.id) as total_completions,
+        COUNT(DISTINCT p.user_id) as unique_users
+    FROM " . DB_DATABASE . ".courses c
+    LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id
+    LEFT JOIN " . DB_DATABASE . ".progress p ON l.id = p.lesson_id AND p.status = 'completed'
+    LEFT JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id
+    WHERE c.organization_domain = ?
+    GROUP BY c.id, c.title, c.status
+    ORDER BY total_completions DESC", [$currentUserDomain]);
+}
 
-// Hämta de senaste aktiviteterna
-$recentActivity = query("SELECT p.*, u.email, l.title as lesson_title, c.title as course_title 
-                        FROM " . DB_DATABASE . ".progress p 
-                        JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id 
-                        JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id 
-                        JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id 
-                        ORDER BY p.updated_at DESC LIMIT 5");
+// Hämta de senaste aktiviteterna - filtrera på domän om inte superadmin
+if ($isSuperAdmin) {
+    $recentActivity = query("SELECT p.*, u.email, l.title as lesson_title, c.title as course_title
+                            FROM " . DB_DATABASE . ".progress p
+                            JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id
+                            JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
+                            JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
+                            ORDER BY p.updated_at DESC LIMIT 5");
+} else {
+    $recentActivity = query("SELECT p.*, u.email, l.title as lesson_title, c.title as course_title
+                            FROM " . DB_DATABASE . ".progress p
+                            JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id
+                            JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
+                            JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
+                            WHERE c.organization_domain = ? AND u.email LIKE ?
+                            ORDER BY p.updated_at DESC LIMIT 5", [$currentUserDomain, '%@' . $currentUserDomain]);
+}
 
-// Beräkna aktivitet per dag (senaste 7 dagarna)
+// Beräkna aktivitet per dag (senaste 7 dagarna) - filtrera på domän om inte superadmin
 $dateActivity = [];
 for ($i = 6; $i >= 0; $i--) {
     $date = date('Y-m-d', strtotime("-$i days"));
     $dateActivity[$date] = 0;
 }
 
-$weekActivity = query("SELECT DATE(updated_at) as date, COUNT(*) as count 
-                      FROM " . DB_DATABASE . ".progress 
-                      WHERE updated_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) 
-                      GROUP BY DATE(updated_at)");
+if ($isSuperAdmin) {
+    $weekActivity = query("SELECT DATE(updated_at) as date, COUNT(*) as count
+                          FROM " . DB_DATABASE . ".progress
+                          WHERE updated_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+                          GROUP BY DATE(updated_at)");
+} else {
+    $weekActivity = query("SELECT DATE(p.updated_at) as date, COUNT(*) as count
+                          FROM " . DB_DATABASE . ".progress p
+                          JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id
+                          JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
+                          JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
+                          WHERE p.updated_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+                          AND c.organization_domain = ? AND u.email LIKE ?
+                          GROUP BY DATE(p.updated_at)", [$currentUserDomain, '%@' . $currentUserDomain]);
+}
 
 foreach ($weekActivity as $day) {
     if (isset($dateActivity[$day['date']])) {
@@ -86,21 +124,31 @@ foreach ($weekActivity as $day) {
     }
 }
 
-// Beräkna aktivitet per kurs (senaste 7 dagarna)
-$courseActivity = query("SELECT 
-    c.title,
-    COUNT(p.id) as activity_count
-FROM " . DB_DATABASE . ".courses c
-LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id
-LEFT JOIN " . DB_DATABASE . ".progress p ON l.id = p.lesson_id 
-    AND p.updated_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-GROUP BY c.id, c.title
-ORDER BY activity_count DESC");
+// Beräkna aktivitet per kurs (senaste 7 dagarna) - filtrera på domän om inte superadmin
+if ($isSuperAdmin) {
+    $courseActivity = query("SELECT
+        c.title,
+        COUNT(p.id) as activity_count
+    FROM " . DB_DATABASE . ".courses c
+    LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id
+    LEFT JOIN " . DB_DATABASE . ".progress p ON l.id = p.lesson_id
+        AND p.updated_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+    GROUP BY c.id, c.title
+    ORDER BY activity_count DESC");
+} else {
+    $courseActivity = query("SELECT
+        c.title,
+        COUNT(p.id) as activity_count
+    FROM " . DB_DATABASE . ".courses c
+    LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id
+    LEFT JOIN " . DB_DATABASE . ".progress p ON l.id = p.lesson_id
+        AND p.updated_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+    LEFT JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id
+    WHERE c.organization_domain = ?
+    GROUP BY c.id, c.title
+    ORDER BY activity_count DESC", [$currentUserDomain]);
+}
 
-$users = queryAll("SELECT * FROM " . DB_DATABASE . ".users ORDER BY created_at DESC");
-$courses = queryAll("SELECT * FROM " . DB_DATABASE . ".courses ORDER BY sort_order ASC");
-$lessons = queryAll("SELECT * FROM " . DB_DATABASE . ".lessons ORDER BY sort_order ASC");
-$progress = queryAll("SELECT * FROM " . DB_DATABASE . ".progress ORDER BY updated_at DESC");
 
 // Beräkna antal fullt genomförda kurser och genomsnitt per användare
 $fullyCompletedCourses = 0;

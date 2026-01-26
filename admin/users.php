@@ -34,8 +34,7 @@ if (!$isSuperAdmin && !$isCurrentUserAdmin) {
     exit;
 }
 
-// Sätt sidtitel
-$page_title = $isSuperAdmin ? 'Användarhantering (alla organisationer)' : 'Användarhantering - ' . $currentUserDomain;
+// Sidtitel sätts senare efter domänfilter har hanterats
 
 // Hantera radering av användare (SECURITY FIX: Changed from GET to POST with CSRF validation)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' &&
@@ -129,7 +128,19 @@ if (isset($_POST['action']) && $_POST['action'] === 'toggle_admin' && isset($_PO
         // Logga ändringen
         logActivity($_SESSION['user_email'], "Ändrade admin-status för användare med ID: " . $userId . " till " . ($isAdmin ? "admin" : "icke-admin"));
 
-        $_SESSION['message'] = "Användarens admin-status har uppdaterats.";
+        // Skicka e-postnotifikation till användaren
+        $notificationSent = sendPermissionChangeNotification(
+            $targetUser['email'],
+            'admin',
+            (bool)$isAdmin,
+            $_SESSION['user_email']
+        );
+
+        if ($notificationSent) {
+            $_SESSION['message'] = "Användarens admin-status har uppdaterats och en notifikation har skickats.";
+        } else {
+            $_SESSION['message'] = "Användarens admin-status har uppdaterats, men e-postnotifikationen kunde inte skickas.";
+        }
         $_SESSION['message_type'] = "success";
     } catch (Exception $e) {
         $_SESSION['message'] = "Ett fel uppstod vid uppdatering av admin-status: " . $e->getMessage();
@@ -164,7 +175,19 @@ if (isset($_POST['action']) && $_POST['action'] === 'toggle_editor' && isset($_P
         // Logga ändringen
         logActivity($_SESSION['user_email'], "Ändrade redaktör-status för användare med ID: " . $userId . " till " . ($isEditor ? "redaktör" : "icke-redaktör"));
 
-        $_SESSION['message'] = "Användarens redaktör-status har uppdaterats.";
+        // Skicka e-postnotifikation till användaren
+        $notificationSent = sendPermissionChangeNotification(
+            $targetUser['email'],
+            'editor',
+            (bool)$isEditor,
+            $_SESSION['user_email']
+        );
+
+        if ($notificationSent) {
+            $_SESSION['message'] = "Användarens redaktör-status har uppdaterats och en notifikation har skickats.";
+        } else {
+            $_SESSION['message'] = "Användarens redaktör-status har uppdaterats, men e-postnotifikationen kunde inte skickas.";
+        }
         $_SESSION['message_type'] = "success";
     } catch (Exception $e) {
         $_SESSION['message'] = "Ett fel uppstod vid uppdatering av redaktör-status: " . $e->getMessage();
@@ -224,35 +247,89 @@ if (isset($_POST['action']) && $_POST['action'] === 'create_user') {
     }
 }
 
-// Hämta det totala antalet lektioner för organisationen
+// För superadmin: hämta alla unika domäner och hantera domänfilter
+$availableDomains = [];
+$selectedDomain = '';
+
 if ($isSuperAdmin) {
+    // Hämta alla unika domäner från användare
+    $domainResults = queryAll("
+        SELECT DISTINCT SUBSTRING_INDEX(email, '@', -1) as domain
+        FROM " . DB_DATABASE . ".users
+        ORDER BY domain ASC
+    ");
+    $availableDomains = array_column($domainResults, 'domain');
+
+    // Kontrollera om en domän är vald via GET-parameter
+    if (isset($_GET['domain']) && $_GET['domain'] !== '') {
+        $selectedDomain = $_GET['domain'];
+        // Validera att domänen finns
+        if (!in_array($selectedDomain, $availableDomains)) {
+            $selectedDomain = '';
+        }
+    }
+}
+
+// Bestäm vilken domän som ska användas för filtrering
+$filterDomain = $isSuperAdmin ? $selectedDomain : $currentUserDomain;
+
+// Hämta det totala antalet lektioner för organisationen
+if ($isSuperAdmin && empty($selectedDomain)) {
     $totalLessonsInSystem = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".lessons")['count'] ?? 0;
 } else {
+    $domainForLessons = $isSuperAdmin ? $selectedDomain : $currentUserDomain;
     $totalLessonsInSystem = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".lessons l
         JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
-        WHERE c.organization_domain = ?", [$currentUserDomain])['count'] ?? 0;
+        WHERE c.organization_domain = ?", [$domainForLessons])['count'] ?? 0;
 }
 
 // Hämta användare med statistik - filtrera på organisation om inte superadmin
-if ($isSuperAdmin) {
+if ($isSuperAdmin && empty($selectedDomain)) {
+    // Superadmin utan filter: visa alla, sortera på domän sedan e-post
     $users = queryAll("
         SELECT u.*,
-               COUNT(p.id) as completed_lessons
+               COUNT(p.id) as completed_lessons,
+               SUBSTRING_INDEX(u.email, '@', -1) as user_domain
         FROM " . DB_DATABASE . ".users u
         LEFT JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id AND p.status = 'completed'
         GROUP BY u.id
-        ORDER BY u.created_at DESC
+        ORDER BY user_domain ASC, u.email ASC
     ");
-} else {
+} elseif ($isSuperAdmin && !empty($selectedDomain)) {
+    // Superadmin med domänfilter
     $users = queryAll("
         SELECT u.*,
-               COUNT(p.id) as completed_lessons
+               COUNT(p.id) as completed_lessons,
+               SUBSTRING_INDEX(u.email, '@', -1) as user_domain
         FROM " . DB_DATABASE . ".users u
         LEFT JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id AND p.status = 'completed'
         WHERE u.email LIKE ?
         GROUP BY u.id
-        ORDER BY u.created_at DESC
+        ORDER BY user_domain ASC, u.email ASC
+    ", ['%@' . $selectedDomain]);
+} else {
+    // Vanlig admin: filtrera på egen domän, sortera på e-post
+    $users = queryAll("
+        SELECT u.*,
+               COUNT(p.id) as completed_lessons,
+               SUBSTRING_INDEX(u.email, '@', -1) as user_domain
+        FROM " . DB_DATABASE . ".users u
+        LEFT JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id AND p.status = 'completed'
+        WHERE u.email LIKE ?
+        GROUP BY u.id
+        ORDER BY u.email ASC
     ", ['%@' . $currentUserDomain]);
+}
+
+// Sätt sidtitel baserat på vald domän
+if ($isSuperAdmin) {
+    if (!empty($selectedDomain)) {
+        $page_title = 'Användarhantering - ' . $selectedDomain;
+    } else {
+        $page_title = 'Användarhantering (alla organisationer)';
+    }
+} else {
+    $page_title = 'Användarhantering - ' . $currentUserDomain;
 }
 
 // Inkludera header
@@ -269,18 +346,33 @@ require_once 'include/header.php';
     <div class="row">
         <div class="col-12">
             <div class="card shadow mb-4">
-                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="d-flex align-items-center">
-                        <h6 class="m-0 font-weight-bold text-muted me-3">Användare</h6>
+                        <h6 class="m-0 font-weight-bold text-muted me-3">Användare <span class="badge bg-secondary"><?= count($users) ?></span></h6>
                         <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addUserModal">
                             + Användare
                         </button>
                     </div>
-                    <div class="input-group" style="width: 300px;">
-                        <span class="input-group-text bg-light border-0">
-                            <i class="bi bi-search"></i>
-                        </span>
-                        <input type="text" id="emailFilter" class="form-control bg-light border-0 small" placeholder="Filtrera e-postadresser..." aria-label="Sök">
+                    <div class="d-flex align-items-center gap-3">
+                        <?php if ($isSuperAdmin && count($availableDomains) > 0): ?>
+                        <div class="d-flex align-items-center">
+                            <label for="domainFilter" class="me-2 text-muted small text-nowrap">Domän:</label>
+                            <select id="domainFilter" class="form-select form-select-sm" style="width: 200px;" onchange="filterByDomain(this.value)">
+                                <option value="">Alla domäner (<?= count($availableDomains) ?>)</option>
+                                <?php foreach ($availableDomains as $domain): ?>
+                                <option value="<?= htmlspecialchars($domain) ?>" <?= $selectedDomain === $domain ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($domain) ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <?php endif; ?>
+                        <div class="input-group" style="width: 250px;">
+                            <span class="input-group-text bg-light border-0">
+                                <i class="bi bi-search"></i>
+                            </span>
+                            <input type="text" id="emailFilter" class="form-control bg-light border-0 small" placeholder="Filtrera e-post..." aria-label="Sök">
+                        </div>
                     </div>
                 </div>
                 <div class="card-body">
@@ -449,6 +541,17 @@ require_once 'include/header.php';
 $csrfToken = htmlspecialchars($_SESSION['csrf_token']);
 ?>
 <script>
+    // Funktion för att filtrera på domän (laddar om sidan med GET-parameter)
+    function filterByDomain(domain) {
+        const url = new URL(window.location.href);
+        if (domain) {
+            url.searchParams.set('domain', domain);
+        } else {
+            url.searchParams.delete('domain');
+        }
+        window.location.href = url.toString();
+    }
+
     document.addEventListener("DOMContentLoaded", function() {
         // Email filtering functionality
         const emailFilter = document.getElementById("emailFilter");
@@ -456,7 +559,7 @@ $csrfToken = htmlspecialchars($_SESSION['csrf_token']);
         const noResultsRow = document.createElement("tr");
         const userTableBody = document.getElementById("userTableBody");
 
-        noResultsRow.innerHTML = "<td colspan=\"6\" class=\"text-center\">Inga användare matchar filtret</td>";
+        noResultsRow.innerHTML = "<td colspan=\"7\" class=\"text-center\">Inga användare matchar filtret</td>";
         noResultsRow.classList.add("no-results");
         noResultsRow.style.display = "none";
         userTableBody.appendChild(noResultsRow);

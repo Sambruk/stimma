@@ -634,11 +634,107 @@ function getAllDomainSettings() {
 
 /**
  * Hämta användarens domän från e-postadress
- * 
+ *
  * @param string $email E-postadress
  * @return string Domännamnet
  */
 function getUserDomain($email) {
     $parts = explode('@', $email);
     return isset($parts[1]) ? strtolower($parts[1]) : '';
+}
+
+/**
+ * Skicka e-postnotifikation när en användares rättigheter ändras
+ *
+ * @param string $userEmail E-postadressen till användaren vars rättigheter ändras
+ * @param string $changeType Typ av ändring ('admin' eller 'editor')
+ * @param bool $newStatus Den nya statusen (true = tilldelad, false = borttagen)
+ * @param string $changedByEmail E-postadressen till den som gjorde ändringen
+ * @return bool True om e-posten skickades, false vid fel
+ */
+function sendPermissionChangeNotification($userEmail, $changeType, $newStatus, $changedByEmail) {
+    require_once __DIR__ . '/mail.php';
+
+    $siteName = defined('SITE_NAME') ? SITE_NAME : 'Stimma';
+    $siteUrl = defined('SITE_URL') ? SITE_URL : '';
+
+    // Bestäm rollnamn på svenska
+    $roleNames = [
+        'admin' => 'administratör',
+        'editor' => 'redaktör'
+    ];
+    $roleName = $roleNames[$changeType] ?? $changeType;
+
+    // Skapa ämnesrad
+    if ($newStatus) {
+        $subject = "Du har tilldelats $roleName-behörighet i $siteName";
+    } else {
+        $subject = "Din $roleName-behörighet har tagits bort i $siteName";
+    }
+
+    // Skapa e-postmeddelande
+    $message = "
+    <!DOCTYPE html>
+    <html lang='sv'>
+    <head>
+        <meta charset='UTF-8'>
+        <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    </head>
+    <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;'>
+        <div style='background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;'>
+            <h1 style='color: #007bff; margin: 0 0 10px 0; font-size: 24px;'>$siteName</h1>
+            <p style='margin: 0; color: #6c757d;'>Meddelande om behörighetsändring</p>
+        </div>
+
+        <div style='padding: 20px 0;'>
+            <p>Hej!</p>
+            ";
+
+    if ($newStatus) {
+        $message .= "
+            <p>Du har nu tilldelats <strong>$roleName-behörighet</strong> i $siteName.</p>
+
+            <div style='background-color: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 4px; margin: 20px 0;'>
+                <strong style='color: #155724;'>Vad innebär detta?</strong>
+                <ul style='color: #155724; margin: 10px 0 0 0; padding-left: 20px;'>";
+
+        if ($changeType === 'admin') {
+            $message .= "
+                    <li>Du kan nu hantera användare i din organisation</li>
+                    <li>Du kan tilldela och ta bort redaktörsbehörigheter</li>
+                    <li>Du har tillgång till administratörspanelen</li>
+                    <li>Du kan konfigurera påminnelser och se utökad statistik</li>";
+        } else {
+            $message .= "
+                    <li>Du kan nu skapa och redigera kurser</li>
+                    <li>Du kan hantera lektioner och frågor</li>
+                    <li>Du har tillgång till kursstatistik</li>
+                    <li>Du kan använda AI-funktioner för kursgenerering</li>";
+        }
+
+        $message .= "
+                </ul>
+            </div>";
+    } else {
+        $message .= "
+            <p>Din <strong>$roleName-behörighet</strong> har tagits bort i $siteName.</p>
+
+            <div style='background-color: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 4px; margin: 20px 0;'>
+                <strong style='color: #856404;'>Vad innebär detta?</strong>
+                <p style='color: #856404; margin: 10px 0 0 0;'>Du har inte längre tillgång till de funktioner som krävde $roleName-behörighet. Du kan fortfarande logga in och genomföra kurser som vanlig användare.</p>
+            </div>";
+    }
+
+    $message .= "
+            <p>Om du har frågor om denna ändring, kontakta din organisations administratör.</p>
+        </div>
+
+        <div style='border-top: 1px solid #dee2e6; padding-top: 20px; margin-top: 20px; color: #6c757d; font-size: 12px;'>
+            <p>Detta är ett automatiskt meddelande från $siteName.</p>
+            <p>Ändringen gjordes av: $changedByEmail</p>
+        </div>
+    </body>
+    </html>";
+
+    return sendSmtpMail($userEmail, $subject, $message);
 }
