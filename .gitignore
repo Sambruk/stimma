@@ -25,3 +25,4 @@ db/*
 Thumbs.db
 email_list.txt
 xstimmainfo.html
+allowed_domains.txt
