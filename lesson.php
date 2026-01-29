@@ -569,16 +569,21 @@ document.addEventListener('DOMContentLoaded', function() {
     const aiChatToggle = document.getElementById('aiChatToggle');
     const aiChatBody = document.getElementById('aiChatBody');
 
-    // Toggle AI chat
-    aiChatToggle.addEventListener('click', function() {
-        aiChatBody.classList.toggle('active');
-    });
-
     // Funktion för att automatiskt justera höjden på textarean
     function autoResizeTextarea(element) {
         element.style.height = 'auto';
         element.style.height = (element.scrollHeight) + 'px';
     }
+
+	<?php
+		// The objects below are not defined if ai_instruction isn't set
+		if (!empty($lesson['ai_instruction'])):
+	?>
+
+    // Toggle AI chat
+    aiChatToggle.addEventListener('click', function() {
+        aiChatBody.classList.toggle('active');
+    });
 
     // Lägg till event listeners för automatisk höjdjustering
     aiInput.addEventListener('input', function() {
@@ -590,6 +595,8 @@ document.addEventListener('DOMContentLoaded', function() {
         aiInput.style.height = 'auto';
         aiInput.rows = 1;
     }
+
+	<?php endif; ?>
 
     // Add message to chat
     function addMessage(message, isUser = false) {
@@ -657,6 +664,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+	<?php 
+		// The objects below are not defined if ai_instruction isn't set
+		if (!empty($lesson['ai_instruction'])):
+	?>
+
     // Event listeners för att skicka meddelande
     aiSendBtn.addEventListener('click', sendAIMessage);
     aiInput.addEventListener('keydown', function(e) {
@@ -665,6 +677,8 @@ document.addEventListener('DOMContentLoaded', function() {
             sendAIMessage();
         }
     });
+
+	<?php endif; ?>
 
     // Quiz form submission
     const quizForm = document.getElementById('quizForm');
