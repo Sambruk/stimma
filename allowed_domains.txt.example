@@ -1,0 +1,7 @@
+# Vitlistade domäner för Stimma
+# En domän per rad. Rader som börjar med # ignoreras.
+# Kopiera denna fil till allowed_domains.txt och lägg till era domäner.
+
+# Exempel:
+example.se
+example.com
