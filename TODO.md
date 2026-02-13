@@ -8,6 +8,9 @@ _Inga pågående uppgifter_
 - [ ] Statistik per e-postkampanj
 
 ## Slutfört
+- [x] Klickbara PUB-avtal i superadmins domänlista – modal med avtalsdetaljer (undertecknare, org, datum, IP, SHA-256)
+- [x] Klickbara rader i pub_documents.php "Digitalt tecknade PUB-avtal" – modal med fullständiga avtalsdetaljer
+- [x] Sökfält för att filtrera domäner i domains.php
 - [x] Domänväljare i användarvyn för superadmin + sortering på domän/e-post
 - [x] E-postnotifikation vid rättighetsändringar (admin/redaktör)
 - [x] Fixa domänfiltrering i admin/index.php (admin ser endast sin organisations statistik)

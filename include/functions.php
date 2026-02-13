@@ -652,6 +652,75 @@ function getUserDomain($email) {
  * @param string $changedByEmail E-postadressen till den som gjorde ändringen
  * @return bool True om e-posten skickades, false vid fel
  */
+/**
+ * Generera UUID v4
+ *
+ * @return string UUID i format xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+ */
+function generateUuid() {
+    $data = random_bytes(16);
+    $data[6] = chr(ord($data[6]) & 0x0f | 0x40); // version 4
+    $data[8] = chr(ord($data[8]) & 0x3f | 0x80); // variant
+    return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+}
+
+/**
+ * Spara en PUB-avtalssigneringsartefakt
+ *
+ * @param array $data Artefaktdata
+ * @return int|null ID för den sparade artefakten eller null vid fel
+ */
+function savePubAgreementArtifact($data) {
+    return execute(
+        "INSERT INTO " . DB_DATABASE . ".pub_agreement_artifacts
+         (agreement_id, version, pdf_filename, pdf_hash, signed_at, ip_address,
+          user_id, user_email, user_name, user_title, user_phone,
+          domain, org_name, org_number, agreement_email, certification_text)
+         VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+            $data['agreement_id'],
+            $data['version'] ?? '1.0',
+            $data['pdf_filename'] ?? null,
+            $data['pdf_hash'] ?? null,
+            $data['ip_address'],
+            $data['user_id'],
+            $data['user_email'],
+            $data['user_name'],
+            $data['user_title'] ?? null,
+            $data['user_phone'] ?? null,
+            $data['domain'],
+            $data['org_name'],
+            $data['org_number'],
+            $data['agreement_email'],
+            $data['certification_text']
+        ]
+    );
+}
+
+/**
+ * Hämta det aktiva PUB-avtalsdokumentet
+ *
+ * @return array|null Dokumentdata eller null om inget aktivt dokument finns
+ */
+function getActivePubDocument() {
+    return queryOne(
+        "SELECT * FROM " . DB_DATABASE . ".pub_agreement_documents WHERE is_active = 1 LIMIT 1"
+    );
+}
+
+/**
+ * Hämta PUB-avtalssigneringsartefakt för en domän
+ *
+ * @param string $domain Domännamnet
+ * @return array|null Artefaktdata eller null
+ */
+function getPubAgreementArtifact($domain) {
+    return queryOne(
+        "SELECT * FROM " . DB_DATABASE . ".pub_agreement_artifacts WHERE domain = ? ORDER BY signed_at DESC LIMIT 1",
+        [$domain]
+    );
+}
+
 function sendPermissionChangeNotification($userEmail, $changeType, $newStatus, $changedByEmail) {
     require_once __DIR__ . '/mail.php';
 

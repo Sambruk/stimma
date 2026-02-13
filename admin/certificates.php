@@ -1,8 +1,8 @@
 <?php
 /**
- * Stimma - Certifikathantering
+ * Stimma - Diplomhantering
  *
- * Admin-sida för att hantera certifikatinställningar och förhandsgranska certifikat
+ * Admin-sida för att hantera diplominställningar och förhandsgranska diplom
  */
 
 require_once '../include/config.php';
@@ -13,18 +13,18 @@ require_once '../include/auth.php';
 // Include centralized authentication and authorization check
 require_once 'include/auth_check.php';
 
-// Endast administratörer kan hantera certifikat
+// Endast administratörer kan hantera diplom
 if (!$isAdmin) {
-    $_SESSION['message'] = 'Du har inte behörighet att hantera certifikat.';
+    $_SESSION['message'] = 'Du har inte behörighet att hantera diplom.';
     $_SESSION['message_type'] = 'warning';
     redirect('admin/index.php');
     exit;
 }
 
 // Sätt sidtitel
-$page_title = 'Certifikathantering';
+$page_title = 'Diplomhantering';
 
-// Hämta alla kurser med certifikatinfo
+// Hämta alla kurser med diplominfo
 $courses = query("SELECT c.*,
                          (SELECT COUNT(*) FROM " . DB_DATABASE . ".certificates WHERE course_id = c.id) as cert_count
                   FROM " . DB_DATABASE . ".courses c
@@ -59,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 if (move_uploaded_file($file['tmp_name'], $uploadPath)) {
                     execute("UPDATE " . DB_DATABASE . ".courses SET certificate_image_url = ? WHERE id = ?",
                             [$filename, $courseId]);
-                    $_SESSION['message'] = 'Certifikatbild uppladdad!';
+                    $_SESSION['message'] = 'Diplombild uppladdad!';
                     $_SESSION['message_type'] = 'success';
                 } else {
                     $_SESSION['message'] = 'Kunde inte spara filen.';
@@ -79,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     if ($_POST['action'] === 'remove_image') {
         execute("UPDATE " . DB_DATABASE . ".courses SET certificate_image_url = NULL WHERE id = ?", [$courseId]);
-        $_SESSION['message'] = 'Certifikatbild borttagen.';
+        $_SESSION['message'] = 'Diplombild borttagen.';
         $_SESSION['message_type'] = 'success';
         redirect('admin/certificates.php');
         exit;
@@ -103,8 +103,8 @@ require_once 'include/header.php';
             <!-- Header -->
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <div>
-                    <h4 class="mb-1"><i class="bi bi-award me-2"></i>Certifikathantering</h4>
-                    <p class="text-muted mb-0">Hantera certifikatbilder och förhandsgranska certifikat</p>
+                    <h4 class="mb-1"><i class="bi bi-award me-2"></i>Diplomhantering</h4>
+                    <p class="text-muted mb-0">Hantera diplombilder och förhandsgranska diplom</p>
                 </div>
             </div>
 
@@ -125,7 +125,7 @@ require_once 'include/header.php';
                                                 <?= htmlspecialchars($course['title']) ?>
                                             </h6>
                                             <small class="<?= $previewCourseId == $course['id'] ? 'text-white-50' : 'text-muted' ?>">
-                                                <?= $course['cert_count'] ?> certifikat utfärdade
+                                                <?= $course['cert_count'] ?> diplom utfärdade
                                             </small>
                                             <?php if ($course['certificate_image_url']): ?>
                                             <span class="badge bg-success ms-2">
@@ -155,7 +155,7 @@ require_once 'include/header.php';
                                     <div class="modal-dialog">
                                         <div class="modal-content">
                                             <div class="modal-header">
-                                                <h5 class="modal-title">Certifikatbild: <?= htmlspecialchars($course['title']) ?></h5>
+                                                <h5 class="modal-title">Diplombild: <?= htmlspecialchars($course['title']) ?></h5>
                                                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                             </div>
                                             <div class="modal-body">
@@ -163,7 +163,7 @@ require_once 'include/header.php';
                                                 <div class="text-center mb-3">
                                                     <p class="text-muted mb-2">Nuvarande bild:</p>
                                                     <img src="../upload/<?= htmlspecialchars($course['certificate_image_url']) ?>"
-                                                         alt="Certifikatbild"
+                                                         alt="Diplombild"
                                                          class="img-fluid rounded border"
                                                          style="max-height: 150px;">
                                                 </div>
@@ -240,12 +240,12 @@ require_once 'include/header.php';
                                             <img src="../images/stimma-logo.png" alt="Stimma" class="logo">
                                             <?php endif; ?>
                                         </div>
-                                        <h1 class="certificate-title">Certifikat</h1>
+                                        <h1 class="certificate-title">Diplom</h1>
                                         <p class="certificate-subtitle">Intyg om genomförd utbildning</p>
                                     </div>
 
                                     <div class="certificate-body">
-                                        <p class="presented-to">Detta certifikat tilldelas</p>
+                                        <p class="presented-to">Detta diplom tilldelas</p>
                                         <h2 class="recipient-name">Anna Andersson</h2>
                                         <p class="completion-text">för att framgångsrikt ha genomfört kursen</p>
                                         <h3 class="course-title"><?= htmlspecialchars($previewCourse['title']) ?></h3>
@@ -254,7 +254,7 @@ require_once 'include/header.php';
 
                                     <div class="certificate-footer">
                                         <div class="certificate-number">
-                                            Certifikatnummer:<br>
+                                            Diplomnummer:<br>
                                             STIMMA-<?= date('Y') ?>-0001-<?= str_pad($previewCourse['id'], 4, '0', STR_PAD_LEFT) ?>-ABCDEF
                                         </div>
                                         <div class="seal">
@@ -271,18 +271,18 @@ require_once 'include/header.php';
                             <div class="mt-3 p-3 bg-white rounded border">
                                 <h6><i class="bi bi-info-circle me-1"></i>Information</h6>
                                 <ul class="mb-0 small text-muted">
-                                    <li>Certifikatet är i <strong>A4-format (stående)</strong> - optimerat för utskrift och att sätta upp på väggen.</li>
-                                    <li>Certifikatet genereras automatiskt när en användare slutför alla lektioner i kursen.</li>
+                                    <li>Diplomet är i <strong>A4-format (stående)</strong> - optimerat för utskrift och att sätta upp på väggen.</li>
+                                    <li>Diplomet genereras automatiskt när en användare slutför alla lektioner i kursen.</li>
                                     <li>Om du laddar upp en kursbild visas den istället för Stimma-logotypen.</li>
                                     <li>Rekommenderad bildstorlek: 200x100 px (liggande) för bästa resultat.</li>
-                                    <li>Användare kan skriva ut certifikatet som PDF via webbläsarens utskriftsfunktion (välj "Stående" orientering).</li>
+                                    <li>Användare kan skriva ut diplomet som PDF via webbläsarens utskriftsfunktion (välj "Stående" orientering).</li>
                                 </ul>
                             </div>
                             <?php else: ?>
                             <div class="text-center py-5">
                                 <i class="bi bi-arrow-left-circle text-muted" style="font-size: 4rem;"></i>
                                 <h5 class="mt-3 text-muted">Välj en kurs</h5>
-                                <p class="text-muted">Klicka på ögon-ikonen för en kurs för att förhandsgranska dess certifikat.</p>
+                                <p class="text-muted">Klicka på ögon-ikonen för en kurs för att förhandsgranska dess diplom.</p>
                             </div>
                             <?php endif; ?>
                         </div>
@@ -291,7 +291,7 @@ require_once 'include/header.php';
                     <!-- Statistik -->
                     <div class="card shadow-sm mt-4">
                         <div class="card-header bg-white">
-                            <h5 class="mb-0"><i class="bi bi-bar-chart me-2"></i>Certifikatstatistik</h5>
+                            <h5 class="mb-0"><i class="bi bi-bar-chart me-2"></i>Diplomstatistik</h5>
                         </div>
                         <div class="card-body">
                             <?php

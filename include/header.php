@@ -59,12 +59,17 @@
     <!-- PUB-avtalsvarning -->
     <div class="alert alert-danger mb-0 rounded-0 py-2" role="alert" style="z-index: 1031;">
         <div class="container-fluid">
-            <div class="d-flex align-items-center">
-                <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
-                <div>
-                    <strong>Din domän (organisation) har inte tecknat ett PUB-avtal med Sambruk ännu.</strong>
-                    Stimma får därför bara nyttjas för att skapa utbildningar och att testa dem. Om Stimma ska nyttjas av er organisation för att medarbetare ska genomföra utbildningar så måste ett PUB-avtal tecknas. Kontakta <a href="mailto:hjalp@sambruksupport.se" class="alert-link">hjalp@sambruksupport.se</a>.
+            <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+                    <div>
+                        <strong>Er organisation har inte tecknat ett PUB-avtal med Sambruk ännu.</strong>
+                        Stimma får därför bara nyttjas för att skapa utbildningar och att testa dem.
+                    </div>
                 </div>
+                <a href="pub_agreement.php" class="btn btn-light btn-sm ms-3 text-nowrap">
+                    <i class="bi bi-pen me-1"></i>Teckna PUB-avtal
+                </a>
             </div>
         </div>
     </div>
@@ -127,8 +132,8 @@
                     <!-- Certificates link -->
                     <a href="certificate.php"
                        class="btn btn-link p-1 me-2 d-inline-flex align-items-center justify-content-center"
-                       title="Mina certifikat"
-                       aria-label="Certifikat">
+                       title="Mina diplom"
+                       aria-label="Diplom">
                         <i class="bi bi-award text-dark" aria-hidden="true"></i>
                     </a>
                     <?php if ($isAdmin || $isCourseEditor): ?>

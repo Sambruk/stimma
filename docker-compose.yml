@@ -34,7 +34,7 @@ services:
       MYSQL_ROOT_PASSWORD: StimmaRoot2025!
       MYSQL_DATABASE: stimma
       MYSQL_USER: stimma_user
-      MYSQL_PASSWORD: StimmaSecure2025!
+      MYSQL_PASSWORD: JOYDfkRJV15lKwBYhh0IMbQA
     volumes:
       - /opt/app/stimma/db:/var/lib/mysql
       - /opt/app/stimma/init.sql:/docker-entrypoint-initdb.d/init.sql:ro

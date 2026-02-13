@@ -12,13 +12,13 @@ Denna handbok beskriver hur du använder Stimma e-learning plattform. Stimma är
 3. [Guide för studenter](#guide-för-studenter)
    - [Din dashboard](#din-dashboard)
    - [Gamification - XP och nivåer](#gamification---xp-och-nivåer)
-   - [Certifikat](#certifikat)
+   - [Diplom](#diplom)
 4. [Guide för redaktörer](#guide-för-redaktörer)
    - [Ange slutdatum för en kurs](#ange-slutdatum-för-en-kurs)
    - [Förhandsgranska lektioner](#förhandsgranska-lektioner)
 5. [Guide för administratörer](#guide-för-administratörer)
    - [Dashboard - Översikt](#dashboard---översikt)
-   - [Certifikathantering](#certifikathantering)
+   - [Diplomhantering](#diplomhantering)
    - [Påminnelseinställningar](#påminnelseinställningar)
    - [Skicka testmail](#skicka-testmail)
 6. [Guide för superadministratörer](#guide-för-superadministratörer)
@@ -124,7 +124,7 @@ Efter inloggning kommer du till din personliga dashboard som ger en översikt ö
    - Totalt antal XP-poäng
    - Din nuvarande nivå
    - Antal slutförda kurser
-   - Antal intjänade certifikat
+   - Antal intjänade diplom
 
 2. **Pågående kurser** - Se dina aktiva kurser med progressindikator
 
@@ -157,23 +157,23 @@ Stimma belönar ditt lärande med XP-poäng och nivåer:
 - 📚 **Kursklart** - Slutför din första kurs
 - 🔥 **På rad** - 7 dagars streak
 - ⭐ **Quiz-mästare** - 10 rätta quiz-svar i rad
-- 🏆 **Certifierad** - Erhåll ditt första certifikat
+- 🏆 **Certifierad** - Erhåll ditt första diplom
 
-### Certifikat
+### Diplom
 
-När du slutför en kurs får du automatiskt ett certifikat:
+När du slutför en kurs får du automatiskt ett diplom:
 
 1. Slutför alla lektioner i kursen
-2. Certifikatet genereras automatiskt
-3. Hitta dina certifikat på din dashboard under **"Mina certifikat"**
-4. Ladda ner certifikatet som PDF
-5. Dela eller skriv ut certifikatet
+2. Diplomet genereras automatiskt
+3. Hitta dina diplom på din dashboard under **"Mina diplom"**
+4. Ladda ner diplomet som PDF
+5. Dela eller skriv ut diplomet
 
-**Certifikatet innehåller:**
+**Diplomet innehåller:**
 - Ditt namn
 - Kursens namn
 - Slutförandedatum
-- Unikt certifikatnummer
+- Unikt diplomnummer
 - Organisationens logotyp
 
 ---
@@ -329,22 +329,22 @@ Som admin har du utökade behörigheter inom din organisation.
 4. Klicka **"Lägg till"** för att tilldela dem
 5. Redaktörer kan nu redigera just den kursen
 
-### Certifikathantering
+### Diplomhantering
 
-Hantera certifikat för din organisation:
+Hantera diplom för din organisation:
 
-1. Gå till **Certifikat** i adminmenyn
-2. Se alla utfärdade certifikat i organisationen
-3. För varje certifikat kan du:
-   - Se vem som erhållit certifikatet
+1. Gå till **Diplom** i adminmenyn
+2. Se alla utfärdade diplom i organisationen
+3. För varje diplom kan du:
+   - Se vem som erhållit diplomet
    - Vilken kurs det gäller
    - Datum för utfärdande
-   - Ladda ner certifikatet som PDF
+   - Ladda ner diplomet som PDF
 
-**Anpassa certifikatmall:**
-1. Gå till **Certifikat** > **Inställningar**
+**Anpassa diplommall:**
+1. Gå till **Diplom** > **Inställningar**
 2. Ladda upp organisationens logotyp
-3. Anpassa certifikattexten
+3. Anpassa diplomtexten
 4. Förhandsgranska resultatet
 
 ### Dashboard - Översikt

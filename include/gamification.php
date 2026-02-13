@@ -2,7 +2,7 @@
 /**
  * Stimma - Gamification System
  *
- * Hanterar streaks, badges, XP och certifikat
+ * Hanterar streaks, badges, XP och diplom
  */
 
 require_once __DIR__ . '/config.php';
@@ -186,7 +186,7 @@ function recordLessonCompletion($userId, $lessonId, $quizCorrect = false, $first
 }
 
 /**
- * Registrera slutförd kurs och skapa certifikat
+ * Registrera slutförd kurs och skapa diplom
  */
 function recordCourseCompletion($userId, $courseId) {
     $stats = getUserStats($userId);
@@ -208,10 +208,10 @@ function recordCourseCompletion($userId, $courseId) {
         return ['error' => 'Kurs eller användare hittades inte'];
     }
 
-    // Generera certifikatnummer
+    // Generera diplomnummer
     $certNumber = 'STIMMA-' . date('Y') . '-' . str_pad($userId, 4, '0', STR_PAD_LEFT) . '-' . str_pad($courseId, 4, '0', STR_PAD_LEFT) . '-' . strtoupper(substr(md5(time()), 0, 6));
 
-    // Skapa certifikat
+    // Skapa diplom
     $certId = execute("INSERT INTO " . DB_DATABASE . ".certificates
                        (user_id, course_id, certificate_number, course_title, user_name, completion_date)
                        VALUES (?, ?, ?, ?, ?, CURDATE())",
@@ -340,7 +340,7 @@ function getAllBadgesWithStatus($userId) {
 }
 
 /**
- * Hämta certifikat för en användare
+ * Hämta diplom för en användare
  */
 function getUserCertificates($userId) {
     return query("SELECT c.*, co.image_url as course_image, co.certificate_image_url
@@ -352,7 +352,7 @@ function getUserCertificates($userId) {
 }
 
 /**
- * Hämta certifikat via certifikatnummer (för verifiering)
+ * Hämta diplom via diplomnummer (för verifiering)
  */
 function getCertificateByNumber($certNumber) {
     return queryOne("SELECT c.*, u.email as user_email, co.certificate_image_url

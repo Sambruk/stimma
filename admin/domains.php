@@ -224,6 +224,16 @@ foreach ($allPubSettings as $setting) {
     $pubSettings[$setting['domain']] = $setting;
 }
 
+// Hämta signeringsartefakter för alla domäner med PUB-avtal
+$pubArtifacts = [];
+$allArtifacts = query("SELECT * FROM " . DB_DATABASE . ".pub_agreement_artifacts ORDER BY signed_at DESC");
+foreach ($allArtifacts as $artifact) {
+    // Spara bara den senaste artefakten per domän
+    if (!isset($pubArtifacts[$artifact['domain']])) {
+        $pubArtifacts[$artifact['domain']] = $artifact;
+    }
+}
+
 // Filtrera domäner om filter är aktivt
 $filteredDomains = $domains;
 if ($showOnlyWithUsers) {
@@ -318,6 +328,13 @@ require_once 'include/header.php';
                                 <?php endif; ?>
                             </div>
                         <?php else: ?>
+                            <div class="mb-3">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                                    <input type="text" class="form-control" id="domainSearch" placeholder="Sök domän..." autocomplete="off">
+                                </div>
+                                <div id="domainSearchInfo" class="form-text d-none"></div>
+                            </div>
                             <div class="table-responsive">
                                 <table class="table table-hover align-middle mb-0">
                                     <thead class="table-light">
@@ -353,20 +370,43 @@ require_once 'include/header.php';
                                                     <strong><?= htmlspecialchars($domain) ?></strong>
                                                 </td>
                                                 <td class="text-center">
-                                                    <form method="POST" action="domains.php<?= $showOnlyWithUsers ? '?filter=with_users' : '' ?>" class="d-inline">
-                                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
-                                                        <input type="hidden" name="action" value="update_pub">
-                                                        <input type="hidden" name="domain" value="<?= htmlspecialchars($domain) ?>">
-                                                        <input type="hidden" name="has_pub" value="<?= $hasPub ? '0' : '1' ?>">
-                                                        <button type="submit" class="btn btn-sm <?= $hasPub ? 'btn-success' : 'btn-outline-secondary' ?>"
-                                                                title="<?= $hasPub ? 'PUB-avtal tecknat' . ($pubInfo['pub_agreement_date'] ? ' (' . $pubInfo['pub_agreement_date'] . ')' : '') : 'Inget PUB-avtal' ?>">
-                                                            <?php if ($hasPub): ?>
-                                                                <i class="bi bi-check-circle-fill"></i>
-                                                            <?php else: ?>
-                                                                <i class="bi bi-x-circle"></i>
-                                                            <?php endif; ?>
+                                                    <?php
+                                                    $artifact = $pubArtifacts[$domain] ?? null;
+                                                    if ($hasPub && $artifact):
+                                                        // Digitalt tecknat avtal - klickbar knapp som öppnar modal
+                                                        $modalId = 'pubModal_' . preg_replace('/[^a-zA-Z0-9]/', '_', $domain);
+                                                    ?>
+                                                        <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#<?= $modalId ?>"
+                                                                title="Visa PUB-avtal för <?= htmlspecialchars($domain) ?> (tecknat <?= htmlspecialchars($artifact['signed_at']) ?>)">
+                                                            <i class="bi bi-check-circle-fill"></i>
                                                         </button>
-                                                    </form>
+                                                    <?php elseif ($hasPub): ?>
+                                                        <!-- Manuellt markerat PUB-avtal (ingen digital artefakt) -->
+                                                        <form method="POST" action="domains.php<?= $showOnlyWithUsers ? '?filter=with_users' : '' ?>" class="d-inline">
+                                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                                                            <input type="hidden" name="action" value="update_pub">
+                                                            <input type="hidden" name="domain" value="<?= htmlspecialchars($domain) ?>">
+                                                            <input type="hidden" name="has_pub" value="0">
+                                                            <button type="submit" class="btn btn-sm btn-success"
+                                                                    title="PUB-avtal manuellt markerat<?= $pubInfo['pub_agreement_date'] ? ' (' . $pubInfo['pub_agreement_date'] . ')' : '' ?> – klicka för att avmarkera">
+                                                                <i class="bi bi-check-circle-fill"></i>
+                                                            </button>
+                                                        </form>
+                                                    <?php else: ?>
+                                                        <!-- Inget PUB-avtal -->
+                                                        <form method="POST" action="domains.php<?= $showOnlyWithUsers ? '?filter=with_users' : '' ?>" class="d-inline">
+                                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                                                            <input type="hidden" name="action" value="update_pub">
+                                                            <input type="hidden" name="domain" value="<?= htmlspecialchars($domain) ?>">
+                                                            <input type="hidden" name="has_pub" value="1">
+                                                            <input type="hidden" name="pub_date" value="<?= date('Y-m-d') ?>">
+                                                            <input type="hidden" name="pub_notes" value="Manuellt markerat av superadmin">
+                                                            <button type="submit" class="btn btn-sm btn-outline-secondary"
+                                                                    title="Inget PUB-avtal – klicka för att markera manuellt">
+                                                                <i class="bi bi-x-circle"></i>
+                                                            </button>
+                                                        </form>
+                                                    <?php endif; ?>
                                                 </td>
                                                 <td class="text-center">
                                                     <?php if ($stats['admins'] > 0): ?>
@@ -449,6 +489,171 @@ require_once 'include/header.php';
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var input = document.getElementById('domainSearch');
+    var info = document.getElementById('domainSearchInfo');
+    if (!input) return;
+
+    var table = input.closest('.card-body').querySelector('table');
+    var rows = table.querySelectorAll('tbody tr');
+
+    input.addEventListener('input', function() {
+        var term = this.value.toLowerCase().trim();
+        var visible = 0;
+
+        rows.forEach(function(row) {
+            var domain = row.querySelector('td:first-child').textContent.toLowerCase();
+            var match = !term || domain.indexOf(term) !== -1;
+            row.style.display = match ? '' : 'none';
+            if (match) visible++;
+        });
+
+        if (term) {
+            info.textContent = 'Visar ' + visible + ' av ' + rows.length + ' domäner';
+            info.classList.remove('d-none');
+        } else {
+            info.classList.add('d-none');
+        }
+    });
+});
+</script>
+
+<!-- Modaler för PUB-avtalsdetaljer -->
+<?php foreach ($filteredDomains as $domain):
+    $artifact = $pubArtifacts[$domain] ?? null;
+    if (!$artifact) continue;
+    $modalId = 'pubModal_' . preg_replace('/[^a-zA-Z0-9]/', '_', $domain);
+?>
+<div class="modal fade" id="<?= $modalId ?>" tabindex="-1" aria-labelledby="<?= $modalId ?>Label" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="<?= $modalId ?>Label">
+                    <i class="bi bi-file-earmark-check me-2"></i>PUB-avtal – <?= htmlspecialchars($domain) ?>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Stäng"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Avtalsinformation -->
+                <div class="row mb-3">
+                    <div class="col-12">
+                        <h6 class="text-muted text-uppercase small fw-bold mb-3">
+                            <i class="bi bi-info-circle me-1"></i>Avtalsinformation
+                        </h6>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Avtals-ID:</strong></p>
+                        <p class="text-muted"><code><?= htmlspecialchars($artifact['agreement_id']) ?></code></p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Version:</strong></p>
+                        <p class="text-muted"><?= htmlspecialchars($artifact['version']) ?></p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Organisation:</strong></p>
+                        <p class="text-muted"><?= htmlspecialchars($artifact['org_name']) ?></p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Organisationsnummer:</strong></p>
+                        <p class="text-muted"><?= htmlspecialchars($artifact['org_number']) ?></p>
+                    </div>
+                </div>
+
+                <hr>
+
+                <!-- Undertecknare -->
+                <div class="row mb-3">
+                    <div class="col-12">
+                        <h6 class="text-muted text-uppercase small fw-bold mb-3">
+                            <i class="bi bi-person-check me-1"></i>Undertecknare
+                        </h6>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Namn:</strong></p>
+                        <p class="text-muted"><?= htmlspecialchars($artifact['user_name']) ?></p>
+                    </div>
+                    <?php if (!empty($artifact['user_title'])): ?>
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Titel:</strong></p>
+                        <p class="text-muted"><?= htmlspecialchars($artifact['user_title']) ?></p>
+                    </div>
+                    <?php endif; ?>
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>E-post:</strong></p>
+                        <p class="text-muted"><?= htmlspecialchars($artifact['user_email']) ?></p>
+                    </div>
+                    <?php if (!empty($artifact['user_phone'])): ?>
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Telefon:</strong></p>
+                        <p class="text-muted"><?= htmlspecialchars($artifact['user_phone']) ?></p>
+                    </div>
+                    <?php endif; ?>
+                    <?php if (!empty($artifact['agreement_email'])): ?>
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Avtalskopia skickad till:</strong></p>
+                        <p class="text-muted"><?= htmlspecialchars($artifact['agreement_email']) ?></p>
+                    </div>
+                    <?php endif; ?>
+                </div>
+
+                <hr>
+
+                <!-- Signeringsdetaljer -->
+                <div class="row mb-3">
+                    <div class="col-12">
+                        <h6 class="text-muted text-uppercase small fw-bold mb-3">
+                            <i class="bi bi-clock-history me-1"></i>Signeringsdetaljer
+                        </h6>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Signerat:</strong></p>
+                        <p class="text-muted"><?= date('Y-m-d H:i:s', strtotime($artifact['signed_at'])) ?></p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>IP-adress:</strong></p>
+                        <p class="text-muted"><code><?= htmlspecialchars($artifact['ip_address']) ?></code></p>
+                    </div>
+                    <?php if (!empty($artifact['pdf_hash'])): ?>
+                    <div class="col-md-12">
+                        <p class="mb-1"><strong>PDF SHA-256:</strong></p>
+                        <p class="text-muted"><code style="font-size: 0.8em;"><?= htmlspecialchars($artifact['pdf_hash']) ?></code></p>
+                    </div>
+                    <?php endif; ?>
+                </div>
+
+                <?php if (!empty($artifact['certification_text'])): ?>
+                <hr>
+                <div class="row">
+                    <div class="col-12">
+                        <h6 class="text-muted text-uppercase small fw-bold mb-3">
+                            <i class="bi bi-patch-check me-1"></i>Intygande
+                        </h6>
+                        <div class="alert alert-light border">
+                            <em><?= htmlspecialchars($artifact['certification_text']) ?></em>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
+            </div>
+            <div class="modal-footer d-flex justify-content-between">
+                <form method="POST" action="domains.php<?= $showOnlyWithUsers ? '?filter=with_users' : '' ?>" class="d-inline"
+                      onsubmit="return confirm('Är du säker på att du vill avmarkera PUB-avtalet för <?= htmlspecialchars($domain) ?>? Signeringsartefakten sparas kvar i databasen.');">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                    <input type="hidden" name="action" value="update_pub">
+                    <input type="hidden" name="domain" value="<?= htmlspecialchars($domain) ?>">
+                    <input type="hidden" name="has_pub" value="0">
+                    <button type="submit" class="btn btn-outline-danger btn-sm">
+                        <i class="bi bi-x-circle me-1"></i>Avmarkera PUB-avtal
+                    </button>
+                </form>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Stäng</button>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endforeach; ?>
 
 <?php
 // Inkludera footer
