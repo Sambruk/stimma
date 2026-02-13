@@ -29,7 +29,7 @@ $levelInfo = calculateLevel((int)$stats['total_xp']);
 // Hämta alla badges med status
 $allBadges = getAllBadgesWithStatus($userId);
 
-// Hämta certifikat
+// Hämta diplom
 $certificates = getUserCertificates($userId);
 
 // Svenska månadsnamn
@@ -467,11 +467,11 @@ $today = date('j') . ' ' . $monthNames[date('n') - 1] . ' ' . date('Y');
                 <div class="stat-card mb-4">
                     <h5 class="section-title">
                         <i class="bi bi-patch-check text-success"></i>
-                        Certifikat
+                        Diplom
                     </h5>
                     <?php if (empty($certificates)): ?>
                     <p class="text-muted small mb-0">
-                        Slutför en kurs för att få ditt första certifikat!
+                        Slutför en kurs för att få ditt första diplom!
                     </p>
                     <?php else: ?>
                     <?php foreach (array_slice($certificates, 0, 3) as $cert): ?>
@@ -486,7 +486,7 @@ $today = date('j') . ' ' . $monthNames[date('n') - 1] . ' ' . date('Y');
                     <?php endforeach; ?>
                     <?php if (count($certificates) > 3): ?>
                     <a href="certificate.php" class="btn btn-outline-primary btn-sm w-100 mt-2">
-                        Visa alla <?= count($certificates) ?> certifikat
+                        Visa alla <?= count($certificates) ?> diplom
                     </a>
                     <?php endif; ?>
                     <?php endif; ?>

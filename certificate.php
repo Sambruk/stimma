@@ -1,8 +1,8 @@
 <?php
 /**
- * Stimma - Certifikat
+ * Stimma - Diplom
  *
- * Visar och genererar kurscertifikat
+ * Visar och genererar kursdiplom
  */
 
 require_once 'include/config.php';
@@ -11,11 +11,11 @@ require_once 'include/functions.php';
 require_once 'include/auth.php';
 require_once 'include/gamification.php';
 
-// Hämta certifikatnummer från URL
+// Hämta diplomnummer från URL
 $certNumber = $_GET['id'] ?? '';
 
 if (empty($certNumber)) {
-    // Om användaren är inloggad, visa deras certifikat
+    // Om användaren är inloggad, visa deras diplom
     if (!isLoggedIn()) {
         header('Location: index.php');
         exit;
@@ -24,21 +24,21 @@ if (empty($certNumber)) {
     $user = queryOne("SELECT * FROM " . DB_DATABASE . ".users WHERE email = ?", [$_SESSION['user_email']]);
     $certificates = getUserCertificates($user['id']);
 
-    // Visa lista över certifikat
+    // Visa lista över diplom
     ?>
     <!DOCTYPE html>
     <html lang="sv">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Mina certifikat - Stimma</title>
+        <title>Mina diplom - Stimma</title>
         <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css">
     </head>
     <body class="bg-light">
         <div class="container py-5">
             <div class="d-flex justify-content-between align-items-center mb-4">
-                <h1><i class="bi bi-award me-2"></i>Mina certifikat</h1>
+                <h1><i class="bi bi-award me-2"></i>Mina diplom</h1>
                 <a href="index.php" class="btn btn-outline-primary">
                     <i class="bi bi-arrow-left me-1"></i>Tillbaka
                 </a>
@@ -47,7 +47,7 @@ if (empty($certNumber)) {
             <?php if (empty($certificates)): ?>
             <div class="alert alert-info">
                 <i class="bi bi-info-circle me-2"></i>
-                Du har inga certifikat ännu. Slutför en kurs för att få ditt första certifikat!
+                Du har inga diplom ännu. Slutför en kurs för att få ditt första diplom!
             </div>
             <?php else: ?>
             <div class="row g-4">
@@ -67,7 +67,7 @@ if (empty($certNumber)) {
                             </p>
                             <a href="certificate.php?id=<?= urlencode($cert['certificate_number']) ?>"
                                class="btn btn-primary btn-sm" target="_blank">
-                                <i class="bi bi-eye me-1"></i>Visa certifikat
+                                <i class="bi bi-eye me-1"></i>Visa diplom
                             </a>
                         </div>
                     </div>
@@ -82,7 +82,7 @@ if (empty($certNumber)) {
     exit;
 }
 
-// Hämta certifikat
+// Hämta diplom
 $certificate = getCertificateByNumber($certNumber);
 
 if (!$certificate) {
@@ -92,14 +92,14 @@ if (!$certificate) {
     <html lang="sv">
     <head>
         <meta charset="UTF-8">
-        <title>Certifikat ej funnet - Stimma</title>
+        <title>Diplom ej funnet - Stimma</title>
         <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
     </head>
     <body class="bg-light">
         <div class="container py-5 text-center">
             <h1 class="text-danger"><i class="bi bi-x-circle"></i></h1>
-            <h2>Certifikat ej funnet</h2>
-            <p class="text-muted">Certifikatet med nummer <?= htmlspecialchars($certNumber) ?> kunde inte hittas.</p>
+            <h2>Diplom ej funnet</h2>
+            <p class="text-muted">Diplomet med nummer <?= htmlspecialchars($certNumber) ?> kunde inte hittas.</p>
             <a href="index.php" class="btn btn-primary">Tillbaka till startsidan</a>
         </div>
     </body>
@@ -108,14 +108,14 @@ if (!$certificate) {
     exit;
 }
 
-// Visa certifikat
+// Visa diplom
 ?>
 <!DOCTYPE html>
 <html lang="sv">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Certifikat - <?= htmlspecialchars($certificate['course_title']) ?></title>
+    <title>Diplom - <?= htmlspecialchars($certificate['course_title']) ?></title>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
     <style>
         * {
@@ -492,7 +492,7 @@ if (!$certificate) {
             <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                 <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
             </svg>
-            Mina certifikat
+            Mina diplom
         </a>
         <span class="print-hint">
             <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16" style="vertical-align: -2px;">
@@ -513,7 +513,7 @@ if (!$certificate) {
         <div class="corner-decoration bottom-right"></div>
 
         <!-- Subtilt vattenmärke -->
-        <div class="watermark">CERTIFIKAT</div>
+        <div class="watermark">DIPLOM</div>
 
         <div class="certificate-content">
             <div class="certificate-header">
@@ -530,12 +530,12 @@ if (!$certificate) {
                     <img src="images/stimma-logo.png" alt="Stimma" class="logo">
                     <?php endif; ?>
                 </div>
-                <h1 class="certificate-title">Certifikat</h1>
+                <h1 class="certificate-title">Diplom</h1>
                 <p class="certificate-subtitle">Intyg om genomförd utbildning</p>
             </div>
 
             <div class="certificate-body">
-                <p class="presented-to">Detta certifikat tilldelas</p>
+                <p class="presented-to">Detta diplom tilldelas</p>
                 <h2 class="recipient-name"><?= htmlspecialchars($certificate['user_name']) ?></h2>
                 <p class="completion-text">för att framgångsrikt ha genomfört kursen</p>
                 <h3 class="course-title"><?= htmlspecialchars($certificate['course_title']) ?></h3>
@@ -549,14 +549,14 @@ if (!$certificate) {
 
             <div class="certificate-footer">
                 <div class="certificate-number">
-                    Certifikatnummer:<br>
+                    Diplomnummer:<br>
                     <?= htmlspecialchars($certificate['certificate_number']) ?>
                 </div>
                 <div class="seal">
                     <span>STIMMA</span>
                 </div>
                 <div class="verification-text">
-                    Verifiera certifikatet på:<br>
+                    Verifiera diplomet på:<br>
                     <strong>stimma.sambruk.se</strong>
                 </div>
             </div>

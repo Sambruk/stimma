@@ -16,7 +16,7 @@ Stimma är en e-learning plattform för mikroutbildning, utvecklad för svenska 
 
 ### Nya funktioner (v1.1)
 - **Gamification** - XP-poäng, nivåer och achievements för ökad motivation
-- **Certifikat** - Automatisk certifikatgenerering vid slutförd kurs
+- **Diplom** - Automatisk diplomgenerering vid slutförd kurs
 - **Dashboard** - Personlig översikt med framsteg och statistik
 - **AI-leverantörsstöd** - Stöd för OpenAI, Anthropic, Google, Azure och OpenRouter
 - **Förhandsvisning** - Testa lektioner utan att spara data

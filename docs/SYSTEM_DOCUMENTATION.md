@@ -85,12 +85,59 @@ stimma/
 
 ### Multi-tenant modell
 
-Stimma använder e-postdomän för organisationsseparation:
+Stimma använder e-postdomän för organisationsseparation. Varje unik domän utgör en helt isolerad organisation.
 
 - Användare `anna@kommun.se` tillhör organisation `kommun.se`
 - Kurser har `organization_domain`-fält
 - Taggar är organisationsspecifika
 - Admin/Redaktörer ser endast sin organisations data
+
+#### Domänmatchning — exakt matchning, ingen subdomängruppering
+
+Systemet använder **exakt strängmatchning** för domäner. Det finns ingen logik som grupperar subdomäner under en moderdomän.
+
+**Hur domänen bestäms:**
+
+1. Vid inloggning extraheras hela domänen efter `@` i e-postadressen:
+   ```php
+   $domain = substr(strrchr($email, "@"), 1);
+   ```
+   Exempel: `anna@edu.ljusdal.se` → domän = `edu.ljusdal.se`
+
+2. Domänen kontrolleras mot vitlistan (`allowed_domains.txt`) med exakt matchning:
+   ```php
+   return in_array($domain, $allowedDomainsCache);
+   ```
+
+3. Kurser filtreras med exakt domänmatchning:
+   ```sql
+   WHERE c.organization_domain = ?
+   ```
+
+**Konsekvens för subdomäner:**
+
+Om man vitlistar **både** `edu.ljusdal.se` och `ljusdal.se` blir de **två helt separata organisationer**:
+
+| Användare | Ser kurser från | Ser INTE kurser från |
+|-----------|----------------|---------------------|
+| `anna@edu.ljusdal.se` | `edu.ljusdal.se` | `ljusdal.se` |
+| `erik@ljusdal.se` | `ljusdal.se` | `edu.ljusdal.se` |
+
+Det gäller även taggar, statistik och all annan organisationsspecifik data — ingen delning sker mellan subdomäner och moderdomäner.
+
+**Befintliga exempel i systemet:**
+
+Filen `allowed_domains.txt` innehåller redan separata poster för subdomäner:
+- `educ.goteborg.se` — separat organisation från `goteborg.se`
+- `intraservice.goteborg.se` — separat organisation från `goteborg.se`
+- `goteborg.se` — egen organisation
+
+Alla tre hanteras som helt isolerade organisationer utan koppling till varandra.
+
+**Viktigt att tänka på vid vitlistning:**
+
+- Om en kommun använder flera e-postdomäner (t.ex. `edu.kommun.se` för skola och `kommun.se` för förvaltning) och vill att alla ska dela kurser, ska **bara en** av domänerna vitlistas, eller så behöver alla användare ha e-postadresser på samma domän.
+- Det finns för närvarande ingen funktion för att slå ihop eller koppla samman organisationer som har olika domäner.
 
 ---
 

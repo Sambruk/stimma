@@ -109,7 +109,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 </li>
                 <li class="nav-item">
                     <a href="certificates.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'certificates.php' ? 'active' : '' ?>">
-                        <i class="bi bi-award me-2"></i> Certifikat
+                        <i class="bi bi-award me-2"></i> Diplom
                     </a>
                 </li>
                 <?php endif; ?>
@@ -124,6 +124,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <li class="nav-item">
                     <a href="users.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'users.php' ? 'active' : '' ?>">
                         <i class="bi bi-people me-2"></i> Användare
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="pub_documents.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'pub_documents.php' ? 'active' : '' ?>">
+                        <i class="bi bi-file-earmark-lock me-2"></i> PUB-dokument
                     </a>
                 </li>
                 <?php endif; ?>
