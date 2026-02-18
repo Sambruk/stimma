@@ -2,10 +2,10 @@
 /**
  * Stimma - Lär dig i små steg
  * Copyright (C) 2025 Christian Alfredsson
- * 
+ *
  * This program is free software; licensed under GPL v2.
  * See LICENSE and LICENSE-AND-TRADEMARK.md for details.
- * 
+ *
  * The name "Stimma" is a trademark and subject to restrictions.
  */
 
@@ -16,6 +16,168 @@ require_once '../include/auth.php';
 
 // Include centralized authentication and authorization check
 require_once 'include/auth_check.php';
+
+/**
+ * Byter inline-bildreferenser i HTML-content baserat på mappning.
+ * upload/gammalt.png → upload/nytt.png
+ */
+function remapContentImages($html, $imageMapping) {
+    if (empty($html) || empty($imageMapping)) {
+        return $html;
+    }
+    return preg_replace_callback(
+        '/(<img\s[^>]*src=["\'])(?:\.\.\/)?upload\/([^"\']+)(["\'])/i',
+        function ($match) use ($imageMapping) {
+            $oldFile = basename($match[2]);
+            if (isset($imageMapping[$oldFile])) {
+                return $match[1] . 'upload/' . $imageMapping[$oldFile] . $match[3];
+            }
+            return $match[0]; // Ingen mappning, behåll original
+        },
+        $html
+    );
+}
+
+/**
+ * Rekursiv borttagning av temp-katalog.
+ */
+function cleanupTempDir($dir) {
+    if (!is_dir($dir)) {
+        return;
+    }
+    $items = scandir($dir);
+    foreach ($items as $item) {
+        if ($item === '.' || $item === '..') continue;
+        $path = $dir . '/' . $item;
+        if (is_dir($path)) {
+            cleanupTempDir($path);
+        } else {
+            unlink($path);
+        }
+    }
+    rmdir($dir);
+}
+
+/**
+ * Hanterar ZIP-import: extraherar bilder, validerar, sparar med nya filnamn.
+ * Returnerar [data, imageMapping] eller kastar Exception.
+ */
+function handleZipImport($tmpName) {
+    $zip = new ZipArchive();
+    if ($zip->open($tmpName) !== true) {
+        throw new Exception('Kunde inte öppna ZIP-filen.');
+    }
+
+    // Säkerhetsvalidering
+    if ($zip->numFiles > 500) {
+        $zip->close();
+        throw new Exception('ZIP-filen innehåller för många filer (max 500).');
+    }
+
+    // Validera entry-namn (path traversal-skydd)
+    for ($i = 0; $i < $zip->numFiles; $i++) {
+        $entryName = $zip->getNameIndex($i);
+        if (strpos($entryName, '..') !== false || strpos($entryName, '\\') !== false || $entryName[0] === '/') {
+            $zip->close();
+            throw new Exception('ZIP-filen innehåller ogiltiga sökvägar.');
+        }
+    }
+
+    // Kontrollera att course.json finns
+    if ($zip->locateName('course.json') === false) {
+        $zip->close();
+        throw new Exception('ZIP-filen saknar course.json.');
+    }
+
+    // Extrahera till temp-katalog
+    $tempDir = sys_get_temp_dir() . '/stimma_import_' . bin2hex(random_bytes(8));
+    if (!mkdir($tempDir, 0700, true)) {
+        $zip->close();
+        throw new Exception('Kunde inte skapa temporär katalog.');
+    }
+
+    try {
+        $zip->extractTo($tempDir);
+        $zip->close();
+
+        // Kontrollera total storlek (max 50MB)
+        $totalSize = 0;
+        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($tempDir));
+        foreach ($iterator as $file) {
+            if ($file->isFile()) {
+                $totalSize += $file->getSize();
+            }
+        }
+        if ($totalSize > 50 * 1024 * 1024) {
+            throw new Exception('ZIP-filens innehåll överskrider maxgränsen (50MB).');
+        }
+
+        // Läs course.json
+        $jsonContent = file_get_contents($tempDir . '/course.json');
+        $data = json_decode($jsonContent, true);
+        if (!$data || !isset($data['course'])) {
+            throw new Exception('Ogiltig course.json i ZIP-filen.');
+        }
+
+        // Importera bilder
+        $imageMapping = []; // gammalt filnamn => nytt filnamn
+        $imagesDir = $tempDir . '/images';
+        $uploadDir = realpath(__DIR__ . '/../upload');
+
+        if (!$uploadDir) {
+            $uploadDir = __DIR__ . '/../upload';
+            if (!mkdir($uploadDir, 0755, true)) {
+                throw new Exception('Kunde inte skapa uppladdningsmapp.');
+            }
+            $uploadDir = realpath($uploadDir);
+        }
+        $uploadDir .= '/';
+
+        $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        $allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        $maxImageSize = 5 * 1024 * 1024; // 5MB per bild
+
+        if (is_dir($imagesDir)) {
+            $imageFiles = scandir($imagesDir);
+            foreach ($imageFiles as $imgFile) {
+                if ($imgFile === '.' || $imgFile === '..') continue;
+
+                $imgPath = $imagesDir . '/' . $imgFile;
+                if (!is_file($imgPath)) continue;
+
+                // Validera filändelse
+                $ext = strtolower(pathinfo($imgFile, PATHINFO_EXTENSION));
+                if (!in_array($ext, $allowedExtensions)) continue;
+
+                // Validera filstorlek
+                if (filesize($imgPath) > $maxImageSize) continue;
+
+                // Validera MIME-typ
+                $mimeType = mime_content_type($imgPath);
+                if (!in_array($mimeType, $allowedMimeTypes)) continue;
+
+                // Validera att det är en riktig bild
+                $imageInfo = getimagesize($imgPath);
+                if ($imageInfo === false) continue;
+
+                // Generera nytt säkert filnamn
+                $newFilename = bin2hex(random_bytes(16)) . '.' . $ext;
+                $destPath = $uploadDir . $newFilename;
+
+                if (copy($imgPath, $destPath)) {
+                    chmod($destPath, 0644);
+                    $imageMapping[$imgFile] = $newFilename;
+                }
+            }
+        }
+
+        return [$data, $imageMapping, $tempDir];
+
+    } catch (Exception $e) {
+        cleanupTempDir($tempDir);
+        throw $e;
+    }
+}
 
 // Hantera AJAX-anrop separat
 if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'] == 'XMLHttpRequest') {
@@ -37,28 +199,46 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'
     // Hantera filuppladdning för AJAX
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['course_file'])) {
         $file = $_FILES['course_file'];
-        
-        // Kontrollera att det är en JSON-fil
-        if ($file['type'] !== 'application/json') {
-            header('Content-Type: application/json');
-            echo json_encode(['success' => false, 'message' => 'Endast JSON-filer är tillåtna.']);
-            exit;
-        }
+        $tempDir = null;
 
-        // Läs innehållet i filen
-        $content = file_get_contents($file['tmp_name']);
-        $data = json_decode($content, true);
-        
-        if (!$data || !isset($data['course'])) {
+        // Detektera filformat baserat på filändelse
+        $fileExtension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        $isZip = ($fileExtension === 'zip');
+
+        if (!$isZip && $fileExtension !== 'json') {
             header('Content-Type: application/json');
-            echo json_encode(['success' => false, 'message' => 'Ogiltig JSON-fil.']);
+            echo json_encode(['success' => false, 'message' => 'Endast JSON- och ZIP-filer är tillåtna.']);
             exit;
         }
 
         try {
+            $data = null;
+            $imageMapping = [];
+
+            if ($isZip) {
+                // ZIP-import
+                list($data, $imageMapping, $tempDir) = handleZipImport($file['tmp_name']);
+            } else {
+                // Bakåtkompatibel JSON-import
+                if ($file['type'] !== 'application/json') {
+                    header('Content-Type: application/json');
+                    echo json_encode(['success' => false, 'message' => 'Ogiltig filtyp för JSON.']);
+                    exit;
+                }
+
+                $content = file_get_contents($file['tmp_name']);
+                $data = json_decode($content, true);
+
+                if (!$data || !isset($data['course'])) {
+                    header('Content-Type: application/json');
+                    echo json_encode(['success' => false, 'message' => 'Ogiltig JSON-fil.']);
+                    exit;
+                }
+            }
+
             // Börja transaktion
             execute("START TRANSACTION");
-            
+
             // Hämta användarens ID, is_admin och is_editor
             $user = queryOne("SELECT id, is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE email = ?", [$_SESSION['user_email']]);
             if (!$user) {
@@ -68,6 +248,15 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'
             // Hämta organization_domain från användarens e-post
             $emailParts = explode('@', $_SESSION['user_email']);
             $organizationDomain = isset($emailParts[1]) ? $emailParts[1] : '';
+
+            // Mappa kursens image_url
+            $courseImageUrl = $data['course']['image_url'] ?? null;
+            if (!empty($courseImageUrl) && !empty($imageMapping)) {
+                $courseImgFile = basename($courseImageUrl);
+                if (isset($imageMapping[$courseImgFile])) {
+                    $courseImageUrl = $imageMapping[$courseImgFile];
+                }
+            }
 
             // Skapa kursen
             $courseId = execute("
@@ -83,12 +272,12 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'
                 $data['course']['duration_minutes'] ?? 0,
                 $data['course']['prerequisites'] ?? null,
                 $data['course']['tags'] ?? null,
-                $data['course']['image_url'] ?? null,
+                $courseImageUrl ?: null,
                 'inactive', // Sätt alltid till inaktiv vid import
                 $data['course']['sort_order'] ?? 0,
                 $data['course']['featured'] ?? 0,
-                $user['id'], // Använd den inloggade användarens ID som author_id
-                $organizationDomain // Sätt organization_domain från användarens e-postdomän
+                $user['id'],
+                $organizationDomain
             ]);
 
             // Om användaren inte är admin, lägg till i course_editors
@@ -104,13 +293,28 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'
                 'progress' => 0,
                 'steps' => []
             ];
-            
+
             // Lägg till lektionerna
             if (isset($data['lessons']) && is_array($data['lessons'])) {
                 $totalLessons = count($data['lessons']);
                 foreach ($data['lessons'] as $index => $lesson) {
+                    // Mappa lektionens image_url
+                    $lessonImageUrl = $lesson['image_url'] ?? null;
+                    if (!empty($lessonImageUrl) && !empty($imageMapping)) {
+                        $lessonImgFile = basename($lessonImageUrl);
+                        if (isset($imageMapping[$lessonImgFile])) {
+                            $lessonImageUrl = $imageMapping[$lessonImgFile];
+                        }
+                    }
+
+                    // Mappa inline-bilder i content
+                    $lessonContent = $lesson['content'] ?? null;
+                    if (!empty($lessonContent) && !empty($imageMapping)) {
+                        $lessonContent = remapContentImages($lessonContent, $imageMapping);
+                    }
+
                     // SECURITY FIX: Sanitize all imported HTML content to prevent XSS
-                    $sanitizedContent = isset($lesson['content']) ? cleanHtml($lesson['content']) : null;
+                    $sanitizedContent = isset($lessonContent) ? cleanHtml($lessonContent) : null;
                     $sanitizedAiInstruction = isset($lesson['ai_instruction']) ? cleanHtml($lesson['ai_instruction']) : null;
                     $sanitizedAiPrompt = isset($lesson['ai_prompt']) ? cleanHtml($lesson['ai_prompt']) : null;
                     $sanitizedQuizQuestion = isset($lesson['quiz_question']) ? cleanHtml($lesson['quiz_question']) : null;
@@ -124,7 +328,6 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'
                     // SECURITY FIX: Validate video URL if present
                     $videoUrl = null;
                     if (isset($lesson['video_url']) && !empty($lesson['video_url'])) {
-                        // Only allow YouTube URLs
                         if (preg_match('/^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//', $lesson['video_url'])) {
                             $videoUrl = $lesson['video_url'];
                         }
@@ -143,7 +346,7 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'
                         $courseId,
                         $sanitizedTitle,
                         $lesson['estimated_duration'] ?? 5,
-                        null, // SECURITY FIX: Don't import image URLs from external sources
+                        $lessonImageUrl ?: null,
                         $videoUrl,
                         $sanitizedContent,
                         $lesson['resource_links'] ?? null,
@@ -157,7 +360,7 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'
                         $sanitizedQuizAnswer2,
                         $sanitizedQuizAnswer3,
                         $lesson['quiz_correct_answer'] ?? null,
-                        $user['id'] // Använd samma author_id som för kursen
+                        $user['id']
                     ]);
 
                     // Lägg till status för varje lektion
@@ -168,34 +371,40 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'
                     ];
                 }
             }
-            
+
             // Slutför transaktionen
             execute("COMMIT");
-            
+
             // Lägg till slutstatus
+            $imageCount = count($imageMapping);
+            $imageMsg = $imageCount > 0 ? " ({$imageCount} bilder importerade)" : "";
             $status['steps'][] = [
-                'message' => 'Importen är klar!',
+                'message' => 'Importen är klar!' . $imageMsg,
                 'current' => 'Omdirigerar...',
                 'progress' => 100,
                 'redirect' => 'courses.php'
             ];
-            
+
             // Skicka all statusinformation i ett svar
             header('Content-Type: application/json');
             echo json_encode($status);
-            exit;
-            
+
         } catch (Exception $e) {
             // Återställ transaktionen vid fel
             execute("ROLLBACK");
-            
+
             header('Content-Type: application/json');
             echo json_encode([
                 'success' => false,
                 'message' => 'Ett fel uppstod vid import av kursen: ' . $e->getMessage()
             ]);
-            exit;
+        } finally {
+            // Rensa temp-katalog
+            if ($tempDir && is_dir($tempDir)) {
+                cleanupTempDir($tempDir);
+            }
         }
+        exit;
     }
     exit;
 }
@@ -229,9 +438,9 @@ require_once 'include/header.php';
         <form method="POST" enctype="multipart/form-data" id="importForm">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
             <div class="mb-3">
-                <label for="course_file" class="form-label">Välj kursfil (JSON)</label>
-                <input type="file" class="form-control" id="course_file" name="course_file" accept=".json" required>
-                <div class="form-text">Välj en JSON-fil som innehåller kursdata som exporterats från en annan Stimma-installation.</div>
+                <label for="course_file" class="form-label">Välj kursfil (ZIP eller JSON)</label>
+                <input type="file" class="form-control" id="course_file" name="course_file" accept=".json,.zip" required>
+                <div class="form-text">Välj en ZIP- eller JSON-fil som innehåller kursdata som exporterats från en annan Stimma-installation. ZIP-filer inkluderar bilder.</div>
             </div>
             <button type="submit" class="btn btn-primary">Importera kurs</button>
             <a href="courses.php" class="btn btn-secondary">Avbryt</a>
@@ -240,11 +449,11 @@ require_once 'include/header.php';
         <!-- Progress indicator -->
         <div id="importProgress" class="mt-4" style="display: none;">
             <div class="progress mb-3" style="height: 25px;">
-                <div class="progress-bar progress-bar-striped progress-bar-animated" 
-                     role="progressbar" 
-                     style="width: 0%" 
-                     aria-valuenow="0" 
-                     aria-valuemin="0" 
+                <div class="progress-bar progress-bar-striped progress-bar-animated"
+                     role="progressbar"
+                     style="width: 0%"
+                     aria-valuenow="0"
+                     aria-valuemin="0"
                      aria-valuemax="100"></div>
             </div>
             <div id="importStatus" class="text-center">
@@ -260,15 +469,15 @@ require_once 'include/header.php';
 <script>
 document.getElementById('importForm').addEventListener('submit', function(e) {
     e.preventDefault();
-    
+
     const formData = new FormData(this);
     const progressBar = document.querySelector('.progress-bar');
     const importProgress = document.getElementById('importProgress');
     const currentItem = document.getElementById('currentItem');
-    
+
     // Visa progress-indikatorn
     importProgress.style.display = 'block';
-    
+
     // Skicka formuläret med fetch
     fetch('import.php', {
         method: 'POST',
@@ -281,23 +490,23 @@ document.getElementById('importForm').addEventListener('submit', function(e) {
     .then(data => {
         if (data.success) {
             let currentStep = 0;
-            
+
             // Funktion för att visa nästa steg
             function showNextStep() {
                 if (currentStep < data.steps.length) {
                     const step = data.steps[currentStep];
-                    
+
                     // Uppdatera progress-baren och status
                     if (step.progress !== undefined) {
                         progressBar.style.width = step.progress + '%';
                         progressBar.setAttribute('aria-valuenow', step.progress);
                     }
-                    
+
                     // Uppdatera statusmeddelandet
                     if (step.current) {
                         currentItem.textContent = step.current;
                     }
-                    
+
                     // Om det är sista steget och det finns en redirect
                     if (currentStep === data.steps.length - 1 && step.redirect) {
                         setTimeout(() => {
@@ -307,11 +516,11 @@ document.getElementById('importForm').addEventListener('submit', function(e) {
                         // Visa nästa steg efter 1 sekund
                         setTimeout(showNextStep, 1000);
                     }
-                    
+
                     currentStep++;
                 }
             }
-            
+
             // Starta visningen av stegen
             showNextStep();
         } else {
