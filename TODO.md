@@ -1,16 +1,21 @@
 # Stimma - Utvecklingsuppgifter
 
 ## Pågående
-_Inga pågående uppgifter_
+- [x] ZIP-baserad kursexport med bilder (export.php)
+- [x] ZIP-baserad kursimport med bildåtermappning (import.php)
+- [x] Öka upload-gränser i docker-compose.yml (50M/55M)
+- [x] Uppdatera importformulär att acceptera .zip-filer
 
 ## Framtida förbättringar
 - [ ] Lägg till förhandsvisning av e-postmall
 - [ ] Statistik per e-postkampanj
 
 ## Slutfört
+- [x] Ta bort Kursbilder-funktionen (PPTX/PDF) – inte responsiv, dålig tillgänglighet
 - [x] Klickbara PUB-avtal i superadmins domänlista – modal med avtalsdetaljer (undertecknare, org, datum, IP, SHA-256)
 - [x] Klickbara rader i pub_documents.php "Digitalt tecknade PUB-avtal" – modal med fullständiga avtalsdetaljer
 - [x] Sökfält för att filtrera domäner i domains.php
+- [x] Infoga bilder i lektionsinnehåll med storlek (S/M/L/100%) och placering (vänster/center/höger)
 - [x] Domänväljare i användarvyn för superadmin + sortering på domän/e-post
 - [x] E-postnotifikation vid rättighetsändringar (admin/redaktör)
 - [x] Fixa domänfiltrering i admin/index.php (admin ser endast sin organisations statistik)
