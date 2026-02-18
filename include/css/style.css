@@ -368,3 +368,22 @@ body {
         height: 150px;
     }
 }
+
+/* Inline-bilder i lektionsinnehåll */
+.content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.25rem;
+}
+.content img.img-sm { width: 25%; }
+.content img.img-md { width: 50%; }
+.content img.img-lg { width: 75%; }
+.content img.img-full { width: 100%; }
+.content img.img-left { float: left; margin: 0 1rem 0.75rem 0; }
+.content img.img-center { display: block; margin: 0.75rem auto; float: none; }
+.content img.img-right { float: right; margin: 0 0 0.75rem 1rem; }
+
+@media (max-width: 576px) {
+    .content img.img-sm,
+    .content img.img-md { width: 100%; float: none; margin: 0.75rem 0; }
+}
