@@ -369,7 +369,7 @@ function convertYoutubeUrl($url) {
                             <?php endif; ?>
                             
                             <div class="<?= !empty($lesson['image_url']) ? 'col-md-8' : 'col-12' ?>">
-                                <div class="content">
+                                <div class="content clearfix">
                                     <?= cleanHtml($lesson['content']) ?>
                                 </div>
                             </div>

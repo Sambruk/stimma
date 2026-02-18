@@ -491,7 +491,7 @@ function cleanHtml($html) {
     // SECURITY FIX: Remove vbscript: URLs
     $html = preg_replace('/vbscript\s*:/i', 'blocked:', $html);
 
-    // Lista över tillåtna HTML-taggar (no attributes allowed)
+    // Lista över tillåtna HTML-taggar
     $allowedTags = [
         'br',      // Radbrytning
         'strong',  // Fet stil
@@ -503,14 +503,58 @@ function cleanHtml($html) {
         'ol',      // Numrerad lista
         'li',      // Listobjekt
         'p',       // Stycke
-        'div'      // Div (kommer att konverteras till p)
+        'div',     // Div (kommer att konverteras till p)
+        'img'      // Bilder (med begränsade attribut)
     ];
 
     // Ta bort alla HTML-taggar förutom de tillåtna
     $html = strip_tags($html, '<' . implode('><', $allowedTags) . '>');
 
-    // SECURITY FIX: Remove ALL attributes from remaining tags (more thorough)
-    $html = preg_replace('/<([a-z][a-z0-9]*)\s+[^>]*>/i', '<$1>', $html);
+    // Sanitera <img>-taggar: behåll bara src, alt, class med säkra värden
+    $html = preg_replace_callback('/<img\b[^>]*>/i', function($match) {
+        $tag = $match[0];
+
+        // Extrahera src
+        $src = '';
+        if (preg_match('/\bsrc\s*=\s*"([^"]*)"/', $tag, $m) ||
+            preg_match("/\bsrc\s*=\s*'([^']*)'/", $tag, $m)) {
+            $src = $m[1];
+        }
+
+        // Normalisera ../upload/ till upload/
+        $src = preg_replace('#^(\.\./)+upload/#', 'upload/', $src);
+
+        // Validera src: tillåt bara relativa upload-sökvägar
+        if (empty($src) || !preg_match('#^upload/[a-zA-Z0-9_\-]+\.(jpg|jpeg|png|gif|webp)$#', $src)) {
+            return ''; // Ta bort bilder med ogiltiga sökvägar
+        }
+
+        // Extrahera alt
+        $alt = '';
+        if (preg_match('/\balt\s*=\s*"([^"]*)"/', $tag, $m) ||
+            preg_match("/\balt\s*=\s*'([^']*)'/", $tag, $m)) {
+            $alt = htmlspecialchars($m[1], ENT_QUOTES, 'UTF-8');
+        }
+
+        // Extrahera och filtrera class
+        $class = '';
+        if (preg_match('/\bclass\s*=\s*"([^"]*)"/', $tag, $m) ||
+            preg_match("/\bclass\s*=\s*'([^']*)'/", $tag, $m)) {
+            $allowedClasses = ['img-sm', 'img-md', 'img-lg', 'img-full', 'img-left', 'img-center', 'img-right'];
+            $classes = array_filter(preg_split('/\s+/', $m[1]), function($c) use ($allowedClasses) {
+                return in_array($c, $allowedClasses);
+            });
+            $class = implode(' ', $classes);
+        }
+
+        return '<img src="' . $src . '"' .
+               ($alt ? ' alt="' . $alt . '"' : '') .
+               ($class ? ' class="' . $class . '"' : '') .
+               '>';
+    }, $html);
+
+    // SECURITY FIX: Remove ALL attributes from non-img tags
+    $html = preg_replace('/<((?!img\b)[a-z][a-z0-9]*)\s+[^>]*>/i', '<$1>', $html);
 
     // Konvertera div-taggar till p-taggar
     $html = str_replace(['<div>', '</div>'], ['<p>', '</p>'], $html);
