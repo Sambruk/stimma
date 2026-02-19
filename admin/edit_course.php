@@ -74,6 +74,14 @@ $availableTags = query(
 
 // Hantera formulärskickning
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Validera CSRF-token
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        $_SESSION['message'] = 'Ogiltig säkerhetstoken. Försök igen.';
+        $_SESSION['message_type'] = 'danger';
+        header('Location: courses.php');
+        exit;
+    }
+
     $title = trim($_POST['title'] ?? '');
     $description = trim($_POST['description'] ?? '');
     $status = isset($_POST['status']) && $_POST['status'] === 'active' ? 'active' : 'inactive';
