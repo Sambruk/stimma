@@ -166,11 +166,10 @@ require_once 'include/header.php';
                                 <a href="export.php?id=<?= $course['id'] ?>" class="btn btn-sm btn-outline-secondary" title="Exportera kurs">
                                     <i class="bi bi-box-arrow-up"></i>
                                 </a>
-                                <a href="delete_course.php?id=<?= $course['id'] ?>&csrf_token=<?= htmlspecialchars($_SESSION['csrf_token']) ?>"
-                                   onclick="return confirm('Är du säker på att du vill radera denna kurs? Alla lektioner i kursen kommer också att raderas.')"
+                                <button type="button" onclick="deleteCourse(<?= $course['id'] ?>)"
                                    class="btn btn-sm btn-outline-danger">
                                     <i class="bi bi-trash"></i>
-                                </a>
+                                </button>
                             </div>
                         </td>
                     </tr>
@@ -547,6 +546,23 @@ $extra_scripts = '<script>
             }
         });
     });
+</script>';
+
+echo '<script>
+function deleteCourse(id) {
+    if (!confirm("Är du säker på att du vill radera denna kurs? Alla lektioner i kursen kommer också att raderas.")) return;
+    var form = document.createElement("form");
+    form.method = "POST";
+    form.action = "delete_course.php";
+    var idInput = document.createElement("input");
+    idInput.type = "hidden"; idInput.name = "id"; idInput.value = id;
+    var csrfInput = document.createElement("input");
+    csrfInput.type = "hidden"; csrfInput.name = "csrf_token"; csrfInput.value = CSRF_TOKEN;
+    form.appendChild(idInput);
+    form.appendChild(csrfInput);
+    document.body.appendChild(form);
+    form.submit();
+}
 </script>';
 
 // Inkludera footer

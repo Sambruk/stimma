@@ -1,13 +1,14 @@
 # Stimma - Utvecklingsuppgifter
 
 ## Pågående
-- [ ] Säkerhetsåtgärder fas 2: CSRF på edit-formulär, magic link-invalidering, delete→POST (se SECURITY.md)
+- [ ] Säkerhetsåtgärder fas 3: magic link-invalidering, credential rotation (se SECURITY.md)
 
 ## Framtida förbättringar
 - [ ] Lägg till förhandsvisning av e-postmall
 - [ ] Statistik per e-postkampanj
 
 ## Slutfört
+- [x] Säkerhetsfix fas 2 (2026-02-19): CSRF på edit-formulär, delete→POST, DB-port stängd
 - [x] Säkerhetsfix fas 1 (2026-02-19): .htaccess, XSS, CSRF timing-safe, CLI-guards, display_errors, htmlspecialchars
 - [x] ZIP-baserad kursexport med bilder (export.php)
 - [x] ZIP-baserad kursimport med bildåtermappning (import.php)

@@ -171,11 +171,10 @@ require_once 'include/header.php';
                                     <a href="edit_lesson.php?id=<?= $lesson['id'] ?>" class="btn btn-sm btn-primary">
                                         <i class="bi bi-pencil"></i>
                                     </a>
-                                    <a href="delete_lesson.php?id=<?= $lesson['id'] ?>&csrf_token=<?= htmlspecialchars($_SESSION['csrf_token']) ?>"
-                                       onclick="return confirm('Är du säker på att du vill radera denna lektion?')"
+                                    <button type="button" onclick="deleteLesson(<?= $lesson['id'] ?>)"
                                        class="btn btn-sm btn-outline-danger">
                                         <i class="bi bi-trash"></i>
-                                    </a>
+                                    </button>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -189,6 +188,23 @@ require_once 'include/header.php';
         <?php endif; ?>
     </div>
 </div>
+
+<script>
+function deleteLesson(id) {
+    if (!confirm('Är du säker på att du vill radera denna lektion?')) return;
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = 'delete_lesson.php';
+    var idInput = document.createElement('input');
+    idInput.type = 'hidden'; idInput.name = 'id'; idInput.value = id;
+    var csrfInput = document.createElement('input');
+    csrfInput.type = 'hidden'; csrfInput.name = 'csrf_token'; csrfInput.value = CSRF_TOKEN;
+    form.appendChild(idInput);
+    form.appendChild(csrfInput);
+    document.body.appendChild(form);
+    form.submit();
+}
+</script>
 
 <?php
 // Inkludera footer
