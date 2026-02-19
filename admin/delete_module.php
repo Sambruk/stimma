@@ -32,7 +32,7 @@ if (!$isAdmin) {
 }
 
 // Kontrollera CSRF-token
-if (!isset($_GET['csrf_token']) || $_GET['csrf_token'] !== $_SESSION['csrf_token']) {
+if (!isset($_GET['csrf_token']) || !validateCsrfToken($_GET['csrf_token'])) {
     $_SESSION['message'] = 'Ogiltig CSRF-token.';
     $_SESSION['message_type'] = 'danger';
     header('Location: index.php');

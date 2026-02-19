@@ -14,8 +14,14 @@
  * 0 9 * * * /usr/bin/php /var/www/html/cron/send_reminders.php >> /var/log/stimma_reminders.log 2>&1
  */
 
+// Blockera webbåtkomst - detta skript ska bara köras via CLI
+if (php_sapi_name() !== 'cli') {
+    http_response_code(403);
+    die('Forbidden');
+}
+
 // Sätt CLI-läge
-define('CLI_MODE', php_sapi_name() === 'cli');
+define('CLI_MODE', true);
 
 // Säkerställ att vi kör i rätt katalog
 chdir(dirname(__DIR__));

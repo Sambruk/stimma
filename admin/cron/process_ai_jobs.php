@@ -7,6 +7,12 @@
  * Run via cron or manually: php process_ai_jobs.php
  */
 
+// Blockera webbåtkomst - detta skript ska bara köras via CLI
+if (php_sapi_name() !== 'cli') {
+    http_response_code(403);
+    die('Forbidden');
+}
+
 // Prevent timeout for long-running processes
 set_time_limit(0);
 ini_set('memory_limit', '512M');

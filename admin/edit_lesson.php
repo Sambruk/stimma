@@ -274,8 +274,8 @@ $courses = queryAll("SELECT * FROM " . DB_DATABASE . ".courses ORDER BY sort_ord
                 </div>
                 <div class="card-body">
                     <?php if (isset($_SESSION['message'])): ?>
-                        <div class="alert alert-<?= $_SESSION['message_type'] ?>">
-                            <?= $_SESSION['message'] ?>
+                        <div class="alert alert-<?= htmlspecialchars($_SESSION['message_type']) ?>">
+                            <?= htmlspecialchars($_SESSION['message']) ?>
                         </div>
                         <?php unset($_SESSION['message'], $_SESSION['message_type']); ?>
                     <?php endif; ?>

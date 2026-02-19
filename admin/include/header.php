@@ -52,7 +52,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    <title>Admin - <?= $page_title ?? 'Administration' ?></title>
+    <title>Admin - <?= htmlspecialchars($page_title ?? 'Administration') ?></title>
     <link rel="mask-icon" href="images/safari-pinned-tab.svg" color="#007bff">
     <meta name="msapplication-TileColor" content="#007bff">
     <meta name="theme-color" content="#007bff">
@@ -71,7 +71,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
     
     <!-- CSRF Token för AJAX-anrop -->
     <script>
-        const CSRF_TOKEN = '<?= $_SESSION['csrf_token'] ?>';
+        const CSRF_TOKEN = <?= json_encode($_SESSION['csrf_token']) ?>;
     </script>
 </head>
 <body>
@@ -166,7 +166,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <li class="nav-item">
                     <div class="nav-link text-white px-3 py-2 d-flex align-items-center">
                         <i class="bi bi-person me-2"></i>
-                        <?= $_SESSION['user_email'] ?>
+                        <?= htmlspecialchars($_SESSION['user_email']) ?>
                     </div>
                 </li>
                 <li class="nav-item">
@@ -181,7 +181,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <div class="main-content">
         <nav class="navbar navbar-expand-lg navbar-light bg-white py-3">
             <div class="container-fluid px-4">
-                <h5 class="mb-0"><?= $page_title ?? 'Administration' ?></h5>
+                <h5 class="mb-0"><?= htmlspecialchars($page_title ?? 'Administration') ?></h5>
                 <div class="d-flex align-items-center">
                     <?php if ($userHasPubAgreement): ?>
                         <span class="badge bg-success" title="PUB-avtal tecknat för <?= htmlspecialchars($userDomain) ?>">
@@ -198,8 +198,8 @@ $current_page = basename($_SERVER['PHP_SELF']);
 
         <div class="container-fluid px-4 py-4">
             <?php if (isset($_SESSION['message'])): ?>
-                <div class="alert alert-<?= $_SESSION['message_type'] ?? 'info' ?>">
-                    <?= $_SESSION['message'] ?>
+                <div class="alert alert-<?= htmlspecialchars($_SESSION['message_type'] ?? 'info') ?>">
+                    <?= htmlspecialchars($_SESSION['message']) ?>
                 </div>
                 <?php unset($_SESSION['message'], $_SESSION['message_type']); ?>
             <?php endif; ?>

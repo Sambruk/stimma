@@ -99,7 +99,7 @@ if ($isSuperAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
                         'file_hash' => $fileHash
                     ]);
 
-                    $_SESSION['message'] = "PUB-avtalsdokument version <strong>" . e($version) . "</strong> har laddats upp och aktiverats.";
+                    $_SESSION['message'] = "PUB-avtalsdokument version " . $version . " har laddats upp och aktiverats.";
                     $_SESSION['message_type'] = 'success';
                 } else {
                     $_SESSION['message'] = 'Kunde inte spara filen. Kontrollera filrättigheter.';

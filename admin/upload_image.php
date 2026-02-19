@@ -18,7 +18,7 @@ require_once '../include/auth.php';
 require_once 'include/ajax_auth_check.php';
 
 // Kontrollera CSRF-token
-if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
     header('Content-Type: application/json');
     echo json_encode(['success' => false, 'error' => 'Invalid CSRF token']);
     exit;

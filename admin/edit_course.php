@@ -232,7 +232,7 @@ require_once 'include/header.php';
                     <?php if (isset($error)): ?>
                         <div class="alert alert-danger">
                             <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                            <?= $error ?>
+                            <?= htmlspecialchars($error) ?>
                         </div>
                     <?php endif; ?>
                     

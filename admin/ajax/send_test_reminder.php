@@ -21,7 +21,7 @@ require_once '../../include/mail.php';
 require_once '../include/ajax_auth_check.php';
 
 // Verifiera CSRF-token
-if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
     echo json_encode(['success' => false, 'message' => 'Ogiltig säkerhetstoken. Ladda om sidan och försök igen.']);
     exit;
 }
