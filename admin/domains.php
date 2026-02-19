@@ -68,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 sort($domains);
 
                 if (saveDomainsList($domainsFile, $domains)) {
-                    $_SESSION['message'] = "Domänen <strong>{$newDomain}</strong> har lagts till.";
+                    $_SESSION['message'] = "Domänen {$newDomain} har lagts till.";
                     $_SESSION['message_type'] = 'success';
 
                     // Logga aktiviteten
@@ -92,7 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!empty($domainToUpdate)) {
             if (updatePubAgreement($domainToUpdate, $hasPub, $pubDate, $pubNotes)) {
                 $status = $hasPub ? 'aktiverat' : 'inaktiverat';
-                $_SESSION['message'] = "PUB-avtal för <strong>{$domainToUpdate}</strong> har {$status}.";
+                $_SESSION['message'] = "PUB-avtal för {$domainToUpdate} har {$status}.";
                 $_SESSION['message_type'] = 'success';
 
                 logActivity($_SESSION['user_email'], "Uppdaterade PUB-avtal för domän: {$domainToUpdate} ({$status})", [
@@ -117,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 unset($domains[$key]);
 
                 if (saveDomainsList($domainsFile, $domains)) {
-                    $_SESSION['message'] = "Domänen <strong>{$domainToDelete}</strong> har tagits bort.";
+                    $_SESSION['message'] = "Domänen {$domainToDelete} har tagits bort.";
                     $_SESSION['message_type'] = 'success';
 
                     // Logga aktiviteten

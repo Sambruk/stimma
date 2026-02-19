@@ -13,7 +13,7 @@ if (!isLoggedIn()) {
 }
 
 // Validera CSRF-token
-if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
     echo json_encode(['success' => false, 'message' => 'Ogiltig CSRF-token.']);
     exit;
 }

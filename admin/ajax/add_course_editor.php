@@ -4,15 +4,11 @@ require_once '../../include/database.php';
 require_once '../../include/functions.php';
 require_once '../../include/auth.php';
 
-// Aktivera felrapportering för felsökning
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
 // Include AJAX-compatible authentication check
 require_once '../include/ajax_auth_check.php';
 
 // Kontrollera CSRF-token
-if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
     echo json_encode(['success' => false, 'message' => 'Ogiltig CSRF-token.']);
     exit;
 }

@@ -44,7 +44,7 @@ function renderEditor($content, $name = 'content', $id = 'editor') {
             <i class="bi bi-eraser"></i>
         </button>
     </div>
-    <div id="<?= $id ?>" class="editor-content" contenteditable="true"><?= $content ?></div>
+    <div id="<?= $id ?>" class="editor-content" contenteditable="true"><?= cleanHtml($content) ?></div>
     <input type="hidden" name="<?= $name ?>" id="<?= $id ?>Input">
     <input type="file" id="<?= $id ?>FileInput" accept="image/jpeg,image/png,image/gif" style="display:none">
     <?php

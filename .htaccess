@@ -1,0 +1,27 @@
+# Stimma Root Security
+# Block access to sensitive files and directories
+
+# Block dotfiles (except .htaccess itself)
+<FilesMatch "^\.(?!htaccess)">
+    Require all denied
+</FilesMatch>
+
+# Block specific sensitive files
+<FilesMatch "^(docker-compose\.yml|docker-compose\.yaml|init\.sql|TODO\.md|SECURITY\.md|README\.md|LICENSE|LICENSE-AND-TRADEMARK\.md|allowed_domains\.txt|email_list\.txt|import_users\.sql|xstimmainfo\.html|Dockerfile|\.gitignore|composer\.json|composer\.lock)$">
+    Require all denied
+</FilesMatch>
+
+# Block .git directory
+RedirectMatch 404 /\.git
+
+# Block db directory (database files)
+RedirectMatch 404 ^/db/
+
+# Block migrations directory from direct access
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^migrations/ - [F,L]
+</IfModule>
+
+# Disable directory listing
+Options -Indexes

@@ -155,7 +155,7 @@ if (!$isLoggedIn):
                         <!-- Logo and system description -->
                         <h1 class="display-4 mb-3"><img src="images/stimma-logo.png" height="80px" alt="<?= $systemName ?>"></h1>
                         <?php if ($systemDescription): ?>
-                            <p class="lead text-muted mb-4"><?= $systemDescription ?></p>
+                            <p class="lead text-muted mb-4"><?= htmlspecialchars($systemDescription) ?></p>
                         <?php endif; ?>
                         
                         <!-- Success message display -->

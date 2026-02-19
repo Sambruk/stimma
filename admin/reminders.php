@@ -48,7 +48,7 @@ if (!$settings) {
 // Hantera formulärdata
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Verifiera CSRF-token
-    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
         $_SESSION['message'] = 'Ogiltig säkerhetstoken. Försök igen.';
         $_SESSION['message_type'] = 'danger';
         header('Location: reminders.php');

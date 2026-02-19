@@ -331,8 +331,8 @@ function convertYoutubeUrl($url) {
                     <div class="card-body">
                         <!-- Flash message display -->
                         <?php if (isset($_SESSION['flash_message']) && $_SESSION['flash_type'] !== 'danger'): ?>
-                        <div class="alert alert-<?= $_SESSION['flash_type'] ?? 'info' ?>" role="alert">
-                            <?= $_SESSION['flash_message'] ?>
+                        <div class="alert alert-<?= htmlspecialchars($_SESSION['flash_type'] ?? 'info') ?>" role="alert">
+                            <?= htmlspecialchars($_SESSION['flash_message']) ?>
                         </div>
                         <?php 
                             unset($_SESSION['flash_message'], $_SESSION['flash_type']);
@@ -436,7 +436,7 @@ function convertYoutubeUrl($url) {
                                 <?php if (isset($_SESSION['flash_message']) && $_SESSION['flash_type'] === 'danger'): ?>
                                 <div class="alert alert-danger mb-3">
                                     <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                                    <?= $_SESSION['flash_message'] ?>
+                                    <?= htmlspecialchars($_SESSION['flash_message']) ?>
                                 </div>
                                 <?php 
                                     unset($_SESSION['flash_message'], $_SESSION['flash_type']);
@@ -552,6 +552,13 @@ function convertYoutubeUrl($url) {
 
 
 <script>
+// HTML-escape helper to prevent XSS via innerHTML
+function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 // Konfigurera marked om det finns tillgängligt
 if (typeof marked !== 'undefined') {
     marked.setOptions({
@@ -603,15 +610,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const messageDiv = document.createElement('div');
         messageDiv.className = isUser ? 'alert alert-primary mb-3' : 'alert alert-info mb-3';
         
-        if (isUser && typeof marked !== 'undefined') {
-            try {
-                messageDiv.innerHTML = marked.parse(message);
-            } catch (e) {
-                console.warn('Kunde inte formatera meddelande med marked.js:', e);
-                messageDiv.textContent = message;
-            }
+        if (isUser) {
+            // User messages: use textContent (safe)
+            messageDiv.textContent = message;
         } else {
-            messageDiv.innerHTML = message;
+            // AI responses: escape HTML to prevent XSS
+            messageDiv.textContent = message;
         }
         
         aiMessages.appendChild(messageDiv);
@@ -647,7 +651,7 @@ document.addEventListener('DOMContentLoaded', function() {
             body: JSON.stringify({
                 lesson_id: <?= $lessonId ?>,
                 message: message,
-                ai_prompt: '<?= addslashes(cleanHtml($lesson['ai_prompt'] ?? '')) ?>'
+                ai_prompt: <?= json_encode(cleanHtml($lesson['ai_prompt'] ?? '')) ?>
             })
         })
         .then(response => response.json())
@@ -729,8 +733,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <p class="text-muted mb-3">Du har klarat denna lektion!</p>
                                 ${data.nextLesson ? `
                                     <div class="d-grid">
-                                        <a href="lesson.php?id=${data.nextLesson.id}" class="btn btn-success btn-lg">
-                                            <i class="bi bi-arrow-right-circle-fill me-2"></i> Fortsätt till nästa lektion: <strong>${data.nextLesson.title}</strong>
+                                        <a href="lesson.php?id=${parseInt(data.nextLesson.id)}" class="btn btn-success btn-lg">
+                                            <i class="bi bi-arrow-right-circle-fill me-2"></i> Fortsätt till nästa lektion: <strong>${escapeHtml(data.nextLesson.title)}</strong>
                                         </a>
                                     </div>
                                 ` : '<p class="text-muted">Detta var sista lektionen i denna kurs!</p>'}
@@ -764,10 +768,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Visa felmeddelande
                     const errorDiv = document.createElement('div');
                     errorDiv.className = 'alert alert-danger d-flex align-items-center mb-3';
-                    errorDiv.innerHTML = `
-                        <i class="bi bi-exclamation-circle me-2"></i>
-                        <div>${data.message}</div>
-                    `;
+                    var icon = document.createElement('i');
+                    icon.className = 'bi bi-exclamation-circle me-2';
+                    var msgDiv = document.createElement('div');
+                    msgDiv.textContent = data.message;
+                    errorDiv.appendChild(icon);
+                    errorDiv.appendChild(msgDiv);
                     
                     const quizSection = document.querySelector('.quiz-section');
                     const existingError = quizSection.querySelector('.alert-danger');
