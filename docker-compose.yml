@@ -30,10 +30,10 @@ services:
     image: mariadb:10.11
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: StimmaRoot2025!
-      MYSQL_DATABASE: stimma
-      MYSQL_USER: stimma_user
-      MYSQL_PASSWORD: JOYDfkRJV15lKwBYhh0IMbQA
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
     volumes:
       - /opt/app/stimma/db:/var/lib/mysql
       - /opt/app/stimma/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
