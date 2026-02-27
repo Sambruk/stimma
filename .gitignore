@@ -6,6 +6,9 @@ upload/*
 !upload/.htaccess
 !upload/.gitkeep
 
+# Uploaded PUB agreement PDFs
+docs/pdf/*.pdf
+
 # Log files
 logs/*
 !logs/.gitkeep
