@@ -42,6 +42,9 @@ if (hasPubAgreement($userDomain)) {
 // Hämta aktivt PUB-dokument
 $activePubDoc = getActivePubDocument();
 
+// Kontrollera om mallen är kontrasignerad av Sambruk
+$sambrukSigned = $activePubDoc ? isSambrukSigned($activePubDoc['id']) : false;
+
 $page_title = 'Teckna PUB-avtal';
 $errors = [];
 
@@ -59,6 +62,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sign_agreement'])) {
     // Kontrollera att SMS-verifiering är genomförd
     if (!$smsVerified) {
         $errors[] = 'SMS-verifiering krävs innan avtalet kan tecknas.';
+    }
+
+    // Kontrollera att mallen är kontrasignerad av Sambruk
+    if (!$sambrukSigned) {
+        $errors[] = 'PUB-avtalsmallen har inte kontrasignerats av Sambruk ännu. Avtalet kan inte tecknas förrän detta skett.';
     }
 
     // Hämta och sanera formulärdata
@@ -171,8 +179,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sign_agreement'])) {
                 'sms_phone' => $signerPhone
             ]);
 
-            // Skapa stämplad PDF
+            // Skapa stämplad PDF (med Sambruk-data om tillgänglig)
             $stampedPdf = null;
+            $sambrukSignData = null;
+            if ($activePubDoc && $sambrukSigned) {
+                $sambrukSignData = getSambrukSignatureData($activePubDoc['id']);
+            }
             if ($pdfPath && file_exists($pdfPath)) {
                 $stampedPdf = stampPubAgreementPdf($pdfPath, [
                     'agreement_id' => $agreementId,
@@ -187,7 +199,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sign_agreement'])) {
                     'signed_at' => $signedAt,
                     'pdf_hash' => $pdfHash,
                     'certification_text' => $certificationText
-                ]);
+                ], $sambrukSignData);
             }
 
             // Skicka bekräftelsemail
@@ -303,11 +315,21 @@ require_once 'include/header.php';
                 </div>
                 <div class="card-body">
                     <p class="mb-3">Innan du kan teckna avtalet måste du granska PUB-avtalet. Klicka på knappen nedan för att öppna dokumentet i en ny flik.</p>
-                    <?php if ($activePubDoc): ?>
-                    <a href="docs/pdf/<?= e($activePubDoc['filename']) ?>" target="_blank" class="btn btn-primary" id="viewPdfBtn">
+                    <?php if ($activePubDoc):
+                        // Visa kontrasignerad version om den finns, annars original
+                        $countersignedFilename = preg_replace('/\.pdf$/i', '_kontrasignerad.pdf', $activePubDoc['filename']);
+                        $countersignedPath = __DIR__ . '/docs/pdf/' . $countersignedFilename;
+                        $pdfToShow = file_exists($countersignedPath) ? $countersignedFilename : $activePubDoc['filename'];
+                    ?>
+                    <a href="docs/pdf/<?= e($pdfToShow) ?>" target="_blank" class="btn btn-primary" id="viewPdfBtn">
                         <i class="bi bi-file-earmark-pdf me-2"></i>Visa PUB-avtalet (PDF)
                     </a>
                     <small class="text-muted ms-2">Version <?= e($activePubDoc['version']) ?></small>
+                    <?php if ($sambrukSigned): ?>
+                    <div class="mt-2">
+                        <span class="badge bg-success"><i class="bi bi-patch-check-fill me-1"></i>Kontrasignerat av Sambruk</span>
+                    </div>
+                    <?php endif; ?>
                     <div id="pdfViewedMsg" class="mt-3" style="display:none">
                         <span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>Du har öppnat avtalet. Du kan nu gå vidare till steg 2.</span>
                     </div>
@@ -322,6 +344,13 @@ require_once 'include/header.php';
 
             <?php if (!$activePubDoc): ?>
             <div class="alert alert-secondary">Formuläret är inte tillgängligt förrän ett PUB-avtalsdokument finns uppladdat.</div>
+            <?php elseif (!$sambrukSigned): ?>
+            <div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                <strong>Avtalet kan inte tecknas just nu.</strong><br>
+                PUB-avtalsmallen har inte kontrasignerats av Sambruk ännu. Signeringsflödet öppnas när Sambruks avtalsansvarige har kontrasignerat den aktuella versionen av avtalet.
+                Kontakta <a href="mailto:hjalp@sambruksupport.se" class="alert-link">hjalp@sambruksupport.se</a> vid frågor.
+            </div>
             <?php else: ?>
 
             <!-- Steg 2: Undertecknare & SMS-verifiering (dolt tills PDF granskats) -->

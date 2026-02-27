@@ -99,8 +99,8 @@ if ($isSuperAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
                         'file_hash' => $fileHash
                     ]);
 
-                    $_SESSION['message'] = "PUB-avtalsdokument version " . $version . " har laddats upp och aktiverats.";
-                    $_SESSION['message_type'] = 'success';
+                    $_SESSION['message'] = "PUB-avtalsdokument version " . $version . " har laddats upp och aktiverats. OBS: Dokumentet behöver kontrasigneras av Sambruk innan organisationer kan teckna avtalet.";
+                    $_SESSION['message_type'] = 'warning';
                 } else {
                     $_SESSION['message'] = 'Kunde inte spara filen. Kontrollera filrättigheter.';
                     $_SESSION['message_type'] = 'danger';
@@ -123,8 +123,160 @@ if ($isSuperAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 'doc_id' => $docId
             ]);
 
-            $_SESSION['message'] = 'Dokumentet har aktiverats.';
+            if (!isSambrukSigned($docId)) {
+                $_SESSION['message'] = 'Dokumentet har aktiverats. OBS: Dokumentet saknar Sambruks kontrasignering - organisationer kan inte teckna avtalet förrän det är kontrasignerat.';
+                $_SESSION['message_type'] = 'warning';
+            } else {
+                $_SESSION['message'] = 'Dokumentet har aktiverats.';
+                $_SESSION['message_type'] = 'success';
+            }
+        }
+
+        header('Location: pub_documents.php');
+        exit;
+    }
+
+    if ($action === 'sambruk_sign') {
+        // Kräver super_admin OCH SMS-verifiering
+        if (!$isSuperAdmin) {
+            $_SESSION['message'] = 'Endast super_admin kan kontrasignera.';
+            $_SESSION['message_type'] = 'danger';
+            header('Location: pub_documents.php');
+            exit;
+        }
+
+        if (!isset($_SESSION['sms_verified']) || $_SESSION['sms_verified'] !== true) {
+            $_SESSION['message'] = 'SMS-verifiering krävs för kontrasignering.';
+            $_SESSION['message_type'] = 'danger';
+            header('Location: pub_documents.php');
+            exit;
+        }
+
+        $docId = (int)($_POST['doc_id'] ?? 0);
+        $signerName = trim($_POST['sambruk_signer_name'] ?? '');
+        $signerEmail = trim($_POST['sambruk_signer_email'] ?? '');
+        $signerTitle = trim($_POST['sambruk_signer_title'] ?? '');
+        $signerPhone = $_SESSION['sms_phone_raw'] ?? trim($_POST['sambruk_signer_phone'] ?? '');
+        $certification = isset($_POST['sambruk_certification']) && $_POST['sambruk_certification'] !== '';
+
+        // Validera
+        $signErrors = [];
+        if ($docId <= 0) $signErrors[] = 'Ogiltigt dokument-ID.';
+        if (empty($signerName)) $signErrors[] = 'Namn måste anges.';
+        if (empty($signerEmail) || !filter_var($signerEmail, FILTER_VALIDATE_EMAIL)) $signErrors[] = 'Giltig e-postadress måste anges.';
+        if (!$certification) $signErrors[] = 'Du måste intyga att du har behörighet att kontrasignera.';
+
+        // Hämta dokumentet och kontrollera att det finns
+        $doc = queryOne("SELECT * FROM " . DB_DATABASE . ".pub_agreement_documents WHERE id = ?", [$docId]);
+        if (!$doc) $signErrors[] = 'Dokumentet hittades inte.';
+
+        if (!empty($signErrors)) {
+            $_SESSION['message'] = implode(' ', $signErrors);
+            $_SESSION['message_type'] = 'danger';
+            header('Location: pub_documents.php');
+            exit;
+        }
+
+        // Beräkna signatur-hash
+        $signedAt = date('Y-m-d H:i:s');
+        $ipAddress = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+        $signatureHash = generateSambrukSignatureHash(
+            $doc['file_hash'],
+            $signerName,
+            $signerEmail,
+            $signedAt,
+            $ipAddress
+        );
+
+        $certificationText = "Jag intygar att jag i egenskap av avtalsansvarig för Sambruk har behörighet att kontrasignera detta PUB-avtal (version {$doc['version']}).";
+
+        // Spara
+        $result = saveSambrukSignature($docId, [
+            'signer_name' => $signerName,
+            'signer_email' => $signerEmail,
+            'signer_title' => $signerTitle ?: null,
+            'signer_phone' => $signerPhone ?: null,
+            'user_id' => $_SESSION['user_id'],
+            'ip_address' => $ipAddress,
+            'signature_hash' => $signatureHash,
+            'certification_text' => $certificationText
+        ]);
+
+        if ($result !== null) {
+            logActivity($_SESSION['user_email'], "Kontrasignerade PUB-avtalsdokument version {$doc['version']} (ID: {$docId})", [
+                'action' => 'sambruk_countersign',
+                'doc_id' => $docId,
+                'version' => $doc['version'],
+                'signer_name' => $signerName,
+                'signer_email' => $signerEmail,
+                'signature_hash' => $signatureHash
+            ]);
+
+            // Generera stämplad PDF med kontrasigneringsintyg
+            require_once __DIR__ . '/../include/pdf_stamp.php';
+            $originalPdfPath = $pdfDir . $doc['filename'];
+            // Hämta den nyligen sparade signeringsdatan
+            $savedSambrukData = getSambrukSignatureData($docId);
+            if ($savedSambrukData && file_exists($originalPdfPath)) {
+                $stampedPdfContent = stampSambrukCountersignPdf(
+                    $originalPdfPath,
+                    $savedSambrukData,
+                    $doc['version'],
+                    $doc['file_hash']
+                );
+                if ($stampedPdfContent) {
+                    // Spara stämplad PDF med _kontrasignerad suffix
+                    $stampedFilename = preg_replace('/\.pdf$/i', '_kontrasignerad.pdf', $doc['filename']);
+                    file_put_contents($pdfDir . $stampedFilename, $stampedPdfContent);
+                    logActivity($_SESSION['user_email'], "Skapade kontrasignerad PDF: {$stampedFilename}", [
+                        'action' => 'sambruk_countersign_pdf_created',
+                        'filename' => $stampedFilename
+                    ]);
+                }
+            }
+
+            // Skicka bekräftelsemail
+            require_once __DIR__ . '/../include/mail.php';
+            $siteName = defined('SITE_NAME') ? SITE_NAME : 'Stimma';
+            $subject = "Bekräftelse: Sambruk har kontrasignerat PUB-avtal version {$doc['version']} - {$siteName}";
+            $emailBody = "
+            <!DOCTYPE html><html lang='sv'><head><meta charset='UTF-8'></head>
+            <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;'>
+                <div style='background-color: #d4edda; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #c3e6cb;'>
+                    <h1 style='color: #155724; margin: 0 0 10px 0; font-size: 22px;'>{$siteName} - PUB-avtal kontrasignerat</h1>
+                    <p style='margin: 0; color: #155724;'>Sambruk har kontrasignerat PUB-avtalsmallen</p>
+                </div>
+                <table style='width: 100%; border-collapse: collapse; margin: 20px 0;'>
+                    <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold; width: 40%;'>Version</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($doc['version']) . "</td></tr>
+                    <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>Undertecknare</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($signerName) . "</td></tr>
+                    <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>Titel</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($signerTitle ?: '-') . "</td></tr>
+                    <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>E-post</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($signerEmail) . "</td></tr>
+                    <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>Datum</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($signedAt) . "</td></tr>
+                    <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>SHA-256</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-size: 11px;'>" . e($signatureHash) . "</td></tr>
+                </table>
+                <div style='border-top: 1px solid #dee2e6; padding-top: 15px; margin-top: 20px; color: #6c757d; font-size: 12px;'>
+                    <p>Organisationer kan nu teckna PUB-avtalet digitalt via {$siteName}.</p>
+                </div>
+            </body></html>";
+
+            sendSmtpMail($signerEmail, $subject, $emailBody);
+            sendSmtpMail('admin@sambruk.se', $subject, $emailBody);
+
+            // Rensa SMS-sessionsdata
+            unset(
+                $_SESSION['sms_verified'],
+                $_SESSION['sms_verified_at'],
+                $_SESSION['sms_verified_phone'],
+                $_SESSION['sms_phone'],
+                $_SESSION['sms_phone_raw'],
+                $_SESSION['sms_send_count']
+            );
+
+            $_SESSION['message'] = "PUB-avtal version {$doc['version']} har kontrasignerats av Sambruk. Organisationer kan nu teckna avtalet.";
             $_SESSION['message_type'] = 'success';
+        } else {
+            $_SESSION['message'] = 'Kunde inte spara kontrasigneringen. Försök igen.';
+            $_SESSION['message_type'] = 'danger';
         }
 
         header('Location: pub_documents.php');
@@ -329,6 +481,7 @@ require_once 'include/header.php';
                                     <th>Uppladdad av</th>
                                     <th>Datum</th>
                                     <th class="text-center">Status</th>
+                                    <th class="text-center">Sambruk-signering</th>
                                     <th class="text-end">Åtgärd</th>
                                 </tr>
                             </thead>
@@ -337,9 +490,17 @@ require_once 'include/header.php';
                                 <tr>
                                     <td><strong><?= e($udoc['version']) ?></strong></td>
                                     <td>
-                                        <a href="../docs/pdf/<?= e($udoc['filename']) ?>" target="_blank" title="<?= e($udoc['original_filename']) ?>">
+                                        <?php
+                                        $csFilename = preg_replace('/\.pdf$/i', '_kontrasignerad.pdf', $udoc['filename']);
+                                        $csExists = !empty($udoc['sambruk_signed_at']) && file_exists($docsPath . $csFilename);
+                                        $linkFile = $csExists ? $csFilename : $udoc['filename'];
+                                        ?>
+                                        <a href="../docs/pdf/<?= e($linkFile) ?>" target="_blank" title="<?= e($udoc['original_filename']) ?>">
                                             <i class="bi bi-file-earmark-pdf text-danger me-1"></i><?= e($udoc['original_filename']) ?>
                                         </a>
+                                        <?php if ($csExists): ?>
+                                            <span class="badge bg-success ms-1" title="Inkluderar kontrasigneringsintyg"><i class="bi bi-patch-check-fill"></i></span>
+                                        <?php endif; ?>
                                     </td>
                                     <td><code title="<?= e($udoc['file_hash']) ?>"><?= substr($udoc['file_hash'], 0, 12) ?>...</code></td>
                                     <td><?= e($udoc['uploader_email'] ?? 'Okänd') ?></td>
@@ -349,6 +510,16 @@ require_once 'include/header.php';
                                             <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Aktiv</span>
                                         <?php else: ?>
                                             <span class="badge bg-secondary">Inaktiv</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="text-center">
+                                        <?php if (!empty($udoc['sambruk_signed_at'])): ?>
+                                            <span class="badge bg-success" title="Kontrasignerad av <?= e($udoc['sambruk_signer_name']) ?> den <?= date('Y-m-d H:i', strtotime($udoc['sambruk_signed_at'])) ?>">
+                                                <i class="bi bi-patch-check-fill me-1"></i><?= e($udoc['sambruk_signer_name']) ?>
+                                            </span>
+                                            <br><small class="text-muted"><?= date('Y-m-d', strtotime($udoc['sambruk_signed_at'])) ?></small>
+                                        <?php else: ?>
+                                            <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>Ej kontrasignerad</span>
                                         <?php endif; ?>
                                     </td>
                                     <td class="text-end">
@@ -369,6 +540,154 @@ require_once 'include/header.php';
                             </tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <!-- Superadmin: Kontrasignering av Sambruk -->
+            <?php
+            // Kontrollera om det finns ett aktivt dokument som INTE är kontrasignerat
+            $activeDoc = getActivePubDocument();
+            $needsCountersign = $activeDoc && !isSambrukSigned($activeDoc['id']);
+            $smsVerifiedForSign = isset($_SESSION['sms_verified']) && $_SESSION['sms_verified'] === true;
+            $smsPhoneRaw = $_SESSION['sms_phone_raw'] ?? '';
+            ?>
+            <?php if ($needsCountersign): ?>
+            <div class="card border-warning shadow-sm mb-4">
+                <div class="card-header py-3 bg-warning text-dark">
+                    <h6 class="m-0 fw-bold">
+                        <i class="bi bi-pen me-2"></i>Kontrasignera PUB-avtal (Sambruk)
+                        <span class="badge bg-dark ms-2">Version <?= e($activeDoc['version']) ?></span>
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info mb-3">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>Det aktiva PUB-avtalet (version <?= e($activeDoc['version']) ?>) saknar Sambruks kontrasignering.</strong>
+                        Organisationer kan inte teckna avtalet förrän det är kontrasignerat. Fyll i uppgifterna nedan och verifiera via SMS.
+                    </div>
+
+                    <?php if (!$smsVerifiedForSign): ?>
+                    <!-- SMS-verifieringsflöde -->
+                    <h6 class="mb-3"><i class="bi bi-person me-2"></i>Undertecknaruppgifter</h6>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label for="cs_name" class="form-label">Namn *</label>
+                            <input type="text" class="form-control" id="cs_name" value="<?= e($currentUser['name'] ?? '') ?>">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="cs_email" class="form-label">E-post *</label>
+                            <input type="email" class="form-control" id="cs_email" value="<?= e($_SESSION['user_email'] ?? '') ?>">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="cs_title" class="form-label">Titel (valfritt)</label>
+                            <input type="text" class="form-control" id="cs_title" placeholder="t.ex. Verksamhetschef">
+                        </div>
+                    </div>
+
+                    <hr class="my-3">
+                    <h6 class="mb-3"><i class="bi bi-phone me-2"></i>SMS-verifiering</h6>
+                    <p class="text-muted mb-3">Ange ditt mobilnummer för att få en verifieringskod via SMS.</p>
+                    <div id="csPhoneGroup">
+                        <div class="input-group mb-3" style="max-width: 500px;">
+                            <span class="input-group-text"><i class="bi bi-phone"></i></span>
+                            <input type="tel" class="form-control" id="csPhone" placeholder="070-123 45 67 eller +46701234567">
+                            <button type="button" class="btn btn-primary" id="csSendSmsBtn">
+                                <i class="bi bi-send me-1"></i>Skicka kod
+                            </button>
+                        </div>
+                    </div>
+                    <div id="csCodeGroup" style="display:none">
+                        <div class="input-group mb-3" style="max-width: 500px;">
+                            <span class="input-group-text"><i class="bi bi-key"></i></span>
+                            <input type="text" class="form-control" id="csCode" placeholder="6-siffrig kod" maxlength="6" pattern="\d{6}" inputmode="numeric">
+                            <button type="button" class="btn btn-success" id="csVerifySmsBtn">
+                                <i class="bi bi-check-lg me-1"></i>Verifiera
+                            </button>
+                        </div>
+                        <button type="button" class="btn btn-link btn-sm p-0" id="csResendSmsBtn">Skicka ny kod</button>
+                    </div>
+                    <div id="csStatus" class="mt-2" style="display:none"></div>
+
+                    <?php else: ?>
+                    <!-- SMS redan verifierad - visa signeringsformulär -->
+                    <div class="alert alert-success mb-3">
+                        <i class="bi bi-check-circle-fill me-2"></i>
+                        <strong>SMS-verifiering genomförd!</strong> Telefonnummer: <?= e($smsPhoneRaw) ?>
+                    </div>
+
+                    <form method="POST" action="pub_documents.php" id="sambrukSignForm">
+                        <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
+                        <input type="hidden" name="action" value="sambruk_sign">
+                        <input type="hidden" name="doc_id" value="<?= (int)$activeDoc['id'] ?>">
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label for="sambruk_signer_name" class="form-label">Namn *</label>
+                                <input type="text" class="form-control" id="sambruk_signer_name" name="sambruk_signer_name"
+                                       value="<?= e($currentUser['name'] ?? '') ?>" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="sambruk_signer_email" class="form-label">E-post *</label>
+                                <input type="email" class="form-control" id="sambruk_signer_email" name="sambruk_signer_email"
+                                       value="<?= e($_SESSION['user_email'] ?? '') ?>" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="sambruk_signer_title" class="form-label">Titel (valfritt)</label>
+                                <input type="text" class="form-control" id="sambruk_signer_title" name="sambruk_signer_title"
+                                       placeholder="t.ex. Verksamhetschef">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Telefon (SMS-verifierad)</label>
+                                <input type="text" class="form-control" value="<?= e($smsPhoneRaw) ?>" readonly>
+                                <input type="hidden" name="sambruk_signer_phone" value="<?= e($smsPhoneRaw) ?>">
+                            </div>
+                        </div>
+
+                        <div class="form-check mb-4">
+                            <input class="form-check-input" type="checkbox" id="sambruk_certification" name="sambruk_certification" value="1" required>
+                            <label class="form-check-label" for="sambruk_certification">
+                                <strong>Jag intygar att jag i egenskap av avtalsansvarig för Sambruk har behörighet att kontrasignera detta PUB-avtal.</strong>
+                            </label>
+                        </div>
+
+                        <button type="submit" class="btn btn-warning btn-lg"
+                                onclick="return confirm('Kontrasignera PUB-avtal version <?= e($activeDoc['version']) ?>? Denna åtgärd kan inte ångras.')">
+                            <i class="bi bi-pen me-2"></i>Kontrasignera PUB-avtal
+                        </button>
+                    </form>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <?php elseif ($activeDoc && isSambrukSigned($activeDoc['id'])): ?>
+            <?php $sambrukData = getSambrukSignatureData($activeDoc['id']); ?>
+            <div class="card border-success shadow-sm mb-4">
+                <div class="card-header py-3 bg-success text-white">
+                    <h6 class="m-0 fw-bold">
+                        <i class="bi bi-patch-check-fill me-2"></i>Sambruks kontrasignering
+                        <span class="badge bg-light text-success ms-2">Version <?= e($activeDoc['version']) ?></span>
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <p class="mb-1"><strong>Undertecknare:</strong></p>
+                            <p class="text-muted"><?= e($sambrukData['sambruk_signer_name']) ?>
+                                <?php if (!empty($sambrukData['sambruk_signer_title'])): ?>
+                                    <br><small>(<?= e($sambrukData['sambruk_signer_title']) ?>)</small>
+                                <?php endif; ?>
+                            </p>
+                        </div>
+                        <div class="col-md-4">
+                            <p class="mb-1"><strong>E-post:</strong></p>
+                            <p class="text-muted"><?= e($sambrukData['sambruk_signer_email']) ?></p>
+                        </div>
+                        <div class="col-md-4">
+                            <p class="mb-1"><strong>Signerat:</strong></p>
+                            <p class="text-muted"><?= date('Y-m-d H:i', strtotime($sambrukData['sambruk_signed_at'])) ?></p>
+                        </div>
+                    </div>
+                    <p class="mb-0"><strong>Signatur-hash:</strong> <code style="font-size: 0.8em;"><?= e($sambrukData['sambruk_signature_hash']) ?></code></p>
                 </div>
             </div>
             <?php endif; ?>
@@ -702,5 +1021,107 @@ require_once 'include/header.php';
     box-shadow: none;
 }
 </style>
+
+<?php if ($isSuperAdmin && $needsCountersign && !$smsVerifiedForSign): ?>
+<script>
+(function() {
+    var csrfToken = '<?= e($_SESSION['csrf_token']) ?>';
+    var csSendBtn = document.getElementById('csSendSmsBtn');
+    var csVerifyBtn = document.getElementById('csVerifySmsBtn');
+    var csResendBtn = document.getElementById('csResendSmsBtn');
+    var csPhoneInput = document.getElementById('csPhone');
+    var csCodeInput = document.getElementById('csCode');
+    var csCodeGroup = document.getElementById('csCodeGroup');
+    var csStatus = document.getElementById('csStatus');
+
+    function csShowStatus(msg, type) {
+        if (!csStatus) return;
+        csStatus.style.display = '';
+        csStatus.className = 'mt-2 alert alert-' + type;
+        csStatus.innerHTML = msg;
+    }
+
+    function csSendSms() {
+        var phone = csPhoneInput ? csPhoneInput.value.trim() : '';
+        if (!phone) { csShowStatus('<i class="bi bi-exclamation-circle me-1"></i>Ange ett telefonnummer.', 'warning'); return; }
+
+        // Validera att namn och e-post är ifyllda
+        var name = document.getElementById('cs_name') ? document.getElementById('cs_name').value.trim() : '';
+        var email = document.getElementById('cs_email') ? document.getElementById('cs_email').value.trim() : '';
+        if (!name) { csShowStatus('<i class="bi bi-exclamation-circle me-1"></i>Namn måste anges.', 'warning'); return; }
+        if (!email) { csShowStatus('<i class="bi bi-exclamation-circle me-1"></i>E-post måste anges.', 'warning'); return; }
+
+        if (csSendBtn) { csSendBtn.disabled = true; csSendBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Skickar...'; }
+
+        var fd = new FormData();
+        fd.append('action', 'send_sms');
+        fd.append('phone', phone);
+        fd.append('csrf_token', csrfToken);
+
+        fetch('../pub_agreement_ajax.php', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                csShowStatus('<i class="bi bi-check-circle me-1"></i>Verifieringskod skickad till ' + phone, 'success');
+                if (csCodeGroup) csCodeGroup.style.display = '';
+                if (csCodeInput) csCodeInput.focus();
+                // Lås fälten
+                if (csPhoneInput) csPhoneInput.readOnly = true;
+                var csName = document.getElementById('cs_name');
+                var csEmail = document.getElementById('cs_email');
+                var csTitle = document.getElementById('cs_title');
+                if (csName) csName.readOnly = true;
+                if (csEmail) csEmail.readOnly = true;
+                if (csTitle) csTitle.readOnly = true;
+            } else {
+                csShowStatus('<i class="bi bi-exclamation-circle me-1"></i>' + (data.error || 'Kunde inte skicka SMS.'), 'danger');
+            }
+        })
+        .catch(function() { csShowStatus('<i class="bi bi-exclamation-circle me-1"></i>Nätverksfel. Försök igen.', 'danger'); })
+        .finally(function() {
+            if (csSendBtn) { csSendBtn.disabled = false; csSendBtn.innerHTML = '<i class="bi bi-send me-1"></i>Skicka kod'; }
+        });
+    }
+
+    function csVerifySms() {
+        var code = csCodeInput ? csCodeInput.value.trim() : '';
+        if (!code || !/^\d{6}$/.test(code)) { csShowStatus('<i class="bi bi-exclamation-circle me-1"></i>Ange en 6-siffrig kod.', 'warning'); return; }
+
+        if (csVerifyBtn) { csVerifyBtn.disabled = true; csVerifyBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Verifierar...'; }
+
+        var fd = new FormData();
+        fd.append('action', 'verify_sms');
+        fd.append('code', code);
+        fd.append('csrf_token', csrfToken);
+
+        fetch('../pub_agreement_ajax.php', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                // Ladda om sidan - nu visas signeringsformuläret
+                window.location.reload();
+            } else {
+                csShowStatus('<i class="bi bi-exclamation-circle me-1"></i>' + (data.error || 'Felaktig kod.'), 'danger');
+            }
+        })
+        .catch(function() { csShowStatus('<i class="bi bi-exclamation-circle me-1"></i>Nätverksfel. Försök igen.', 'danger'); })
+        .finally(function() {
+            if (csVerifyBtn) { csVerifyBtn.disabled = false; csVerifyBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Verifiera'; }
+        });
+    }
+
+    if (csSendBtn) csSendBtn.addEventListener('click', csSendSms);
+    if (csResendBtn) csResendBtn.addEventListener('click', csSendSms);
+    if (csVerifyBtn) csVerifyBtn.addEventListener('click', csVerifySms);
+
+    if (csCodeInput) {
+        csCodeInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); csVerifySms(); } });
+    }
+    if (csPhoneInput) {
+        csPhoneInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); csSendSms(); } });
+    }
+})();
+</script>
+<?php endif; ?>
 
 <?php require_once 'include/footer.php'; ?>

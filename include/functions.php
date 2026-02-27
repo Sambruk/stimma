@@ -765,6 +765,84 @@ function getPubAgreementArtifact($domain) {
     );
 }
 
+/**
+ * Kontrollera om ett PUB-avtalsdokument har Sambruks kontrasignering
+ *
+ * @param int $docId Dokument-ID i pub_agreement_documents
+ * @return bool True om dokumentet är kontrasignerat av Sambruk
+ */
+function isSambrukSigned($docId) {
+    $doc = queryOne(
+        "SELECT sambruk_signed_at FROM " . DB_DATABASE . ".pub_agreement_documents WHERE id = ?",
+        [$docId]
+    );
+    return $doc && !empty($doc['sambruk_signed_at']);
+}
+
+/**
+ * Hämta Sambruks signeringsdata för ett PUB-avtalsdokument
+ *
+ * @param int $docId Dokument-ID i pub_agreement_documents
+ * @return array|null Sambruk-signeringsdata eller null
+ */
+function getSambrukSignatureData($docId) {
+    return queryOne(
+        "SELECT sambruk_signed_at, sambruk_signer_name, sambruk_signer_email,
+                sambruk_signer_title, sambruk_signer_phone, sambruk_signer_user_id,
+                sambruk_ip_address, sambruk_signature_hash, sambruk_certification_text
+         FROM " . DB_DATABASE . ".pub_agreement_documents WHERE id = ?",
+        [$docId]
+    );
+}
+
+/**
+ * Spara Sambruks kontrasignering för ett PUB-avtalsdokument
+ *
+ * @param int $docId Dokument-ID i pub_agreement_documents
+ * @param array $data Signeringsdata med nycklar: signer_name, signer_email, signer_title, signer_phone, user_id, ip_address, signature_hash, certification_text
+ * @return int|null Antal uppdaterade rader eller null vid fel
+ */
+function saveSambrukSignature($docId, $data) {
+    return execute(
+        "UPDATE " . DB_DATABASE . ".pub_agreement_documents
+         SET sambruk_signed_at = NOW(),
+             sambruk_signer_name = ?,
+             sambruk_signer_email = ?,
+             sambruk_signer_title = ?,
+             sambruk_signer_phone = ?,
+             sambruk_signer_user_id = ?,
+             sambruk_ip_address = ?,
+             sambruk_signature_hash = ?,
+             sambruk_certification_text = ?
+         WHERE id = ?",
+        [
+            $data['signer_name'],
+            $data['signer_email'],
+            $data['signer_title'] ?? null,
+            $data['signer_phone'] ?? null,
+            $data['user_id'],
+            $data['ip_address'],
+            $data['signature_hash'],
+            $data['certification_text'],
+            $docId
+        ]
+    );
+}
+
+/**
+ * Generera signatur-hash för Sambruks kontrasignering
+ *
+ * @param string $fileHash PDF-filens SHA-256-hash
+ * @param string $name Undertecknarens namn
+ * @param string $email Undertecknarens e-post
+ * @param string $signedAt Signeringstidpunkt (Y-m-d H:i:s)
+ * @param string $ip IP-adress
+ * @return string SHA-256-hash
+ */
+function generateSambrukSignatureHash($fileHash, $name, $email, $signedAt, $ip) {
+    return hash('sha256', implode('|', [$fileHash, $name, $email, $signedAt, $ip]));
+}
+
 function sendPermissionChangeNotification($userEmail, $changeType, $newStatus, $changedByEmail) {
     require_once __DIR__ . '/mail.php';
 
