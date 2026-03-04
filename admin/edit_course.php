@@ -72,6 +72,19 @@ $availableTags = query(
     [$userDomain]
 );
 
+// Hämta organisationstaggar för domänen
+$availableOrgTags = getOrgTagsForDomain($userDomain);
+
+// Hämta kursens nuvarande organisationstaggar
+$courseOrgTags = [];
+if (isset($_GET['id'])) {
+    $courseOrgTagRows = query(
+        "SELECT tag FROM " . DB_DATABASE . ".course_org_tags WHERE course_id = ?",
+        [$courseId]
+    );
+    $courseOrgTags = array_column($courseOrgTagRows, 'tag');
+}
+
 // Hantera formulärskickning
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Validera CSRF-token
@@ -86,6 +99,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $description = trim($_POST['description'] ?? '');
     $status = isset($_POST['status']) && $_POST['status'] === 'active' ? 'active' : 'inactive';
     $deadline = !empty($_POST['deadline']) ? $_POST['deadline'] : null;
+    $sequentialMode = isset($_POST['sequential_mode']) ? 1 : 0;
+    $sequentialIntervalDays = max(1, min(365, (int)($_POST['sequential_interval_days'] ?? 7)));
+    $sequentialReminderDelayDays = max(1, min(90, (int)($_POST['sequential_reminder_delay_days'] ?? 3)));
+    $startDate = !empty($_POST['start_date']) ? $_POST['start_date'] : null;
+    $seqNewLessonSubject = trim($_POST['seq_new_lesson_subject'] ?? '') ?: null;
+    $seqNewLessonBody = trim($_POST['seq_new_lesson_body'] ?? '') ?: null;
+    $seqReminderSubject = trim($_POST['seq_reminder_subject'] ?? '') ?: null;
+    $seqReminderBody = trim($_POST['seq_reminder_body'] ?? '') ?: null;
+    // Sätt sequential_status till 'pending' om stegvis läge + startdatum
+    $sequentialStatus = null;
+    if ($sequentialMode && $startDate) {
+        $existingStatus = $course['sequential_status'] ?? null;
+        $sequentialStatus = ($existingStatus && $existingStatus !== 'pending') ? $existingStatus : 'pending';
+    }
     $imageUrl = $course['image_url'] ?? null;
     
     if (empty($title)) {
@@ -146,10 +173,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         description = ?,
                         status = ?,
                         deadline = ?,
+                        start_date = ?,
+                        sequential_mode = ?,
+                        sequential_interval_days = ?,
+                        sequential_reminder_delay_days = ?,
+                        seq_new_lesson_subject = ?,
+                        seq_new_lesson_body = ?,
+                        seq_reminder_subject = ?,
+                        seq_reminder_body = ?,
+                        sequential_status = ?,
                         image_url = ?,
                         updated_at = NOW()
                         WHERE id = ?",
-                        [$title, $description, $status, $deadline, $imageUrl, $_GET['id']]);
+                        [$title, $description, $status, $deadline, $startDate, $sequentialMode, $sequentialIntervalDays, $sequentialReminderDelayDays, $seqNewLessonSubject, $seqNewLessonBody, $seqReminderSubject, $seqReminderBody, $sequentialStatus, $imageUrl, $_GET['id']]);
 
                 // Uppdatera kursens taggar
                 // Ta bort befintliga taggar
@@ -171,6 +207,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
 
+                // Uppdatera organisationstaggar
+                execute("DELETE FROM " . DB_DATABASE . ".course_org_tags WHERE course_id = ?", [$_GET['id']]);
+                $selectedOrgTags = $_POST['org_tags'] ?? [];
+                $domainOrgTags = array_column(getOrgTagsForDomain($userDomain), 'tag');
+                foreach ($selectedOrgTags as $orgTag) {
+                    if (in_array($orgTag, $domainOrgTags)) {
+                        execute(
+                            "INSERT INTO " . DB_DATABASE . ".course_org_tags (course_id, tag) VALUES (?, ?)",
+                            [$_GET['id'], $orgTag]
+                        );
+                    }
+                }
+
                 $_SESSION['message'] = 'Kursen har uppdaterats.';
             } else {
                 // Hitta högsta sort_order
@@ -183,9 +232,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 // Skapa ny kurs med nästa sort_order och organization_domain
                 execute("INSERT INTO " . DB_DATABASE . ".courses
-                        (title, description, status, deadline, sort_order, image_url, author_id, organization_domain, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
-                        [$title, $description, $status, $deadline, $maxOrder + 1, $imageUrl, $authorId, $organizationDomain]);
+                        (title, description, status, deadline, start_date, sequential_mode, sequential_interval_days, sequential_reminder_delay_days, seq_new_lesson_subject, seq_new_lesson_body, seq_reminder_subject, seq_reminder_body, sequential_status, sort_order, image_url, author_id, organization_domain, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                        [$title, $description, $status, $deadline, $startDate, $sequentialMode, $sequentialIntervalDays, $sequentialReminderDelayDays, $seqNewLessonSubject, $seqNewLessonBody, $seqReminderSubject, $seqReminderBody, $sequentialStatus, $maxOrder + 1, $imageUrl, $authorId, $organizationDomain]);
 
                 // Hämta det nya kurs-ID:t
                 $newCourseId = getDb()->lastInsertId();
@@ -212,6 +261,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
 
+                // Lägg till organisationstaggar för ny kurs
+                $selectedOrgTags = $_POST['org_tags'] ?? [];
+                $domainOrgTags = array_column(getOrgTagsForDomain($userDomain), 'tag');
+                foreach ($selectedOrgTags as $orgTag) {
+                    if (in_array($orgTag, $domainOrgTags)) {
+                        execute(
+                            "INSERT INTO " . DB_DATABASE . ".course_org_tags (course_id, tag) VALUES (?, ?)",
+                            [$newCourseId, $orgTag]
+                        );
+                    }
+                }
+
                 $_SESSION['message'] = 'Kursen har skapats.';
             }
 
@@ -233,8 +294,11 @@ require_once 'include/header.php';
     <div class="row">
         <div class="col-12">
             <div class="card shadow mb-4">
-                <div class="card-header py-3">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
                     <h6 class="m-0 font-weight-bold text-muted"><?= $page_title ?></h6>
+                    <?php if ($course): ?>
+                        <span class="badge bg-secondary">ID: <?= $course['id'] ?></span>
+                    <?php endif; ?>
                 </div>
                 <div class="card-body">
                     <?php if (isset($error)): ?>
@@ -306,6 +370,217 @@ require_once 'include/header.php';
                             </div>
                         </div>
 
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="sequential_mode" name="sequential_mode"
+                                           value="1" <?= ($course['sequential_mode'] ?? 0) ? 'checked' : '' ?>>
+                                    <label class="form-check-label fw-bold" for="sequential_mode">Stegvisa lektioner</label>
+                                </div>
+                                <div class="form-text mb-3">
+                                    Aktivera för att skicka ut en lektion i taget med tidsstyrt intervall. Användare måste klara varje lektion innan nästa blir tillgänglig.
+                                </div>
+                                <div id="sequentialSettings" style="display: <?= ($course['sequential_mode'] ?? 0) ? 'block' : 'none' ?>;">
+                                    <?php if (!empty($course['sequential_status'])): ?>
+                                    <div class="mb-3">
+                                        <?php
+                                        $statusBadges = [
+                                            'pending' => '<span class="badge bg-secondary">Väntar</span>',
+                                            'sending' => '<span class="badge bg-warning text-dark">Skickar</span>',
+                                            'active' => '<span class="badge bg-success">Aktiv</span>',
+                                            'completed' => '<span class="badge bg-info">Slutförd</span>',
+                                        ];
+                                        echo 'Status: ' . ($statusBadges[$course['sequential_status']] ?? '<span class="badge bg-light text-dark">' . htmlspecialchars($course['sequential_status']) . '</span>');
+                                        ?>
+                                    </div>
+                                    <?php endif; ?>
+
+                                    <div class="row g-3 mb-3">
+                                        <div class="col-md-4">
+                                            <label for="sequential_interval_days" class="form-label">Dagar mellan lektioner</label>
+                                            <input type="number" class="form-control" id="sequential_interval_days" name="sequential_interval_days"
+                                                   value="<?= htmlspecialchars($course['sequential_interval_days'] ?? 7) ?>" min="1" max="365">
+                                            <div class="form-text">Dagar innan nästa lektion efter avklarad.</div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="sequential_reminder_delay_days" class="form-label">Påminnelse efter (dagar)</label>
+                                            <input type="number" class="form-control" id="sequential_reminder_delay_days" name="sequential_reminder_delay_days"
+                                                   value="<?= htmlspecialchars($course['sequential_reminder_delay_days'] ?? 3) ?>" min="1" max="90">
+                                            <div class="form-text">Dagar innan påminnelse skickas.</div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="start_date" class="form-label">Startdatum</label>
+                                            <input type="date" class="form-control" id="start_date" name="start_date"
+                                                   value="<?= htmlspecialchars($course['start_date'] ?? '') ?>">
+                                            <div class="form-text">Kursen startar automatiskt detta datum.</div>
+                                        </div>
+                                    </div>
+
+                                    <!-- E-postmall: Ny lektion -->
+                                    <div class="card mb-3 border-success">
+                                        <div class="card-header bg-success bg-opacity-10">
+                                            <h6 class="m-0"><i class="bi bi-envelope-plus me-2"></i>E-postmall: Ny lektion</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="mb-2">
+                                                <label for="seq_new_lesson_subject" class="form-label">Ämnesrad</label>
+                                                <input type="text" class="form-control" id="seq_new_lesson_subject" name="seq_new_lesson_subject"
+                                                       value="<?= htmlspecialchars($course['seq_new_lesson_subject'] ?? '') ?>"
+                                                       placeholder="Ny lektion tillgänglig: {{lesson_title}}">
+                                            </div>
+                                            <div class="mb-0">
+                                                <label for="seq_new_lesson_body" class="form-label">Brödtext</label>
+                                                <textarea class="form-control" id="seq_new_lesson_body" name="seq_new_lesson_body" rows="5"
+                                                          placeholder="Hej {{user_name}}!&#10;&#10;En ny lektion i kursen {{course_title}} är tillgänglig:&#10;{{lesson_title}}&#10;&#10;Gå till lektionen: {{lesson_url}}"><?= htmlspecialchars($course['seq_new_lesson_body'] ?? '') ?></textarea>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- E-postmall: Påminnelse -->
+                                    <div class="card mb-3 border-warning">
+                                        <div class="card-header bg-warning bg-opacity-10">
+                                            <h6 class="m-0"><i class="bi bi-bell me-2"></i>E-postmall: Påminnelse</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="mb-2">
+                                                <label for="seq_reminder_subject" class="form-label">Ämnesrad</label>
+                                                <input type="text" class="form-control" id="seq_reminder_subject" name="seq_reminder_subject"
+                                                       value="<?= htmlspecialchars($course['seq_reminder_subject'] ?? '') ?>"
+                                                       placeholder="Påminnelse: {{lesson_title}} väntar på dig">
+                                            </div>
+                                            <div class="mb-0">
+                                                <label for="seq_reminder_body" class="form-label">Brödtext</label>
+                                                <textarea class="form-control" id="seq_reminder_body" name="seq_reminder_body" rows="5"
+                                                          placeholder="Hej {{user_name}}!&#10;&#10;Du har en lektion som väntar: {{lesson_title}}&#10;i kursen {{course_title}}.&#10;&#10;Gå till lektionen: {{lesson_url}}"><?= htmlspecialchars($course['seq_reminder_body'] ?? '') ?></textarea>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Variabellista -->
+                                    <div class="alert alert-info mb-3">
+                                        <i class="bi bi-braces me-2"></i><strong>Tillgängliga variabler:</strong><br>
+                                        <code>{{user_name}}</code> <code>{{user_email}}</code> <code>{{course_title}}</code>
+                                        <code>{{lesson_title}}</code> <code>{{lesson_url}}</code> <code>{{lesson_number}}</code>
+                                        <code>{{total_lessons}}</code> <code>{{course_url}}</code> <code>{{deadline}}</code>
+                                        <code>{{days_remaining}}</code> <code>{{system_name}}</code>
+                                        <br><small class="text-muted">Lämna mallarna tomma för att använda standardmallen.</small>
+                                    </div>
+
+                                    <?php if (isset($_GET['id'])): ?>
+                                    <!-- Testmail -->
+                                    <div class="card mb-3 border-info">
+                                        <div class="card-header bg-info bg-opacity-10">
+                                            <h6 class="m-0"><i class="bi bi-envelope-check me-2"></i>Skicka testmail</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="input-group">
+                                                <input type="email" class="form-control" id="seqTestEmail" placeholder="din@epost.se"
+                                                       value="<?= htmlspecialchars($_SESSION['user_email'] ?? '') ?>">
+                                                <button type="button" class="btn btn-info" id="sendSeqTestBtn">
+                                                    <i class="bi bi-send me-1"></i>Skicka test
+                                                </button>
+                                            </div>
+                                            <div id="seqTestResult" class="mt-2" style="display: none;"></div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Starta utskick nu -->
+                                    <?php if (empty($course['sequential_status']) || $course['sequential_status'] === 'pending'): ?>
+                                    <div class="card mb-3 border-primary">
+                                        <div class="card-body text-center">
+                                            <p class="mb-2 text-muted">Registrera alla berörda användare och skicka första lektionen.</p>
+                                            <button type="button" class="btn btn-primary" id="triggerStartBtn">
+                                                <i class="bi bi-play-circle me-1"></i>Starta utskick nu
+                                            </button>
+                                            <div id="triggerStartResult" class="mt-2" style="display: none;"></div>
+                                        </div>
+                                    </div>
+                                    <?php endif; ?>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
+                        <script>
+                        document.getElementById('sequential_mode').addEventListener('change', function() {
+                            document.getElementById('sequentialSettings').style.display = this.checked ? 'block' : 'none';
+                        });
+
+                        // Testmail
+                        const seqTestBtn = document.getElementById('sendSeqTestBtn');
+                        if (seqTestBtn) {
+                            seqTestBtn.addEventListener('click', function() {
+                                const btn = this;
+                                const email = document.getElementById('seqTestEmail').value;
+                                const resultDiv = document.getElementById('seqTestResult');
+
+                                if (!email) { resultDiv.style.display = 'block'; resultDiv.className = 'mt-2 alert alert-danger'; resultDiv.textContent = 'Ange en e-postadress.'; return; }
+
+                                btn.disabled = true;
+                                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Skickar...';
+                                resultDiv.style.display = 'none';
+
+                                const formData = new FormData();
+                                formData.append('course_id', '<?= (int)($_GET['id'] ?? 0) ?>');
+                                formData.append('test_email', email);
+                                formData.append('csrf_token', '<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>');
+
+                                fetch('ajax/send_sequential_test_email.php', { method: 'POST', body: formData })
+                                    .then(r => r.json())
+                                    .then(data => {
+                                        resultDiv.style.display = 'block';
+                                        resultDiv.className = 'mt-2 alert ' + (data.success ? 'alert-success' : 'alert-danger');
+                                        resultDiv.textContent = data.message;
+                                    })
+                                    .catch(() => {
+                                        resultDiv.style.display = 'block';
+                                        resultDiv.className = 'mt-2 alert alert-danger';
+                                        resultDiv.textContent = 'Nätverksfel.';
+                                    })
+                                    .finally(() => {
+                                        btn.disabled = false;
+                                        btn.innerHTML = '<i class="bi bi-send me-1"></i>Skicka test';
+                                    });
+                            });
+                        }
+
+                        // Starta utskick
+                        const triggerBtn = document.getElementById('triggerStartBtn');
+                        if (triggerBtn) {
+                            triggerBtn.addEventListener('click', function() {
+                                if (!confirm('Vill du starta utskicket? Alla berörda användare kommer registreras och få första lektionen.')) return;
+
+                                const btn = this;
+                                const resultDiv = document.getElementById('triggerStartResult');
+
+                                btn.disabled = true;
+                                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Startar...';
+                                resultDiv.style.display = 'none';
+
+                                const formData = new FormData();
+                                formData.append('course_id', '<?= (int)($_GET['id'] ?? 0) ?>');
+                                formData.append('csrf_token', '<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>');
+
+                                fetch('ajax/trigger_sequential_start.php', { method: 'POST', body: formData })
+                                    .then(r => r.json())
+                                    .then(data => {
+                                        resultDiv.style.display = 'block';
+                                        resultDiv.className = 'mt-2 alert ' + (data.success ? 'alert-success' : 'alert-danger');
+                                        resultDiv.textContent = data.message;
+                                        if (data.success) { btn.style.display = 'none'; }
+                                    })
+                                    .catch(() => {
+                                        resultDiv.style.display = 'block';
+                                        resultDiv.className = 'mt-2 alert alert-danger';
+                                        resultDiv.textContent = 'Nätverksfel.';
+                                    })
+                                    .finally(() => {
+                                        btn.disabled = false;
+                                        btn.innerHTML = '<i class="bi bi-play-circle me-1"></i>Starta utskick nu';
+                                    });
+                            });
+                        }
+                        </script>
+
                         <?php if (!empty($availableTags)): ?>
                         <div class="mb-3">
                             <label class="form-label">Taggar</label>
@@ -336,6 +611,257 @@ require_once 'include/header.php';
                                 <i class="bi bi-info-circle me-2"></i>
                                 Inga taggar har skapats för din organisation ännu.
                                 <a href="tags.php" class="alert-link">Skapa taggar</a>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+
+                        <?php if (!empty($availableOrgTags)): ?>
+                        <?php
+                        // Sortera i bokstavsordning
+                        $sortedOrgTags = $availableOrgTags;
+                        usort($sortedOrgTags, function($a, $b) { return strcasecmp($a['tag'], $b['tag']); });
+
+                        // Dela upp i 5 kolumner, jämnt fördelade
+                        $colCount = 5;
+                        $totalTags = count($sortedOrgTags);
+                        $perCol = (int)ceil($totalTags / $colCount);
+                        $columns = [];
+                        for ($i = 0; $i < $colCount; $i++) {
+                            $columns[$i] = array_slice($sortedOrgTags, $i * $perCol, $perCol);
+                        }
+                        // Beräkna bokstavsetikett per kolumn
+                        $colLabels = [];
+                        foreach ($columns as $ci => $colTags) {
+                            if (empty($colTags)) {
+                                $colLabels[$ci] = '';
+                                continue;
+                            }
+                            $first = mb_strtoupper(mb_substr($colTags[0]['tag'], 0, 1));
+                            $last = mb_strtoupper(mb_substr(end($colTags)['tag'], 0, 1));
+                            $colLabels[$ci] = ($first === $last) ? $first : $first . '–' . $last;
+                        }
+                        ?>
+                        <div class="mb-3">
+                            <label class="form-label">Organisationstaggar</label>
+                            <div class="form-text mb-2">
+                                Begränsa vilka delar av organisationen som ska se kursen. Lämna tomt för att visa kursen för alla.
+                            </div>
+
+                            <!-- Valda taggar -->
+                            <div id="selectedOrgTags" class="mb-2 d-flex flex-wrap gap-1">
+                                <?php foreach ($sortedOrgTags as $orgTag):
+                                    if (in_array($orgTag['tag'], $courseOrgTags)):
+                                ?>
+                                <span class="badge bg-success d-inline-flex align-items-center py-2 px-3 selected-org-tag" data-tag="<?= htmlspecialchars($orgTag['tag']) ?>">
+                                    <?= htmlspecialchars($orgTag['tag']) ?>
+                                    <button type="button" class="btn-close btn-close-white ms-2" style="font-size: .55rem;" aria-label="Ta bort"></button>
+                                    <input type="hidden" name="org_tags[]" value="<?= htmlspecialchars($orgTag['tag']) ?>">
+                                </span>
+                                <?php
+                                    endif;
+                                endforeach; ?>
+                            </div>
+
+                            <!-- Sökfält + knappar -->
+                            <div class="input-group input-group-sm mb-2">
+                                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                                <input type="text" class="form-control" id="orgTagSearch" placeholder="Sök organisationstaggar..." autocomplete="off">
+                                <button type="button" class="btn btn-outline-secondary" id="orgTagSelectAll" title="Markera alla synliga">Alla</button>
+                                <button type="button" class="btn btn-outline-secondary" id="orgTagClearAll" title="Rensa alla">Rensa</button>
+                            </div>
+
+                            <!-- 5-kolumns tagg-lista -->
+                            <div id="orgTagList" style="max-height: 340px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: .375rem; background: #fff;">
+                                <div class="row g-0">
+                                    <?php foreach ($columns as $ci => $colTags): ?>
+                                    <?php if (!empty($colTags)): ?>
+                                    <div class="col org-tag-column" style="min-width: 0; border-right: <?= $ci < $colCount - 1 ? '1px solid #dee2e6' : 'none' ?>;">
+                                        <div class="px-2 py-1 bg-light border-bottom text-center" style="position: sticky; top: 0; z-index: 1;">
+                                            <small class="fw-bold text-muted"><?= $colLabels[$ci] ?></small>
+                                        </div>
+                                        <?php foreach ($colTags as $orgTag):
+                                            $isSelected = in_array($orgTag['tag'], $courseOrgTags);
+                                        ?>
+                                        <div class="org-tag-item px-2 py-1 <?= $isSelected ? 'org-tag-selected' : '' ?>"
+                                             data-tag="<?= htmlspecialchars($orgTag['tag']) ?>"
+                                             data-search="<?= htmlspecialchars(mb_strtolower($orgTag['tag'])) ?>"
+                                             role="button"
+                                             style="cursor: pointer; font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+                                             title="<?= htmlspecialchars($orgTag['tag']) ?>">
+                                            <i class="bi bi-check-circle-fill text-success me-1 org-tag-icon-sel" style="display: <?= $isSelected ? 'inline' : 'none' ?>;"></i>
+                                            <i class="bi bi-plus-circle text-muted me-1 org-tag-icon-add" style="display: <?= $isSelected ? 'none' : 'inline' ?>;"></i>
+                                            <span><?= htmlspecialchars($orgTag['tag']) ?></span>
+                                        </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                    <?php endif; ?>
+                                    <?php endforeach; ?>
+                                </div>
+                                <div id="orgTagNoResults" class="text-muted text-center py-3" style="display: none;">
+                                    Inga taggar matchar sökningen.
+                                </div>
+                            </div>
+                            <div class="form-text mt-1">
+                                <span id="orgTagCount"><?= count($courseOrgTags) ?></span> av <?= $totalTags ?> taggar valda.
+                            </div>
+                        </div>
+                        <style>
+                        .org-tag-item:hover { background-color: #f0f7ff; }
+                        .org-tag-item.org-tag-selected { background-color: #e8f5e9; }
+                        .org-tag-item.org-tag-hidden { display: none !important; }
+                        </style>
+                        <script>
+                        (function() {
+                            const searchInput = document.getElementById('orgTagSearch');
+                            const tagList = document.getElementById('orgTagList');
+                            const selectedContainer = document.getElementById('selectedOrgTags');
+                            const countEl = document.getElementById('orgTagCount');
+                            const noResults = document.getElementById('orgTagNoResults');
+                            const allItems = tagList.querySelectorAll('.org-tag-item');
+                            const colHeaders = tagList.querySelectorAll('.org-tag-column > .bg-light');
+
+                            function updateCount() {
+                                countEl.textContent = selectedContainer.querySelectorAll('.selected-org-tag').length;
+                            }
+
+                            function markItemSelected(item, selected) {
+                                const iconSel = item.querySelector('.org-tag-icon-sel');
+                                const iconAdd = item.querySelector('.org-tag-icon-add');
+                                if (selected) {
+                                    item.classList.add('org-tag-selected');
+                                    iconSel.style.display = 'inline';
+                                    iconAdd.style.display = 'none';
+                                } else {
+                                    item.classList.remove('org-tag-selected');
+                                    iconSel.style.display = 'none';
+                                    iconAdd.style.display = 'inline';
+                                }
+                            }
+
+                            function addTag(tagValue) {
+                                if (selectedContainer.querySelector('[data-tag="' + CSS.escape(tagValue) + '"]')) return;
+
+                                const badge = document.createElement('span');
+                                badge.className = 'badge bg-success d-inline-flex align-items-center py-2 px-3 selected-org-tag';
+                                badge.setAttribute('data-tag', tagValue);
+                                badge.appendChild(document.createTextNode(tagValue));
+
+                                const closeBtn = document.createElement('button');
+                                closeBtn.type = 'button';
+                                closeBtn.className = 'btn-close btn-close-white ms-2';
+                                closeBtn.style.fontSize = '.55rem';
+                                closeBtn.setAttribute('aria-label', 'Ta bort');
+                                badge.appendChild(closeBtn);
+
+                                const hidden = document.createElement('input');
+                                hidden.type = 'hidden';
+                                hidden.name = 'org_tags[]';
+                                hidden.value = tagValue;
+                                badge.appendChild(hidden);
+
+                                selectedContainer.appendChild(badge);
+
+                                const listItem = tagList.querySelector('.org-tag-item[data-tag="' + CSS.escape(tagValue) + '"]');
+                                if (listItem) markItemSelected(listItem, true);
+
+                                updateCount();
+                            }
+
+                            function removeTag(tagValue) {
+                                const badge = selectedContainer.querySelector('.selected-org-tag[data-tag="' + CSS.escape(tagValue) + '"]');
+                                if (badge) badge.remove();
+
+                                const listItem = tagList.querySelector('.org-tag-item[data-tag="' + CSS.escape(tagValue) + '"]');
+                                if (listItem) markItemSelected(listItem, false);
+
+                                updateCount();
+                            }
+
+                            function filterList() {
+                                const term = searchInput.value.toLowerCase().trim();
+                                let visibleCount = 0;
+                                allItems.forEach(function(item) {
+                                    const match = !term || item.dataset.search.indexOf(term) !== -1;
+                                    if (match) {
+                                        item.classList.remove('org-tag-hidden');
+                                        visibleCount++;
+                                    } else {
+                                        item.classList.add('org-tag-hidden');
+                                    }
+                                });
+                                noResults.style.display = visibleCount === 0 ? '' : 'none';
+
+                                // Uppdatera kolumnrubriker vid sökning
+                                tagList.querySelectorAll('.org-tag-column').forEach(function(col) {
+                                    const visibleItems = col.querySelectorAll('.org-tag-item:not(.org-tag-hidden)');
+                                    const header = col.querySelector('.bg-light small');
+                                    if (visibleItems.length === 0) {
+                                        col.style.display = 'none';
+                                    } else {
+                                        col.style.display = '';
+                                        if (term) {
+                                            const first = visibleItems[0].dataset.tag.charAt(0).toUpperCase();
+                                            const last = visibleItems[visibleItems.length - 1].dataset.tag.charAt(0).toUpperCase();
+                                            header.textContent = first === last ? first : first + '–' + last;
+                                        }
+                                    }
+                                });
+
+                                // Återställ rubriker om sökning rensas
+                                if (!term) {
+                                    const labels = <?= json_encode(array_values($colLabels)) ?>;
+                                    tagList.querySelectorAll('.org-tag-column').forEach(function(col, i) {
+                                        col.style.display = '';
+                                        col.querySelector('.bg-light small').textContent = labels[i] || '';
+                                    });
+                                }
+                            }
+
+                            // Klicka i listan -> toggla
+                            tagList.addEventListener('click', function(e) {
+                                const item = e.target.closest('.org-tag-item');
+                                if (!item) return;
+                                const tag = item.dataset.tag;
+                                if (item.classList.contains('org-tag-selected')) {
+                                    removeTag(tag);
+                                } else {
+                                    addTag(tag);
+                                }
+                            });
+
+                            // Klicka X på badge -> ta bort
+                            selectedContainer.addEventListener('click', function(e) {
+                                if (e.target.classList.contains('btn-close')) {
+                                    const badge = e.target.closest('.selected-org-tag');
+                                    if (badge) removeTag(badge.dataset.tag);
+                                }
+                            });
+
+                            searchInput.addEventListener('input', filterList);
+
+                            document.getElementById('orgTagSelectAll').addEventListener('click', function() {
+                                allItems.forEach(function(item) {
+                                    if (!item.classList.contains('org-tag-hidden')) {
+                                        addTag(item.dataset.tag);
+                                    }
+                                });
+                            });
+
+                            document.getElementById('orgTagClearAll').addEventListener('click', function() {
+                                selectedContainer.querySelectorAll('.selected-org-tag').forEach(function(badge) {
+                                    removeTag(badge.dataset.tag);
+                                });
+                                searchInput.value = '';
+                                filterList();
+                            });
+                        })();
+                        </script>
+                        <?php else: ?>
+                        <div class="mb-3">
+                            <label class="form-label">Organisationstaggar</label>
+                            <div class="alert alert-light border mb-0">
+                                <i class="bi bi-info-circle me-2"></i>
+                                Inga organisationstaggar finns för din domän. De skapas automatiskt vid API-synkronisering av användare.
                             </div>
                         </div>
                         <?php endif; ?>

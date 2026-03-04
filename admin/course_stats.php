@@ -1,0 +1,601 @@
+<?php
+/**
+ * Stimma - Lär dig i små steg
+ * Copyright (C) 2025 Christian Alfredsson
+ *
+ * This program is free software; licensed under GPL v2.
+ * See LICENSE and LICENSE-AND-TRADEMARK.md for details.
+ *
+ * The name "Stimma" is a trademark and subject to restrictions.
+ *
+ * Kursstatistik med org-tagg-drill-down
+ */
+
+require_once '../include/config.php';
+require_once '../include/database.php';
+require_once '../include/functions.php';
+require_once '../include/auth.php';
+
+require_once 'include/auth_check.php';
+
+$currentUser = queryOne("SELECT * FROM " . DB_DATABASE . ".users WHERE email = ?", [$_SESSION['user_email']]);
+$userEmail = $_SESSION['user_email'];
+$userDomain = substr(strrchr($userEmail, "@"), 1);
+$isAdmin = $currentUser && $currentUser['is_admin'] == 1;
+$isEditor = $currentUser && $currentUser['is_editor'] == 1;
+
+if (!$isAdmin && !$isEditor) {
+    $_SESSION['message'] = 'Du har inte behörighet att se kursstatistik.';
+    $_SESSION['message_type'] = 'danger';
+    header('Location: index.php');
+    exit;
+}
+
+$selectedCourseId = isset($_GET['course_id']) ? (int)$_GET['course_id'] : null;
+
+// Hämta kurser baserat på behörighet
+if ($isAdmin) {
+    $courses = query(
+        "SELECT c.*, (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = c.id) AS lesson_count
+         FROM " . DB_DATABASE . ".courses c
+         WHERE c.organization_domain = ?
+         ORDER BY c.sort_order ASC",
+        [$userDomain]
+    );
+} else {
+    $courses = query(
+        "SELECT DISTINCT c.*, (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = c.id) AS lesson_count
+         FROM " . DB_DATABASE . ".courses c
+         LEFT JOIN " . DB_DATABASE . ".course_editors ce ON c.id = ce.course_id
+         WHERE c.organization_domain = ?
+           AND (c.author_id = ? OR ce.email = ?)
+         ORDER BY c.sort_order ASC",
+        [$userDomain, $currentUser['id'], $userEmail]
+    );
+}
+
+// Om redaktör försöker se en kurs de inte har tillgång till
+if ($selectedCourseId && !$isAdmin) {
+    $hasAccess = queryOne(
+        "SELECT c.id FROM " . DB_DATABASE . ".courses c
+         LEFT JOIN " . DB_DATABASE . ".course_editors ce ON c.id = ce.course_id
+         WHERE c.id = ? AND (c.author_id = ? OR ce.email = ?)",
+        [$selectedCourseId, $currentUser['id'], $userEmail]
+    );
+    if (!$hasAccess) {
+        $_SESSION['message'] = 'Du har inte behörighet att se statistik för denna kurs.';
+        $_SESSION['message_type'] = 'danger';
+        header('Location: course_stats.php');
+        exit;
+    }
+}
+
+$page_title = 'Kursstatistik';
+require_once 'include/header.php';
+?>
+
+<div class="container-fluid">
+
+<?php if (!$selectedCourseId): ?>
+    <!-- VY 1: Kursöversikt -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-muted">Kursöversikt</h6>
+        </div>
+        <div class="card-body">
+            <?php if (empty($courses)): ?>
+                <div class="alert alert-info">Inga kurser hittades.</div>
+            <?php else: ?>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Titel</th>
+                            <th>Typ</th>
+                            <th>Status</th>
+                            <th>Lektioner</th>
+                            <th>Inskrivna</th>
+                            <th>Klara</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($courses as $course):
+                            // Räkna inskrivna (har minst en progress-rad)
+                            $enrolled = queryOne(
+                                "SELECT COUNT(DISTINCT p.user_id) AS cnt
+                                 FROM " . DB_DATABASE . ".progress p
+                                 JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
+                                 WHERE l.course_id = ?",
+                                [$course['id']]
+                            );
+                            $enrolledCount = $enrolled ? (int)$enrolled['cnt'] : 0;
+
+                            // Räkna klara (alla lektioner completed)
+                            $totalLessons = (int)$course['lesson_count'];
+                            $completedUsers = 0;
+                            if ($totalLessons > 0) {
+                                $completed = queryOne(
+                                    "SELECT COUNT(*) AS cnt FROM (
+                                        SELECT p.user_id
+                                        FROM " . DB_DATABASE . ".progress p
+                                        JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
+                                        WHERE l.course_id = ? AND p.status = 'completed'
+                                        GROUP BY p.user_id
+                                        HAVING COUNT(DISTINCT p.lesson_id) >= ?
+                                    ) AS completed_users",
+                                    [$course['id'], $totalLessons]
+                                );
+                                $completedUsers = $completed ? (int)$completed['cnt'] : 0;
+                            }
+                        ?>
+                        <tr>
+                            <td>
+                                <a href="?course_id=<?= $course['id'] ?>" class="text-decoration-none fw-bold">
+                                    <?= htmlspecialchars($course['title']) ?>
+                                </a>
+                            </td>
+                            <td>
+                                <?php if ($course['sequential_mode']): ?>
+                                    <span class="badge bg-info">Stegvis</span>
+                                <?php else: ?>
+                                    <span class="badge bg-secondary">Normal</span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php if ($course['status'] === 'active'): ?>
+                                    <span class="badge bg-success">Aktiv</span>
+                                <?php else: ?>
+                                    <span class="badge bg-warning">Inaktiv</span>
+                                <?php endif; ?>
+                            </td>
+                            <td><?= $totalLessons ?></td>
+                            <td><?= $enrolledCount ?></td>
+                            <td><?= $completedUsers ?></td>
+                            <td>
+                                <a href="?course_id=<?= $course['id'] ?>" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-eye me-1"></i>Detaljer
+                                </a>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <?php endif; ?>
+        </div>
+    </div>
+
+<?php else: ?>
+    <?php
+    // VY 2: Kursdetalj
+    $course = queryOne("SELECT * FROM " . DB_DATABASE . ".courses WHERE id = ?", [$selectedCourseId]);
+    if (!$course) {
+        echo '<div class="alert alert-danger">Kursen hittades inte.</div>';
+        require_once 'include/footer.php';
+        exit;
+    }
+
+    $courseLessons = query(
+        "SELECT * FROM " . DB_DATABASE . ".lessons WHERE course_id = ? ORDER BY sort_order ASC",
+        [$selectedCourseId]
+    );
+
+    // Hämta kursens org-taggar
+    $courseOrgTags = query(
+        "SELECT tag FROM " . DB_DATABASE . ".course_org_tags WHERE course_id = ?",
+        [$selectedCourseId]
+    );
+    $courseOrgTagValues = array_column($courseOrgTags, 'tag');
+    $hasCourseOrgTags = !empty($courseOrgTagValues);
+
+    // Bygg användargrupper baserat på org-taggar
+    $userGroups = [];
+
+    if ($hasCourseOrgTags) {
+        // Gruppera per org-tagg
+        foreach ($courseOrgTagValues as $tag) {
+            $usersInTag = query(
+                "SELECT u.id, u.name, u.email
+                 FROM " . DB_DATABASE . ".users u
+                 JOIN " . DB_DATABASE . ".user_org_tags uot ON u.id = uot.user_id
+                 WHERE uot.tag = ? AND u.email LIKE ?
+                 ORDER BY u.name ASC, u.email ASC",
+                [$tag, '%@' . $userDomain]
+            );
+            $userGroups[$tag] = $usersInTag;
+        }
+    } else {
+        // Alla domänanvändare i en grupp
+        $allDomainUsers = query(
+            "SELECT id, name, email FROM " . DB_DATABASE . ".users
+             WHERE email LIKE ?
+             ORDER BY name ASC, email ASC",
+            ['%@' . $userDomain]
+        );
+        $userGroups['Alla användare'] = $allDomainUsers;
+    }
+
+    // Hämta all progress för denna kurs
+    $allProgress = query(
+        "SELECT p.user_id, p.lesson_id, p.status
+         FROM " . DB_DATABASE . ".progress p
+         JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
+         WHERE l.course_id = ?",
+        [$selectedCourseId]
+    );
+    $progressMap = [];
+    foreach ($allProgress as $p) {
+        $progressMap[$p['user_id']][$p['lesson_id']] = $p['status'];
+    }
+
+    // Hämta sequential schedule data
+    $allSchedules = [];
+    if ($course['sequential_mode']) {
+        $scheduleRows = query(
+            "SELECT * FROM " . DB_DATABASE . ".sequential_lesson_schedule WHERE course_id = ?",
+            [$selectedCourseId]
+        );
+        foreach ($scheduleRows as $s) {
+            $allSchedules[$s['user_id']][$s['lesson_id']] = $s;
+        }
+    }
+
+    // Räkna sammanfattning
+    $totalEnrolled = 0;
+    $totalNotStarted = 0;
+    $totalCompleted = 0;
+    $totalLessonsInCourse = count($courseLessons);
+    $seenUserIds = [];
+
+    foreach ($userGroups as $users) {
+        foreach ($users as $u) {
+            if (isset($seenUserIds[$u['id']])) continue;
+            $seenUserIds[$u['id']] = true;
+
+            $userLessonsCompleted = 0;
+            $hasAnyProgress = false;
+            foreach ($courseLessons as $cl) {
+                if (isset($progressMap[$u['id']][$cl['id']]) && $progressMap[$u['id']][$cl['id']] === 'completed') {
+                    $userLessonsCompleted++;
+                    $hasAnyProgress = true;
+                } elseif (isset($progressMap[$u['id']][$cl['id']])) {
+                    $hasAnyProgress = true;
+                }
+            }
+
+            if ($hasAnyProgress) {
+                $totalEnrolled++;
+                if ($totalLessonsInCourse > 0 && $userLessonsCompleted >= $totalLessonsInCourse) {
+                    $totalCompleted++;
+                }
+            } else {
+                $totalNotStarted++;
+            }
+        }
+    }
+
+    $totalUniqueUsers = count($seenUserIds);
+    $avgProgress = 0;
+    if ($totalEnrolled > 0 && $totalLessonsInCourse > 0) {
+        $totalCompletedLessons = 0;
+        foreach ($seenUserIds as $uid => $v) {
+            foreach ($courseLessons as $cl) {
+                if (isset($progressMap[$uid][$cl['id']]) && $progressMap[$uid][$cl['id']] === 'completed') {
+                    $totalCompletedLessons++;
+                }
+            }
+        }
+        $avgProgress = round(($totalCompletedLessons / ($totalEnrolled * $totalLessonsInCourse)) * 100);
+    }
+    ?>
+
+    <div class="mb-3">
+        <a href="course_stats.php" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Tillbaka till översikt
+        </a>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-muted">
+                <?= htmlspecialchars($course['title']) ?>
+                <?php if ($course['sequential_mode']): ?>
+                    <span class="badge bg-info ms-2">Stegvis</span>
+                <?php endif; ?>
+            </h6>
+            <?php if ($course['sequential_mode']): ?>
+            <button type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#manualReminderModal">
+                <i class="bi bi-bell me-1"></i>Skicka påminnelse
+            </button>
+            <?php endif; ?>
+        </div>
+        <div class="card-body">
+            <!-- Sammanfattningskort -->
+            <div class="row g-3 mb-4">
+                <div class="col-sm-3">
+                    <div class="card border-primary">
+                        <div class="card-body text-center">
+                            <div class="h3 text-primary"><?= $totalEnrolled ?></div>
+                            <small class="text-muted">Inskrivna</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-sm-3">
+                    <div class="card border-secondary">
+                        <div class="card-body text-center">
+                            <div class="h3 text-secondary"><?= $totalNotStarted ?></div>
+                            <small class="text-muted">Ej påbörjat</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-sm-3">
+                    <div class="card border-info">
+                        <div class="card-body text-center">
+                            <div class="h3 text-info"><?= $avgProgress ?>%</div>
+                            <small class="text-muted">Genomsnitt</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-sm-3">
+                    <div class="card border-success">
+                        <div class="card-body text-center">
+                            <div class="h3 text-success"><?= $totalCompleted ?></div>
+                            <small class="text-muted">Klara</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Användargrupper -->
+            <?php
+            $groupIndex = 0;
+            foreach ($userGroups as $groupName => $users):
+                $groupIndex++;
+            ?>
+            <?php if ($hasCourseOrgTags): ?>
+            <div class="accordion mb-3" id="orgTagAccordion<?= $groupIndex ?>">
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button <?= $groupIndex > 1 ? 'collapsed' : '' ?>" type="button"
+                                data-bs-toggle="collapse" data-bs-target="#orgTagCollapse<?= $groupIndex ?>">
+                            <i class="bi bi-people me-2"></i>
+                            <?= htmlspecialchars($groupName) ?>
+                            <span class="badge bg-secondary ms-2"><?= count($users) ?> användare</span>
+                        </button>
+                    </h2>
+                    <div id="orgTagCollapse<?= $groupIndex ?>" class="accordion-collapse collapse <?= $groupIndex === 1 ? 'show' : '' ?>">
+                        <div class="accordion-body p-0">
+            <?php endif; ?>
+
+            <?php if (empty($users)): ?>
+                <div class="p-3 text-muted">Inga användare i denna grupp.</div>
+            <?php else: ?>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Namn</th>
+                                <th>E-post</th>
+                                <th>Status</th>
+                                <?php foreach ($courseLessons as $cl): ?>
+                                <th class="text-center" style="min-width: 40px;" title="<?= htmlspecialchars($cl['title']) ?>">
+                                    L<?= $cl['sort_order'] ?>
+                                </th>
+                                <?php endforeach; ?>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($users as $u):
+                                $userLessonsCompleted = 0;
+                                $hasAnyProgress = false;
+                                foreach ($courseLessons as $cl) {
+                                    if (isset($progressMap[$u['id']][$cl['id']]) && $progressMap[$u['id']][$cl['id']] === 'completed') {
+                                        $userLessonsCompleted++;
+                                        $hasAnyProgress = true;
+                                    } elseif (isset($progressMap[$u['id']][$cl['id']])) {
+                                        $hasAnyProgress = true;
+                                    }
+                                }
+
+                                if ($totalLessonsInCourse > 0 && $userLessonsCompleted >= $totalLessonsInCourse) {
+                                    $statusBadge = '<span class="badge bg-success">Klar</span>';
+                                } elseif ($hasAnyProgress) {
+                                    $statusBadge = '<span class="badge bg-primary">Pågår</span>';
+                                } else {
+                                    $statusBadge = '<span class="badge bg-light text-dark">Ej påbörjad</span>';
+                                }
+                            ?>
+                            <tr>
+                                <td><?= htmlspecialchars($u['name'] ?: '-') ?></td>
+                                <td class="small"><?= htmlspecialchars($u['email']) ?></td>
+                                <td><?= $statusBadge ?></td>
+                                <?php foreach ($courseLessons as $cl):
+                                    $lessonStatus = $progressMap[$u['id']][$cl['id']] ?? null;
+                                    $schedule = $allSchedules[$u['id']][$cl['id']] ?? null;
+
+                                    if ($lessonStatus === 'completed') {
+                                        $icon = '<i class="bi bi-check-circle-fill text-success" title="Klar"></i>';
+                                    } elseif ($course['sequential_mode'] && $schedule) {
+                                        if ($schedule['available_at'] !== null && strtotime($schedule['available_at']) <= time()) {
+                                            $icon = '<i class="bi bi-clock text-primary" title="Tillgänglig"></i>';
+                                        } elseif ($schedule['available_at'] !== null) {
+                                            $icon = '<i class="bi bi-lock text-muted" title="Öppnas ' . date('j/n', strtotime($schedule['available_at'])) . '"></i>';
+                                        } else {
+                                            $icon = '<i class="bi bi-lock text-muted" title="Ej tillgänglig"></i>';
+                                        }
+                                    } elseif ($hasAnyProgress || $lessonStatus !== null) {
+                                        $icon = '<i class="bi bi-circle text-muted" title="Ej påbörjad"></i>';
+                                    } else {
+                                        $icon = '<i class="bi bi-circle text-muted" title="Ej påbörjad"></i>';
+                                    }
+                                ?>
+                                <td class="text-center"><?= $icon ?></td>
+                                <?php endforeach; ?>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($hasCourseOrgTags): ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+            <?php endforeach; ?>
+        </div>
+    </div>
+
+    <?php if ($course['sequential_mode']): ?>
+    <!-- E-postlogg -->
+    <?php
+    // Kö-status
+    $queueStats = queryOne(
+        "SELECT
+            SUM(status = 'queued') AS queued,
+            SUM(status = 'sending') AS sending,
+            SUM(status = 'sent') AS sent,
+            SUM(status = 'failed') AS failed
+         FROM " . DB_DATABASE . ".sequential_email_queue WHERE course_id = ?",
+        [$selectedCourseId]
+    );
+    // Logg grupperad per datum + typ
+    $emailLog = query(
+        "SELECT DATE(sent_at) AS log_date, type,
+                SUM(email_status = 'sent') AS sent_count,
+                SUM(email_status = 'failed') AS failed_count
+         FROM " . DB_DATABASE . ".sequential_reminder_log
+         WHERE course_id = ?
+         GROUP BY DATE(sent_at), type
+         ORDER BY log_date DESC
+         LIMIT 100",
+        [$selectedCourseId]
+    );
+    ?>
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 text-muted"><i class="bi bi-envelope-paper me-2"></i>E-postlogg</h6>
+        </div>
+        <div class="card-body">
+            <?php if ($queueStats && ($queueStats['queued'] > 0 || $queueStats['sending'] > 0)): ?>
+            <div class="alert alert-warning mb-3">
+                <i class="bi bi-hourglass-split me-1"></i>
+                <strong>Kö:</strong>
+                <?= (int)$queueStats['queued'] ?> väntande,
+                <?= (int)$queueStats['sending'] ?> skickas just nu
+            </div>
+            <?php endif; ?>
+
+            <?php if (empty($emailLog)): ?>
+            <p class="text-muted mb-0">Inga e-postutskick har loggats för denna kurs ännu.</p>
+            <?php else: ?>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Datum</th>
+                            <th>Typ</th>
+                            <th class="text-end">Skickade</th>
+                            <th class="text-end">Misslyckade</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($emailLog as $logRow):
+                            $typeBadge = match($logRow['type']) {
+                                'new_lesson' => '<span class="badge bg-success">Ny lektion</span>',
+                                'reminder' => '<span class="badge bg-warning text-dark">Påminnelse</span>',
+                                'manual_reminder' => '<span class="badge bg-info">Manuell</span>',
+                                default => '<span class="badge bg-secondary">' . htmlspecialchars($logRow['type']) . '</span>',
+                            };
+                        ?>
+                        <tr>
+                            <td><?= htmlspecialchars($logRow['log_date']) ?></td>
+                            <td><?= $typeBadge ?></td>
+                            <td class="text-end"><?= (int)$logRow['sent_count'] ?></td>
+                            <td class="text-end"><?= (int)$logRow['failed_count'] > 0 ? '<span class="text-danger">' . (int)$logRow['failed_count'] . '</span>' : '0' ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <?php endif; ?>
+        </div>
+    </div>
+
+    <!-- Modal för manuell påminnelse -->
+    <div class="modal fade" id="manualReminderModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-bell me-2"></i>Skicka manuell påminnelse</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted">Skickar en påminnelse till alla användare som har en tillgänglig lektion de inte har slutfört.</p>
+                    <div class="mb-3">
+                        <label for="customMessage" class="form-label">Valfritt meddelande (visas i e-posten)</label>
+                        <textarea class="form-control" id="customMessage" rows="3" placeholder="Skriv ett personligt meddelande..."></textarea>
+                    </div>
+                    <div id="reminderResult" style="display: none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
+                    <button type="button" class="btn btn-warning" id="sendReminderBtn">
+                        <i class="bi bi-send me-1"></i>Skicka påminnelse
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.getElementById('sendReminderBtn').addEventListener('click', function() {
+        const btn = this;
+        const resultDiv = document.getElementById('reminderResult');
+        const customMessage = document.getElementById('customMessage').value;
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Skickar...';
+        resultDiv.style.display = 'none';
+
+        const formData = new FormData();
+        formData.append('course_id', <?= $selectedCourseId ?>);
+        formData.append('custom_message', customMessage);
+        formData.append('csrf_token', CSRF_TOKEN);
+
+        fetch('ajax/send_manual_sequential_reminder.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            resultDiv.style.display = 'block';
+            if (data.success) {
+                resultDiv.className = 'alert alert-success';
+                resultDiv.textContent = data.message;
+            } else {
+                resultDiv.className = 'alert alert-danger';
+                resultDiv.textContent = data.message || 'Ett fel uppstod.';
+            }
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-send me-1"></i>Skicka påminnelse';
+        })
+        .catch(error => {
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'alert alert-danger';
+            resultDiv.textContent = 'Nätverksfel. Försök igen.';
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-send me-1"></i>Skicka påminnelse';
+        });
+    });
+    </script>
+    <?php endif; ?>
+
+<?php endif; ?>
+
+</div>
+
+<?php require_once 'include/footer.php'; ?>
