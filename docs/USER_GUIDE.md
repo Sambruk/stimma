@@ -15,15 +15,21 @@ Denna handbok beskriver hur du använder Stimma e-learning plattform. Stimma är
    - [Diplom](#diplom)
 4. [Guide för redaktörer](#guide-för-redaktörer)
    - [Ange slutdatum för en kurs](#ange-slutdatum-för-en-kurs)
+   - [Stegvisa kurser](#stegvisa-kurser)
+   - [E-postmallar för stegvisa kurser](#e-postmallar-för-stegvisa-kurser)
+   - [Testmail för stegvisa kurser](#testmail-för-stegvisa-kurser)
+   - [Starta stegvis kurs manuellt](#starta-stegvis-kurs-manuellt)
    - [Förhandsgranska lektioner](#förhandsgranska-lektioner)
 5. [Guide för administratörer](#guide-för-administratörer)
    - [Dashboard - Översikt](#dashboard---översikt)
    - [Diplomhantering](#diplomhantering)
+   - [E-postlogg för stegvisa kurser](#e-postlogg-för-stegvisa-kurser)
    - [Påminnelseinställningar](#påminnelseinställningar)
    - [Skicka testmail](#skicka-testmail)
 6. [Guide för superadministratörer](#guide-för-superadministratörer)
    - [AI-leverantörskonfiguration](#ai-leverantörskonfiguration)
    - [Testa AI-anslutning](#testa-ai-anslutning)
+   - [Inställningar för stegvisa kurser](#inställningar-för-stegvisa-kurser)
 
 ---
 
@@ -217,6 +223,86 @@ Du kan ange ett slutdatum för när en kurs ska vara genomförd:
 - Slutdatumet visas i påminnelsemail till användare som inte slutfört kursen
 - Användare ser hur många dagar som återstår
 
+### Stegvisa kurser
+
+Stegvisa kurser levererar en lektion i taget med tidsstyrt intervall. Användare måste klara varje lektion innan nästa blir tillgänglig.
+
+1. Öppna kursen för redigering
+2. Kryssa i **"Stegvisa lektioner"**
+3. Konfigurera:
+   - **Dagar mellan lektioner** - Antal dagar innan nästa lektion blir tillgänglig efter avklarad lektion (standard: 7)
+   - **Påminnelse efter (dagar)** - Antal dagar innan en påminnelse skickas om användaren inte slutfört sin aktuella lektion (standard: 3)
+   - **Startdatum** - Ange ett datum för automatisk kursstart. Alla berörda användare registreras automatiskt och får sin första lektion detta datum
+4. Klicka **"Spara"**
+
+**Status för stegvisa kurser:**
+
+| Status | Betydelse |
+|--------|-----------|
+| **Väntar** | Kursen har ett startdatum men har inte startats ännu |
+| **Skickar** | E-post skickas ut till användare |
+| **Aktiv** | Kursen är igång och lektioner levereras löpande |
+| **Slutförd** | Alla användare har fått alla lektioner |
+
+### E-postmallar för stegvisa kurser
+
+Du kan anpassa e-postmallarna som skickas när en ny lektion blir tillgänglig och vid påminnelser. Om mallarna lämnas tomma används en standardmall.
+
+1. Öppna kursen för redigering
+2. Scrolla ned till stegvisa inställningar
+3. Under **"E-postmall: Ny lektion"** fyller du i:
+   - **Ämnesrad** - T.ex. `Ny lektion tillgänglig: {{lesson_title}}`
+   - **Brödtext** - Meddelandets innehåll
+4. Under **"E-postmall: Påminnelse"** fyller du i:
+   - **Ämnesrad** - T.ex. `Påminnelse: {{lesson_title}} väntar på dig`
+   - **Brödtext** - Påminnelsemeddelandets innehåll
+5. Klicka **"Spara"**
+
+**Tillgängliga variabler i mallarna:**
+
+| Variabel | Beskrivning |
+|----------|-------------|
+| `{{user_name}}` | Användarens namn |
+| `{{user_email}}` | Användarens e-postadress |
+| `{{course_title}}` | Kursens titel |
+| `{{lesson_title}}` | Lektionens titel |
+| `{{lesson_url}}` | Direktlänk till lektionen |
+| `{{lesson_number}}` | Lektionens nummer i kursen |
+| `{{total_lessons}}` | Totalt antal lektioner i kursen |
+| `{{course_url}}` | Länk till kurssidan |
+| `{{deadline}}` | Kursens slutdatum (t.ex. "15 mars 2026") |
+| `{{days_remaining}}` | Antal dagar kvar till deadline |
+| `{{system_name}}` | Systemets namn (t.ex. "Stimma") |
+
+**Tips:** Lämna mallarna tomma för att använda standardmallarna. Standardmallarna innehåller en snygg HTML-layout med kursnamn, lektionsnamn och en "Gå till lektionen"-knapp.
+
+### Testmail för stegvisa kurser
+
+Innan du startar en stegvis kurs bör du verifiera att e-postmallarna ser bra ut:
+
+1. Öppna kursen för redigering (kursen måste vara sparad)
+2. Scrolla ned till **"Skicka testmail"** under stegvisa inställningar
+3. Ange din e-postadress (din adress är förifylld)
+4. Klicka **"Skicka test"**
+5. Kontrollera din inkorg — du får **två testmail**: ett "Ny lektion"-mail och ett "Påminnelse"-mail
+6. Mallarna renderas med exempelvärden så du kan se hur det slutgiltiga mailet ser ut
+
+### Starta stegvis kurs manuellt
+
+Du kan starta en stegvis kurs omedelbart utan att vänta på startdatumet:
+
+1. Öppna kursen för redigering
+2. Scrolla ned till **"Starta utskick nu"**-knappen (visas bara om kursen inte redan startats)
+3. Klicka på knappen och bekräfta
+4. Systemet:
+   - Registrerar alla berörda användare (baserat på organisationstaggar, eller alla i domänen)
+   - Köar e-post för första lektionen
+   - Skickar en första batch direkt
+   - Återstående e-post skickas via det nattliga cron-jobbet
+5. Du ser en bekräftelse med antal registrerade användare och köade e-post
+
+**Obs:** När kursen väl startats kan den inte startas igen. Nya användare som tillkommer i organisationen måste registreras separat.
+
 ### Skapa lektioner
 
 1. Öppna kursen du vill lägga till lektioner i
@@ -346,6 +432,23 @@ Hantera diplom för din organisation:
 2. Ladda upp organisationens logotyp
 3. Anpassa diplomtexten
 4. Förhandsgranska resultatet
+
+### E-postlogg för stegvisa kurser
+
+Följ upp e-postutskick för stegvisa kurser via kursstatistiken:
+
+1. Gå till **Statistik** i adminmenyn
+2. Välj en stegvis kurs
+3. Scrolla ned till kortet **"E-postlogg"**
+4. Här ser du:
+   - **Kö-status** — Antal väntande och pågående e-post i kön (visas om det finns väntande utskick)
+   - **Utskickstabell** — Historik grupperad per datum och typ:
+     - **Ny lektion** (grön badge) — Mail om ny tillgänglig lektion
+     - **Påminnelse** (gul badge) — Automatisk påminnelse
+     - **Manuell** (blå badge) — Manuellt skickad påminnelse
+   - Antal **skickade** och **misslyckade** per rad
+
+**Tips:** Kontrollera loggen efter att du startat en kurs för att verifiera att alla e-post skickats korrekt. Misslyckade utskick markeras i rött.
 
 ### Dashboard - Översikt
 
@@ -505,6 +608,42 @@ Innan du börjar använda AI-funktioner, verifiera att anslutningen fungerar:
 - Definiera tydliga **blockerade ämnen** för er verksamhet
 - Använd **svarsriktlinjer** för att säkerställa lämplig ton
 - Testa AI-svar regelbundet
+
+### Inställningar för stegvisa kurser
+
+Superadministratörer kan konfigurera hur stegvisa kursers e-postutskick hanteras. Dessa inställningar är viktiga för organisationer med många användare för att undvika att e-post fastnar i spamfilter.
+
+1. Gå till **AI-inställningar** i adminmenyn
+2. Scrolla ned till kortet **"Stegvisa kurser"**
+3. Konfigurera:
+
+| Inställning | Beskrivning | Standard |
+|-------------|-------------|----------|
+| **Cron-timme (0-23)** | Vilken timme på dygnet det nattliga utskicket körs. Cron-jobbet hittar nya tillgängliga lektioner, köar påminnelser och bearbetar e-postkön. | 8 |
+| **Batch-storlek** | Antal e-post som skickas i varje batch. En lägre siffra minskar risken för att e-post markeras som spam. | 10 |
+| **Batchfördröjning (sekunder)** | Paus i sekunder mellan varje batch. Sprider utskicken över tid så att e-postservern inte överbelastas. | 30 |
+
+4. Klicka **"Spara stegvisa inställningar"**
+
+**Hur throttling fungerar:**
+
+Istället för att skicka alla e-post på en gång, använder systemet en kö med batchar:
+
+1. Det nattliga cron-jobbet hittar alla nya tillgängliga lektioner och påminnelser
+2. Dessa läggs i en e-postkö (`sequential_email_queue`)
+3. Kön bearbetas i batchar — t.ex. 10 e-post åt gången
+4. Mellan varje batch pausas utskicket — t.ex. 30 sekunder
+5. Detta innebär att 100 e-post tar ~5 minuter istället för att skickas på en sekund
+
+**Rekommendationer:**
+
+| Organisationsstorlek | Batch-storlek | Fördröjning |
+|---------------------|---------------|-------------|
+| Liten (< 50 användare) | 20 | 10 sekunder |
+| Medel (50-500 användare) | 10 | 30 sekunder |
+| Stor (500+ användare) | 5 | 60 sekunder |
+
+**Tips:** Om ni upplever att e-post hamnar i skräppost, prova att minska batch-storleken och öka fördröjningen. Kontrollera även att er SMTP-server har korrekta SPF- och DKIM-poster.
 
 ### Domänhantering
 

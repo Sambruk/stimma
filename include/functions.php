@@ -499,11 +499,13 @@ function cleanHtml($html) {
         'em',      // Kursiv stil
         'i',       // Kursiv stil (alternativ)
         'u',       // Understruken
+        'h3',      // Underrubrik (används i lektionsinnehåll)
+        'h4',      // Underrubrik (används i sammanfattningar)
         'ul',      // Punktlista
         'ol',      // Numrerad lista
         'li',      // Listobjekt
         'p',       // Stycke
-        'div',     // Div (kommer att konverteras till p)
+        'div',     // Div (konverteras till p, eller behålls med lesson-*-klass)
         'img'      // Bilder (med begränsade attribut)
     ];
 
@@ -553,11 +555,27 @@ function cleanHtml($html) {
                '>';
     }, $html);
 
+    // Preserve styled div blocks (lesson content classes) before attribute stripping
+    // These divs don't nest inside each other, so non-greedy match is safe
+    $styledDivPlaceholders = [];
+    $allowedDivClasses = ['lesson-intro', 'lesson-tip', 'lesson-info', 'lesson-example', 'lesson-warning', 'lesson-summary'];
+    $classPattern = implode('|', array_map(function($c) { return preg_quote($c, '/'); }, $allowedDivClasses));
+    $html = preg_replace_callback('/<div\s+class\s*=\s*["\'](' . $classPattern . ')["\']\s*>(.*?)<\/div>/si', function($match) use (&$styledDivPlaceholders) {
+        $key = '%%STYLEDIV_' . count($styledDivPlaceholders) . '%%';
+        $styledDivPlaceholders[$key] = '<div class="' . $match[1] . '">' . $match[2] . '</div>';
+        return $key;
+    }, $html);
+
     // SECURITY FIX: Remove ALL attributes from non-img tags
     $html = preg_replace('/<((?!img\b)[a-z][a-z0-9]*)\s+[^>]*>/i', '<$1>', $html);
 
     // Konvertera div-taggar till p-taggar
     $html = str_replace(['<div>', '</div>'], ['<p>', '</p>'], $html);
+
+    // Restore styled div blocks
+    foreach ($styledDivPlaceholders as $key => $divBlock) {
+        $html = str_replace($key, $divBlock, $html);
+    }
 
     // Ta bort kapslade p-taggar
     $html = preg_replace('/<p>\s*<p>/i', '<p>', $html);
@@ -841,6 +859,518 @@ function saveSambrukSignature($docId, $data) {
  */
 function generateSambrukSignatureHash($fileHash, $name, $email, $signedAt, $ip) {
     return hash('sha256', implode('|', [$fileHash, $name, $email, $signedAt, $ip]));
+}
+
+/**
+ * Hämta alla unika organisationstaggar för en domän
+ *
+ * @param string $domain Domännamnet
+ * @return array Lista med unika org-taggar
+ */
+function getOrgTagsForDomain($domain) {
+    return query(
+        "SELECT DISTINCT uot.tag
+         FROM " . DB_DATABASE . ".user_org_tags uot
+         JOIN " . DB_DATABASE . ".users u ON uot.user_id = u.id
+         WHERE u.email LIKE ?
+         ORDER BY uot.tag ASC",
+        ['%@' . $domain]
+    );
+}
+
+/**
+ * Hämta en användares organisationstaggar
+ *
+ * @param int $userId Användarens ID
+ * @return array Lista med org-taggar
+ */
+function getUserOrgTags($userId) {
+    return query(
+        "SELECT tag FROM " . DB_DATABASE . ".user_org_tags WHERE user_id = ? ORDER BY tag ASC",
+        [$userId]
+    );
+}
+
+/**
+ * Registrera en användare i en stegvis kurs.
+ * Skapar schedule-rader för alla lektioner (lektion 1 = tillgänglig, resten NULL).
+ * Skapar även en course_enrollment om den inte redan finns.
+ *
+ * @param int $userId Användarens ID
+ * @param int $courseId Kursens ID
+ * @return bool True om det lyckades
+ */
+function enrollUserInSequentialCourse($userId, $courseId) {
+    // Kontrollera om redan inskriven
+    $existing = queryOne(
+        "SELECT id FROM " . DB_DATABASE . ".sequential_lesson_schedule WHERE user_id = ? AND course_id = ? LIMIT 1",
+        [$userId, $courseId]
+    );
+    if ($existing) {
+        return true; // Redan inskriven
+    }
+
+    // Hämta alla lektioner sorterade
+    $lessons = query(
+        "SELECT id FROM " . DB_DATABASE . ".lessons WHERE course_id = ? ORDER BY sort_order ASC",
+        [$courseId]
+    );
+
+    if (empty($lessons)) {
+        return false;
+    }
+
+    // Skapa schedule-rader
+    foreach ($lessons as $index => $lesson) {
+        $availableAt = ($index === 0) ? date('Y-m-d H:i:s') : null;
+        execute(
+            "INSERT IGNORE INTO " . DB_DATABASE . ".sequential_lesson_schedule
+             (user_id, course_id, lesson_id, available_at)
+             VALUES (?, ?, ?, ?)",
+            [$userId, $courseId, $lesson['id'], $availableAt]
+        );
+    }
+
+    // Skapa course_enrollment om den inte finns
+    $enrollment = queryOne(
+        "SELECT id FROM " . DB_DATABASE . ".course_enrollments WHERE user_id = ? AND course_id = ?",
+        [$userId, $courseId]
+    );
+    if (!$enrollment) {
+        execute(
+            "INSERT INTO " . DB_DATABASE . ".course_enrollments (user_id, course_id, status) VALUES (?, ?, 'active')",
+            [$userId, $courseId]
+        );
+    }
+
+    return true;
+}
+
+/**
+ * Lås upp nästa lektion i en stegvis kurs efter att en lektion slutförts.
+ * Sätter completed_at på den avklarade lektionen och available_at på nästa.
+ *
+ * @param int $userId Användarens ID
+ * @param int $courseId Kursens ID
+ * @param int $completedLessonId ID för den just avklarade lektionen
+ * @return void
+ */
+function unlockNextSequentialLesson($userId, $courseId, $completedLessonId) {
+    // Markera lektionen som avklarad
+    execute(
+        "UPDATE " . DB_DATABASE . ".sequential_lesson_schedule
+         SET completed_at = NOW()
+         WHERE user_id = ? AND course_id = ? AND lesson_id = ? AND completed_at IS NULL",
+        [$userId, $courseId, $completedLessonId]
+    );
+
+    // Hämta kursens intervall
+    $course = queryOne(
+        "SELECT sequential_interval_days FROM " . DB_DATABASE . ".courses WHERE id = ?",
+        [$courseId]
+    );
+    $intervalDays = $course ? (int)$course['sequential_interval_days'] : 7;
+
+    // Hitta nästa lektion (via sort_order)
+    $nextLesson = queryOne(
+        "SELECT l.id FROM " . DB_DATABASE . ".lessons l
+         WHERE l.course_id = ? AND l.sort_order > (
+             SELECT l2.sort_order FROM " . DB_DATABASE . ".lessons l2 WHERE l2.id = ?
+         )
+         ORDER BY l.sort_order ASC LIMIT 1",
+        [$courseId, $completedLessonId]
+    );
+
+    if ($nextLesson) {
+        // Sätt available_at = nu + interval dagar
+        execute(
+            "UPDATE " . DB_DATABASE . ".sequential_lesson_schedule
+             SET available_at = DATE_ADD(NOW(), INTERVAL ? DAY)
+             WHERE user_id = ? AND course_id = ? AND lesson_id = ? AND available_at IS NULL",
+            [$intervalDays, $userId, $courseId, $nextLesson['id']]
+        );
+    }
+}
+
+/**
+ * Kontrollera om en lektion är tillgänglig för en användare.
+ * Returnerar true om kursen inte är stegvis, eller om available_at <= NOW().
+ *
+ * @param int $userId Användarens ID
+ * @param int $lessonId Lektionens ID
+ * @param int $courseId Kursens ID
+ * @return bool True om lektionen är tillgänglig
+ */
+function isLessonAvailableForUser($userId, $lessonId, $courseId) {
+    // Kontrollera om kursen är stegvis
+    $course = queryOne(
+        "SELECT sequential_mode FROM " . DB_DATABASE . ".courses WHERE id = ?",
+        [$courseId]
+    );
+    if (!$course || !$course['sequential_mode']) {
+        return true; // Ej stegvis - alltid tillgänglig
+    }
+
+    // Kontrollera schedule
+    $schedule = queryOne(
+        "SELECT available_at FROM " . DB_DATABASE . ".sequential_lesson_schedule
+         WHERE user_id = ? AND lesson_id = ?",
+        [$userId, $lessonId]
+    );
+
+    if (!$schedule) {
+        return false; // Ingen schedule-rad = inte inskriven ännu
+    }
+
+    if ($schedule['available_at'] === null) {
+        return false; // Ej upplåst ännu
+    }
+
+    return strtotime($schedule['available_at']) <= time();
+}
+
+/**
+ * Hämta status för alla lektioner i en stegvis kurs för en användare.
+ *
+ * @param int $userId Användarens ID
+ * @param int $courseId Kursens ID
+ * @return array Lista med schedule-rader JOINade med lektionsdata
+ */
+function getSequentialCourseStatusForUser($userId, $courseId) {
+    return query(
+        "SELECT sls.*, l.title as lesson_title, l.sort_order
+         FROM " . DB_DATABASE . ".sequential_lesson_schedule sls
+         JOIN " . DB_DATABASE . ".lessons l ON sls.lesson_id = l.id
+         WHERE sls.user_id = ? AND sls.course_id = ?
+         ORDER BY l.sort_order ASC",
+        [$userId, $courseId]
+    );
+}
+
+/**
+ * Ersätt {{variabel}}-platshållare i en malltext med värden.
+ *
+ * @param string $template Malltext med {{variabel}}-platshållare
+ * @param array $vars Associativ array med variabelnamn => värde
+ * @return string Renderad text
+ */
+function renderSequentialEmailTemplate($template, $vars) {
+    foreach ($vars as $key => $value) {
+        $template = str_replace('{{' . $key . '}}', $value ?? '', $template);
+    }
+    return $template;
+}
+
+/**
+ * Lägg till e-post i sequential_email_queue med dubblettkontroll.
+ *
+ * @param int $courseId Kursens ID
+ * @param array $userLessonPairs Array av ['user_id' => int, 'lesson_id' => int]
+ * @param string $emailType 'new_lesson' eller 'reminder'
+ * @return int Antal tillagda rader
+ */
+function queueSequentialEmails($courseId, $userLessonPairs, $emailType) {
+    $added = 0;
+    foreach ($userLessonPairs as $pair) {
+        // Dubblettkontroll
+        $existing = queryOne(
+            "SELECT id FROM " . DB_DATABASE . ".sequential_email_queue
+             WHERE user_id = ? AND course_id = ? AND lesson_id = ? AND email_type = ? AND status IN ('queued','sending')",
+            [$pair['user_id'], $courseId, $pair['lesson_id'], $emailType]
+        );
+        if ($existing) {
+            continue;
+        }
+        execute(
+            "INSERT INTO " . DB_DATABASE . ".sequential_email_queue
+             (user_id, course_id, lesson_id, email_type, scheduled_at, status)
+             VALUES (?, ?, ?, ?, NOW(), 'queued')",
+            [$pair['user_id'], $courseId, $pair['lesson_id'], $emailType]
+        );
+        $added++;
+    }
+    return $added;
+}
+
+/**
+ * Bearbeta e-postkön i batchar med throttling.
+ *
+ * @param int|null $courseId Begränsa till specifik kurs, null = alla
+ * @param int $batchSize Antal e-post per batch
+ * @param int $delaySeconds Sekunder mellan batchar
+ * @param callable|null $logCallback Loggfunktion, t.ex. function($msg) { echo $msg; }
+ * @return array ['sent' => int, 'failed' => int]
+ */
+function processEmailQueue($courseId, $batchSize = 10, $delaySeconds = 30, $logCallback = null) {
+    require_once __DIR__ . '/mail.php';
+
+    $systemUrl = rtrim(getenv('SYSTEM_URL') ?: 'https://stimma.sambruk.se', '/');
+    $systemName = trim(getenv('SYSTEM_NAME'), '"\'') ?: 'Stimma';
+    $mailFrom = getenv('MAIL_FROM_ADDRESS') ?: 'noreply@tropheus.se';
+    $mailFromName = trim(getenv('MAIL_FROM_NAME'), '"\'') ?: 'Stimma';
+
+    $log = $logCallback ?: function($msg) {};
+
+    $sent = 0;
+    $failed = 0;
+    $batchNum = 0;
+
+    while (true) {
+        // Hämta nästa batch
+        $whereClause = "q.status = 'queued' AND q.scheduled_at <= NOW()";
+        $params = [];
+        if ($courseId !== null) {
+            $whereClause .= " AND q.course_id = ?";
+            $params[] = $courseId;
+        }
+
+        $items = query(
+            "SELECT q.*, u.email, u.name AS user_name,
+                    l.title AS lesson_title, l.sort_order,
+                    c.title AS course_title, c.deadline,
+                    c.seq_new_lesson_subject, c.seq_new_lesson_body,
+                    c.seq_reminder_subject, c.seq_reminder_body,
+                    (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = c.id) AS total_lessons
+             FROM " . DB_DATABASE . ".sequential_email_queue q
+             JOIN " . DB_DATABASE . ".users u ON q.user_id = u.id
+             JOIN " . DB_DATABASE . ".lessons l ON q.lesson_id = l.id
+             JOIN " . DB_DATABASE . ".courses c ON q.course_id = c.id
+             WHERE $whereClause
+             ORDER BY q.scheduled_at ASC
+             LIMIT $batchSize",
+            $params
+        );
+
+        if (empty($items)) {
+            break;
+        }
+
+        $batchNum++;
+        $log("Batch $batchNum: bearbetar " . count($items) . " e-post...");
+
+        foreach ($items as $item) {
+            // Markera som 'sending'
+            execute(
+                "UPDATE " . DB_DATABASE . ".sequential_email_queue SET status = 'sending', attempts = attempts + 1 WHERE id = ?",
+                [$item['id']]
+            );
+
+            $lessonUrl = $systemUrl . '/lesson.php?id=' . $item['lesson_id'];
+            $courseUrl = $systemUrl . '/course.php?id=' . $item['course_id'];
+            $userName = $item['user_name'] ?: 'användare';
+            $lessonNumber = $item['sort_order'] ?? 1;
+
+            // Beräkna deadline-info
+            $deadlineFormatted = '';
+            $daysRemaining = '';
+            if ($item['deadline']) {
+                $months = ['januari','februari','mars','april','maj','juni','juli','augusti','september','oktober','november','december'];
+                $dt = new DateTime($item['deadline']);
+                $deadlineFormatted = $dt->format('j') . ' ' . $months[$dt->format('n') - 1] . ' ' . $dt->format('Y');
+                $daysRemaining = (string)max(0, (int)((new DateTime($item['deadline']))->getTimestamp() - time()) / 86400);
+            }
+
+            // Mallvariabler
+            $vars = [
+                'user_name' => htmlspecialchars($userName),
+                'user_email' => htmlspecialchars($item['email']),
+                'course_title' => htmlspecialchars($item['course_title']),
+                'lesson_title' => htmlspecialchars($item['lesson_title']),
+                'lesson_url' => htmlspecialchars($lessonUrl),
+                'lesson_number' => $lessonNumber,
+                'total_lessons' => $item['total_lessons'],
+                'course_url' => htmlspecialchars($courseUrl),
+                'deadline' => $deadlineFormatted,
+                'days_remaining' => $daysRemaining,
+                'system_name' => htmlspecialchars($systemName),
+            ];
+
+            // Välj mall baserat på typ
+            if ($item['email_type'] === 'new_lesson') {
+                $templateSubject = $item['seq_new_lesson_subject'];
+                $templateBody = $item['seq_new_lesson_body'];
+            } else {
+                $templateSubject = $item['seq_reminder_subject'];
+                $templateBody = $item['seq_reminder_body'];
+            }
+
+            // Bygg e-post
+            if ($templateSubject && $templateBody) {
+                $subject = renderSequentialEmailTemplate($templateSubject, $vars);
+                $bodyText = renderSequentialEmailTemplate($templateBody, $vars);
+                $htmlMessage = buildSequentialEmailHtml($bodyText, $systemName);
+            } else {
+                // Fallback till standardmall
+                $htmlMessage = buildDefaultSequentialEmailHtml($item, $vars, $systemName, $systemUrl);
+                if ($item['email_type'] === 'new_lesson') {
+                    $subject = "Ny lektion tillgänglig: " . $item['lesson_title'];
+                } else {
+                    $subject = "Påminnelse: " . $item['lesson_title'] . " väntar på dig";
+                }
+            }
+
+            $mailSent = sendSmtpMail($item['email'], $subject, $htmlMessage, $mailFrom, $mailFromName);
+
+            if ($mailSent) {
+                execute(
+                    "UPDATE " . DB_DATABASE . ".sequential_email_queue SET status = 'sent', sent_at = NOW() WHERE id = ?",
+                    [$item['id']]
+                );
+                $sent++;
+
+                // Uppdatera schedule
+                if ($item['email_type'] === 'new_lesson') {
+                    execute(
+                        "UPDATE " . DB_DATABASE . ".sequential_lesson_schedule SET notified_at = NOW()
+                         WHERE user_id = ? AND course_id = ? AND lesson_id = ? AND notified_at IS NULL",
+                        [$item['user_id'], $item['course_id'], $item['lesson_id']]
+                    );
+                } else {
+                    execute(
+                        "UPDATE " . DB_DATABASE . ".sequential_lesson_schedule SET reminded_at = NOW()
+                         WHERE user_id = ? AND course_id = ? AND lesson_id = ? AND reminded_at IS NULL",
+                        [$item['user_id'], $item['course_id'], $item['lesson_id']]
+                    );
+                }
+
+                // Logga i sequential_reminder_log
+                execute(
+                    "INSERT INTO " . DB_DATABASE . ".sequential_reminder_log (user_id, course_id, lesson_id, type, email_status)
+                     VALUES (?, ?, ?, ?, 'sent')",
+                    [$item['user_id'], $item['course_id'], $item['lesson_id'], $item['email_type']]
+                );
+
+                $log("Skickat {$item['email_type']} till {$item['email']}: {$item['lesson_title']}");
+            } else {
+                $errorMsg = 'E-post kunde inte skickas';
+                execute(
+                    "UPDATE " . DB_DATABASE . ".sequential_email_queue SET status = 'failed', error_message = ? WHERE id = ?",
+                    [$errorMsg, $item['id']]
+                );
+                $failed++;
+
+                execute(
+                    "INSERT INTO " . DB_DATABASE . ".sequential_reminder_log (user_id, course_id, lesson_id, type, email_status, error_message)
+                     VALUES (?, ?, ?, ?, 'failed', ?)",
+                    [$item['user_id'], $item['course_id'], $item['lesson_id'], $item['email_type'], $errorMsg]
+                );
+
+                $log("FEL: Kunde inte skicka {$item['email_type']} till {$item['email']}");
+            }
+        }
+
+        // Delay mellan batchar om det finns fler
+        $remaining = queryOne(
+            "SELECT COUNT(*) AS cnt FROM " . DB_DATABASE . ".sequential_email_queue
+             WHERE status = 'queued' AND scheduled_at <= NOW()" .
+            ($courseId !== null ? " AND course_id = " . (int)$courseId : ""),
+            []
+        );
+        if ($remaining && $remaining['cnt'] > 0 && $delaySeconds > 0) {
+            $log("Väntar {$delaySeconds}s innan nästa batch ({$remaining['cnt']} kvar)...");
+            sleep($delaySeconds);
+        }
+    }
+
+    return ['sent' => $sent, 'failed' => $failed];
+}
+
+/**
+ * Bygg HTML-wrapper för e-post med anpassad brödtext.
+ *
+ * @param string $bodyText Brödtext (kan innehålla HTML)
+ * @param string $systemName Systemets namn
+ * @return string Fullständigt HTML-mail
+ */
+function buildSequentialEmailHtml($bodyText, $systemName) {
+    // Konvertera newlines till <br> om texten inte redan innehåller HTML-taggar
+    if (strip_tags($bodyText) === $bodyText) {
+        $bodyText = nl2br($bodyText);
+    }
+
+    return "
+    <!DOCTYPE html>
+    <html lang='sv'>
+    <head><meta charset='UTF-8'></head>
+    <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;'>
+        <div style='background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;'>
+            <h1 style='color: #007bff; margin: 0 0 10px 0; font-size: 24px;'>" . htmlspecialchars($systemName) . "</h1>
+        </div>
+        <div style='padding: 20px 0;'>
+            $bodyText
+        </div>
+        <div style='border-top: 1px solid #dee2e6; padding-top: 20px; margin-top: 20px; color: #6c757d; font-size: 12px;'>
+            <p>Detta är ett automatiskt meddelande från " . htmlspecialchars($systemName) . ".</p>
+        </div>
+    </body>
+    </html>";
+}
+
+/**
+ * Bygg standard-HTML-mail (fallback när inga mallar konfigurerats).
+ * Bevarar exakt samma HTML som det ursprungliga cron-skriptet.
+ *
+ * @param array $item Körad med e-post- och kursdata
+ * @param array $vars Mallvariabler
+ * @param string $systemName Systemets namn
+ * @param string $systemUrl Systemets URL
+ * @return string Fullständigt HTML-mail
+ */
+function buildDefaultSequentialEmailHtml($item, $vars, $systemName, $systemUrl) {
+    $lessonUrl = $systemUrl . '/lesson.php?id=' . $item['lesson_id'];
+    $userName = $item['user_name'] ?: 'användare';
+
+    if ($item['email_type'] === 'new_lesson') {
+        return "
+        <!DOCTYPE html>
+        <html lang='sv'>
+        <head><meta charset='UTF-8'></head>
+        <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;'>
+            <div style='background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;'>
+                <h1 style='color: #007bff; margin: 0 0 10px 0; font-size: 24px;'>$systemName</h1>
+                <p style='margin: 0; color: #6c757d;'>Ny lektion tillgänglig</p>
+            </div>
+            <div style='padding: 20px 0;'>
+                <p>Hej " . htmlspecialchars($userName) . "!</p>
+                <p>En ny lektion i kursen <strong>" . htmlspecialchars($item['course_title']) . "</strong> är nu tillgänglig för dig:</p>
+                <div style='background-color: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 4px; margin: 20px 0;'>
+                    <strong style='color: #155724;'>" . htmlspecialchars($item['lesson_title']) . "</strong>
+                </div>
+                <p>
+                    <a href='" . htmlspecialchars($lessonUrl) . "' style='display: inline-block; background-color: #007bff; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-weight: bold;'>Gå till lektionen</a>
+                </p>
+            </div>
+            <div style='border-top: 1px solid #dee2e6; padding-top: 20px; margin-top: 20px; color: #6c757d; font-size: 12px;'>
+                <p>Detta är ett automatiskt meddelande från $systemName.</p>
+            </div>
+        </body>
+        </html>";
+    } else {
+        return "
+        <!DOCTYPE html>
+        <html lang='sv'>
+        <head><meta charset='UTF-8'></head>
+        <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;'>
+            <div style='background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;'>
+                <h1 style='color: #007bff; margin: 0 0 10px 0; font-size: 24px;'>$systemName</h1>
+                <p style='margin: 0; color: #6c757d;'>Påminnelse</p>
+            </div>
+            <div style='padding: 20px 0;'>
+                <p>Hej " . htmlspecialchars($userName) . "!</p>
+                <p>Du har en lektion i kursen <strong>" . htmlspecialchars($item['course_title']) . "</strong> som väntar på dig:</p>
+                <div style='background-color: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 4px; margin: 20px 0;'>
+                    <strong style='color: #856404;'>" . htmlspecialchars($item['lesson_title']) . "</strong>
+                </div>
+                <p>
+                    <a href='" . htmlspecialchars($lessonUrl) . "' style='display: inline-block; background-color: #007bff; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-weight: bold;'>Gå till lektionen</a>
+                </p>
+            </div>
+            <div style='border-top: 1px solid #dee2e6; padding-top: 20px; margin-top: 20px; color: #6c757d; font-size: 12px;'>
+                <p>Detta är ett automatiskt meddelande från $systemName.</p>
+            </div>
+        </body>
+        </html>";
+    }
 }
 
 function sendPermissionChangeNotification($userEmail, $changeType, $newStatus, $changedByEmail) {

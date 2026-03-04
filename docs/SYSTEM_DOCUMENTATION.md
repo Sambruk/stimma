@@ -432,6 +432,29 @@ CREATE TABLE ai_settings (
 );
 ```
 
+#### sequential_email_queue
+E-postkö för throttlad utskick av stegvisa kurser.
+
+```sql
+CREATE TABLE sequential_email_queue (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    course_id INT NOT NULL,
+    lesson_id INT NOT NULL,
+    email_type ENUM('new_lesson','reminder') NOT NULL,
+    scheduled_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    sent_at DATETIME DEFAULT NULL,
+    status ENUM('queued','sending','sent','failed') NOT NULL DEFAULT 'queued',
+    error_message TEXT DEFAULT NULL,
+    batch_id INT DEFAULT NULL,
+    attempts INT NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+    FOREIGN KEY (lesson_id) REFERENCES lessons(id) ON DELETE CASCADE
+);
+```
+
 #### activity_log
 Revisionslogg för användaråtgärder.
 
@@ -459,6 +482,13 @@ CREATE TABLE activity_log (
 | `/lesson.php` | GET/POST | Visa lektion, svara på quiz |
 | `/ai_chat.php` | POST | AI-tutor chattmeddelande |
 
+### REST API-endpoints (Bearer-token)
+
+| Endpoint | Metod | Beskrivning | Auth |
+|----------|-------|-------------|------|
+| `/api/sync_users.php` | POST | Synkronisera användarlista per domän | Bearer stm_... |
+| `/api/course_status.php` | GET | Kontrollera kursstatus för en användare | Bearer stm_... |
+
 ### Admin AJAX-endpoints
 
 | Endpoint | Metod | Beskrivning | Behörighet |
@@ -471,6 +501,9 @@ CREATE TABLE activity_log (
 | `/admin/ajax/search_users.php` | GET | Sök användare | Admin+ |
 | `/admin/update_course_order.php` | POST | Uppdatera kursordning | Redaktör+ |
 | `/admin/update_lesson_order.php` | POST | Uppdatera lektionsordning | Redaktör+ |
+| `/admin/ajax/send_sequential_test_email.php` | POST | Skicka testmail för stegvis kurs | Redaktör+ |
+| `/admin/ajax/trigger_sequential_start.php` | POST | Manuell start av stegvis kurs | Redaktör+ |
+| `/admin/ajax/send_manual_sequential_reminder.php` | POST | Skicka manuell påminnelse | Redaktör+ |
 
 ### Autentisering
 

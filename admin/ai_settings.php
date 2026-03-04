@@ -53,6 +53,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'course_generation_prompt' => trim($_POST['course_generation_prompt'] ?? '')
     ];
 
+    // Handle max_lesson_count if submitted
+    if (isset($_POST['max_lesson_count'])) {
+        $maxLessons = max(1, min(100, (int)$_POST['max_lesson_count']));
+        $settings['max_lesson_count'] = (string)$maxLessons;
+    }
+
+    // Handle sequential course settings if submitted
+    if (isset($_POST['sequential_cron_hour'])) {
+        $settings['sequential_cron_hour'] = (string)max(0, min(23, (int)$_POST['sequential_cron_hour']));
+    }
+    if (isset($_POST['sequential_batch_size'])) {
+        $settings['sequential_batch_size'] = (string)max(1, min(500, (int)$_POST['sequential_batch_size']));
+    }
+    if (isset($_POST['sequential_batch_delay_seconds'])) {
+        $settings['sequential_batch_delay_seconds'] = (string)max(0, min(300, (int)$_POST['sequential_batch_delay_seconds']));
+    }
+
     foreach ($settings as $key => $value) {
         $result = execute(
             "UPDATE " . DB_DATABASE . ".ai_settings SET setting_value = ?, updated_by = ? WHERE setting_key = ?",
@@ -264,6 +281,30 @@ require_once 'include/header.php';
                     <input type="hidden" name="topic_restrictions" value="<?= htmlspecialchars($settings['topic_restrictions']['setting_value'] ?? '') ?>">
                     <input type="hidden" name="custom_instructions" value="<?= htmlspecialchars($settings['custom_instructions']['setting_value'] ?? '') ?>">
 
+                    <!-- Max antal lektioner -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="m-0"><i class="bi bi-sliders me-2"></i>Begränsningar</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row align-items-end">
+                                <div class="col-md-4">
+                                    <label for="max_lesson_count" class="form-label">
+                                        Maximalt antal lektioner per AI-genererad kurs
+                                    </label>
+                                    <input type="number" class="form-control" id="max_lesson_count" name="max_lesson_count"
+                                        min="1" max="100" value="<?= htmlspecialchars($settings['max_lesson_count']['setting_value'] ?? '20') ?>">
+                                </div>
+                                <div class="col-md-8">
+                                    <small class="text-muted">
+                                        Denna gräns visas i AI-genereringsmodalen och förhindrar att användare anger fler lektioner än tillåtet.
+                                        Standardvärde: 20. Högre värden ger längre genereringstid och högre API-kostnader.
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="card mb-4">
                         <div class="card-header">
                             <h6 class="m-0"><i class="bi bi-file-earmark-code me-2"></i>Kursgeneringsprompt</h6>
@@ -303,6 +344,60 @@ require_once 'include/header.php';
                                 </button>
                             </div>
                         </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Stegvisa kurser - inställningar -->
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 bg-info text-white">
+                <h6 class="m-0 font-weight-bold">
+                    <i class="bi bi-list-ol me-2"></i>Stegvisa kurser
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Information:</strong> Dessa inställningar styr hur stegvisa kursers e-postutskick hanteras.
+                    Batchar används för att sprida utskick över tid och undvika svartlistning hos e-postleverantörer.
+                </div>
+
+                <form method="POST" action="ai_settings.php">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                    <!-- Behåll övriga inställningar -->
+                    <input type="hidden" name="guardrails_enabled" value="<?= ($settings['guardrails_enabled']['setting_value'] ?? '1') === '1' ? '1' : '' ?>">
+                    <input type="hidden" name="system_prompt_prefix" value="<?= htmlspecialchars($settings['system_prompt_prefix']['setting_value'] ?? '') ?>">
+                    <input type="hidden" name="blocked_topics" value="<?= htmlspecialchars($settings['blocked_topics']['setting_value'] ?? '') ?>">
+                    <input type="hidden" name="response_guidelines" value="<?= htmlspecialchars($settings['response_guidelines']['setting_value'] ?? '') ?>">
+                    <input type="hidden" name="topic_restrictions" value="<?= htmlspecialchars($settings['topic_restrictions']['setting_value'] ?? '') ?>">
+                    <input type="hidden" name="custom_instructions" value="<?= htmlspecialchars($settings['custom_instructions']['setting_value'] ?? '') ?>">
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label for="sequential_cron_hour" class="form-label">Cron-timme (0-23)</label>
+                            <input type="number" class="form-control" id="sequential_cron_hour" name="sequential_cron_hour"
+                                   min="0" max="23" value="<?= htmlspecialchars($settings['sequential_cron_hour']['setting_value'] ?? '8') ?>">
+                            <small class="text-muted">Vilken timme på dygnet det nattliga utskicket körs.</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="sequential_batch_size" class="form-label">Batch-storlek</label>
+                            <input type="number" class="form-control" id="sequential_batch_size" name="sequential_batch_size"
+                                   min="1" max="500" value="<?= htmlspecialchars($settings['sequential_batch_size']['setting_value'] ?? '10') ?>">
+                            <small class="text-muted">Antal e-post som skickas per batch.</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="sequential_batch_delay_seconds" class="form-label">Batchfördröjning (sekunder)</label>
+                            <input type="number" class="form-control" id="sequential_batch_delay_seconds" name="sequential_batch_delay_seconds"
+                                   min="0" max="300" value="<?= htmlspecialchars($settings['sequential_batch_delay_seconds']['setting_value'] ?? '30') ?>">
+                            <small class="text-muted">Paus mellan varje batch för att undvika svartlistning.</small>
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <button type="submit" class="btn btn-info text-white">
+                            <i class="bi bi-save me-2"></i>Spara stegvisa inställningar
+                        </button>
                     </div>
                 </form>
             </div>
