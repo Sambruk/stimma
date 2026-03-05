@@ -108,6 +108,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a href="course_stats.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'course_stats.php' ? 'active' : '' ?>">
+                        <i class="bi bi-diagram-3 me-2"></i> Kursstatistik
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a href="certificates.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'certificates.php' ? 'active' : '' ?>">
                         <i class="bi bi-award me-2"></i> Diplom
                     </a>
@@ -124,6 +129,16 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <li class="nav-item">
                     <a href="users.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'users.php' ? 'active' : '' ?>">
                         <i class="bi bi-people me-2"></i> Användare
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="api_keys.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'api_keys.php' ? 'active' : '' ?>">
+                        <i class="bi bi-key me-2"></i> API-nycklar
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="sync_logs.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'sync_logs.php' ? 'active' : '' ?>">
+                        <i class="bi bi-arrow-repeat me-2"></i> Synkloggar
                     </a>
                 </li>
                 <li class="nav-item">

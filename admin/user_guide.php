@@ -84,6 +84,12 @@ require_once 'include/header.php';
                         </a>
                     </div>
                     <div class="col-md-3 col-6">
+                        <a href="#pub-avtal" class="quick-nav-card pub">
+                            <div class="icon"><i class="bi bi-file-earmark-lock-fill"></i></div>
+                            <div class="label">PUB-avtal</div>
+                        </a>
+                    </div>
+                    <div class="col-md-3 col-6">
                         <a href="#behorigheter" class="quick-nav-card permissions">
                             <div class="icon"><i class="bi bi-key-fill"></i></div>
                             <div class="label">Behörigheter</div>
@@ -236,7 +242,7 @@ require_once 'include/header.php';
                                             </span>
                                             <div>
                                                 <strong>Med "Kom ihåg mig"</strong>
-                                                <p class="text-muted small mb-0">Du förblir inloggad i <strong>30 dagar</strong>. Perfekt om du använder din egen dator eller mobil.</p>
+                                                <p class="text-muted small mb-0">Du förblir inloggad i <strong>7 dagar</strong>. Perfekt om du använder din egen dator eller mobil.</p>
                                             </div>
                                         </div>
                                     </div>
@@ -288,6 +294,24 @@ require_once 'include/header.php';
                     </div>
                     <h5>AI-tutor</h5>
                     <p>Ställ frågor till AI-tutorn om du behöver hjälp. Den är tränad på lektionens innehåll.</p>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <i class="bi bi-award"></i>
+                    </div>
+                    <h5>Diplom</h5>
+                    <p>Slutför alla lektioner och quiz i en kurs för att få ditt diplom. Ladda ner eller skriv ut det.</p>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <i class="bi bi-graph-up-arrow"></i>
+                    </div>
+                    <h5>Följ din progress</h5>
+                    <p>Se hur långt du kommit i varje kurs. Din framsteg sparas automatiskt.</p>
                 </div>
             </div>
         </div>
@@ -364,9 +388,11 @@ require_once 'include/header.php';
                             <li>Fyll i lektionsinformation:
                                 <ul>
                                     <li><strong>Titel</strong> - Lektionens namn</li>
-                                    <li><strong>Innehåll</strong> - Lektionstexten (stödjer HTML)</li>
-                                    <li><strong>Video-URL</strong> - Länk till video (valfritt)</li>
-                                    <li><strong>Quiz</strong> - Fråga med tre svarsalternativ</li>
+                                    <li><strong>Innehåll</strong> - Lektionstexten (stödjer HTML med formaterade rutor)</li>
+                                    <li><strong>Video-URL</strong> - Länk till YouTube-video (valfritt)</li>
+                                    <li><strong>Lektionsbild</strong> - Ladda upp eller generera med AI</li>
+                                    <li><strong>Quiz</strong> - Fråga med upp till 5 svarsalternativ (enkelval eller flerval)</li>
+                                    <li><strong>AI-handledare</strong> - Instruktion och prompt för AI-tutorn (valfritt)</li>
                                 </ul>
                             </li>
                             <li>Klicka <strong>"Spara"</strong></li>
@@ -383,24 +409,135 @@ require_once 'include/header.php';
 
             <div class="accordion-item">
                 <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#aiGenerateCourse">
+                        <i class="bi bi-stars me-2"></i>AI-generera en hel kurs
+                    </button>
+                </h2>
+                <div id="aiGenerateCourse" class="accordion-collapse collapse" data-bs-parent="#editorAccordion">
+                    <div class="accordion-body">
+                        <p>Med AI-kursgenerering kan du skapa en komplett kurs med lektioner, quiz, bilder och diplom - allt på en gång.</p>
+
+                        <h6 class="mt-3 mb-2"><i class="bi bi-1-circle me-2 text-primary"></i>Steg 1: Grundinställningar</h6>
+                        <p class="text-muted small">Klicka på <strong>"AI Generera kurs"</strong> i Kurshanteringen och fyll i:</p>
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <ul class="styled-list mb-0">
+                                    <li><strong>Kursnamn</strong> - Vad kursen ska heta</li>
+                                    <li><strong>Beskrivning</strong> - Beskriv kursen utförligt (ju mer detaljer, desto bättre resultat)</li>
+                                    <li><strong>Antal lektioner</strong> - Hur många lektioner som ska skapas</li>
+                                    <li><strong>Svårighetsgrad</strong> - Nybörjare, Medel eller Avancerad</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <ul class="styled-list mb-0">
+                                    <li><strong>Textlängd</strong> - Kort (~5-8 meningar), Mellan (~12-18) eller Lång (~25-35)</li>
+                                    <li><strong>Tonalitet</strong> - Pedagogisk, Formell, Avslappnad eller Inspirerande</li>
+                                    <li><strong>Språkstil</strong> - Formell, Informell, Akademisk eller Vardaglig</li>
+                                    <li><strong>Målgrupp</strong> - T.ex. "nyanställda inom vården"</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-4">
+                                <div class="mini-card">
+                                    <h6><i class="bi bi-palette me-2 text-primary"></i>Färgtema</h6>
+                                    <p class="small text-muted mb-0">Välj en färg som påverkar bildernas färgpalett.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mini-card">
+                                    <h6><i class="bi bi-check2-square me-2 text-success"></i>Quiz & AI-tutor</h6>
+                                    <p class="small text-muted mb-0">Kryssa i för att generera quiz per lektion och/eller AI-handledare.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mini-card">
+                                    <h6><i class="bi bi-images me-2 text-warning"></i>Generera bilder</h6>
+                                    <p class="small text-muted mb-0">AI skapar kursbild, lektionsbilder och diplombild automatiskt.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h6 class="mt-4 mb-2"><i class="bi bi-2-circle me-2 text-primary"></i>Steg 2: AI ställer kompletterande frågor</h6>
+                        <p class="text-muted small">AI:n analyserar din beskrivning och ställer 2-4 följdfrågor för att skapa bättre innehåll. Svara på frågorna eller klicka <strong>"Hoppa över"</strong>.</p>
+
+                        <h6 class="mt-4 mb-2"><i class="bi bi-3-circle me-2 text-primary"></i>Steg 3: Generering pågår</h6>
+                        <p class="text-muted small">AI:n arbetar i bakgrunden. En progress-indikator visar hur långt det kommit. Du kan stänga dialogen - genereringen fortsätter.</p>
+                        <div class="tip-box success mt-3">
+                            <div class="tip-icon"><i class="bi bi-lightbulb-fill"></i></div>
+                            <div class="tip-content">
+                                <strong>Bra att veta</strong>
+                                <ul class="mb-0 mt-2">
+                                    <li>Kursen skapas som <strong>inaktiv</strong> - granska och aktivera manuellt</li>
+                                    <li>Varje lektion får rik formatering med tips-, info-, exempel- och sammanfattningsrutor</li>
+                                    <li>Quiz-frågor varieras automatiskt mellan enkelval och flerval</li>
+                                    <li>Bildgenerering kan ta extra tid (10-30 sek per bild)</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <h2 class="accordion-header">
                     <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#aiFeatures">
-                        <i class="bi bi-magic me-2"></i>AI-funktioner
+                        <i class="bi bi-magic me-2"></i>AI-bilder
                     </button>
                 </h2>
                 <div id="aiFeatures" class="accordion-collapse collapse" data-bs-parent="#editorAccordion">
                     <div class="accordion-body">
+                        <p>Du kan generera AI-bilder med DALL-E 3 på flera ställen:</p>
                         <div class="row g-4">
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <div class="mini-card">
-                                    <h6><i class="bi bi-image me-2 text-primary"></i>Generera AI-bild</h6>
-                                    <p class="small text-muted mb-0">Klicka på "Generera AI-bild" i kurs- eller lektionsredigeringen. DALL-E 3 skapar en passande bild (tar 10-30 sekunder).</p>
+                                    <h6><i class="bi bi-book me-2 text-primary"></i>Kursbild</h6>
+                                    <p class="small text-muted mb-0">I kursredigeringen, klicka <strong>"Generera AI-bild"</strong>. Bilden blir kursens omslag.</p>
                                 </div>
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <div class="mini-card">
-                                    <h6><i class="bi bi-stars me-2 text-primary"></i>Skapa AI-kurs</h6>
-                                    <p class="small text-muted mb-0">Skapa en hel kurs automatiskt med AI. Ange kursnamn, antal lektioner och svårighetsgrad så genereras allt innehåll.</p>
+                                    <h6><i class="bi bi-journal me-2 text-success"></i>Lektionsbild</h6>
+                                    <p class="small text-muted mb-0">I lektionsredigeringen, klicka <strong>"Generera AI-bild"</strong> för en illustration av lektionens ämne.</p>
                                 </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mini-card">
+                                    <h6><i class="bi bi-award me-2 text-warning"></i>Diplombild</h6>
+                                    <p class="small text-muted mb-0">I kursredigeringen under Certifikatbild. Visas på diplomet vid kursavslut.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#importExport">
+                        <i class="bi bi-arrow-left-right me-2"></i>Importera och exportera kurser
+                    </button>
+                </h2>
+                <div id="importExport" class="accordion-collapse collapse" data-bs-parent="#editorAccordion">
+                    <div class="accordion-body">
+                        <div class="row g-4">
+                            <div class="col-md-6">
+                                <h6><i class="bi bi-box-arrow-up me-2 text-primary"></i>Exportera</h6>
+                                <p class="small text-muted">Klicka på export-ikonen bredvid kursen i kurslistan. En ZIP-fil laddas ner med:</p>
+                                <ul class="small">
+                                    <li>Kursdata i JSON-format</li>
+                                    <li>Alla bilder (kurs, lektioner, diplom)</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6><i class="bi bi-box-arrow-in-down me-2 text-success"></i>Importera</h6>
+                                <p class="small text-muted">Klicka <strong>"Importera kurs"</strong> i Kurshanteringen och ladda upp en ZIP-fil. Kursen skapas som inaktiv med alla lektioner och bilder.</p>
+                            </div>
+                        </div>
+                        <div class="tip-box info mt-3">
+                            <div class="tip-icon"><i class="bi bi-share"></i></div>
+                            <div class="tip-content">
+                                <strong>Dela kurser:</strong> Exportera en kurs från en organisation och importera den i en annan. Perfekt för att dela utbildningsmaterial mellan kommuner.
                             </div>
                         </div>
                     </div>
@@ -536,6 +673,59 @@ require_once 'include/header.php';
                 </div>
             </div>
         </div>
+
+        <!-- Stegvisa kurser -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-skip-forward me-2 text-primary"></i>Stegvisa kurser</h5>
+                <p class="text-muted">Kurser kan konfigureras med stegvis leverans, där studenter får tillgång till en lektion i taget istället för alla på en gång.</p>
+
+                <div class="row">
+                    <div class="col-lg-6">
+                        <h6 class="mb-3">Inställningar (under Redigera kurs)</h6>
+                        <ul class="config-list">
+                            <li><i class="bi bi-toggle-on"></i> <strong>Stegvis leverans</strong> – aktivera via checkboxen i kursredigeraren</li>
+                            <li><i class="bi bi-calendar3"></i> <strong>Intervall</strong> – antal dagar mellan varje lektion (t.ex. 3 dagar)</li>
+                            <li><i class="bi bi-bell"></i> <strong>Automatiska påminnelser</strong> – e-post skickas automatiskt när en ny lektion blir tillgänglig</li>
+                        </ul>
+                    </div>
+                    <div class="col-lg-6">
+                        <h6 class="mb-3">Studentens upplevelse</h6>
+                        <ul class="config-list">
+                            <li><i class="bi bi-lock"></i> Låsikon visas på lektioner som ännu inte är tillgängliga</li>
+                            <li><i class="bi bi-clock"></i> Klockikon och datum visas för nästa planerade lektion</li>
+                            <li><i class="bi bi-envelope"></i> E-post skickas automatiskt när en ny lektion låses upp</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Kursstatistik -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-graph-up me-2 text-success"></i>Kursstatistik</h5>
+                <p class="text-muted">Under menyn <strong>Kursstatistik</strong> får du en detaljerad översikt över hur studenter genomför varje kurs.</p>
+
+                <div class="row">
+                    <div class="col-lg-6">
+                        <h6 class="mb-3">Funktioner</h6>
+                        <ul class="config-list">
+                            <li><i class="bi bi-bar-chart-line"></i> <strong>Kursöversikt</strong> – se andel påbörjade och slutförda per kurs</li>
+                            <li><i class="bi bi-diagram-3"></i> <strong>Organisationstaggar</strong> – drill-down per org-tagg (avdelning/enhet)</li>
+                            <li><i class="bi bi-person"></i> <strong>Användarnivå</strong> – se individuell progress för varje student</li>
+                        </ul>
+                    </div>
+                    <div class="col-lg-6">
+                        <h6 class="mb-3">Manuell påminnelse</h6>
+                        <ul class="config-list">
+                            <li><i class="bi bi-send"></i> Skicka manuell påminnelse till enskild användare direkt från statistikvyn</li>
+                            <li><i class="bi bi-chat-text"></i> Lägg till ett valfritt personligt meddelande</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -547,17 +737,18 @@ require_once 'include/header.php';
             <h2>Guide för superadministratörer</h2>
         </div>
 
-        <div class="card border-0 shadow-sm">
+        <div class="card border-0 shadow-sm mb-4">
             <div class="card-body p-4">
                 <div class="row align-items-center">
                     <div class="col-lg-6">
-                        <h5><i class="bi bi-cpu me-2 text-danger"></i>AI-inställningar</h5>
+                        <h5><i class="bi bi-cpu me-2 text-danger"></i>AI-inställningar - Guardrails</h5>
                         <p class="text-muted">Konfigurera hur AI-tutorn beter sig i hela systemet.</p>
                         <ul class="config-list">
                             <li><i class="bi bi-shield-check"></i> <strong>Guardrails</strong> - Säkerhetsbegränsningar för AI-svar</li>
                             <li><i class="bi bi-chat-text"></i> <strong>Systemprompt</strong> - Text som läggs till före AI-förfrågningar</li>
                             <li><i class="bi bi-x-octagon"></i> <strong>Blockerade ämnen</strong> - Ämnen AI:n inte får diskutera</li>
                             <li><i class="bi bi-list-check"></i> <strong>Svarsriktlinjer</strong> - Regler för hur AI:n ska svara</li>
+                            <li><i class="bi bi-gear"></i> <strong>Anpassade instruktioner</strong> - Organisationsspecifika regler</li>
                         </ul>
                     </div>
                     <div class="col-lg-6">
@@ -572,6 +763,140 @@ require_once 'include/header.php';
                                 </ul>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <div class="row align-items-start">
+                    <div class="col-lg-6">
+                        <h5><i class="bi bi-sliders me-2 text-primary"></i>AI-inställningar - Kursgenerering</h5>
+                        <p class="text-muted">Styr hur AI-genererade kurser skapas.</p>
+                        <ul class="config-list">
+                            <li><i class="bi bi-123"></i> <strong>Max antal lektioner</strong> - Begränsa hur många lektioner som kan genereras per kurs (1-100)</li>
+                            <li><i class="bi bi-file-text"></i> <strong>Genereringsprompt</strong> - Anpassa AI-prompten som styr hur kursinnehåll genereras</li>
+                        </ul>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="tip-box info">
+                            <div class="tip-icon"><i class="bi bi-lightbulb-fill"></i></div>
+                            <div class="tip-content">
+                                <strong>Prompten styr kvaliteten</strong>
+                                <p class="mb-0 mt-1">Genereringsprompten bestämmer hur AI:n strukturerar kurser. Anpassa den för att matcha er organisations pedagogiska stil. Klicka "Återställ standard" för att gå tillbaka till grundprompten.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Superadmin: Domain & PUB management -->
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                        <i class="bi bi-globe"></i>
+                    </div>
+                    <h5>Domänhantering</h5>
+                    <p>Hantera organisationer/domäner, se PUB-avtalsstatus och klicka för avtalsdetaljer.</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                        <i class="bi bi-file-earmark-lock"></i>
+                    </div>
+                    <h5>PUB-avtal</h5>
+                    <p>Se alla digitalt tecknade PUB-avtal. Klicka för fullständiga detaljer: undertecknare, organisation, datum, IP och hash.</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                        <i class="bi bi-people-fill"></i>
+                    </div>
+                    <h5>Alla användare</h5>
+                    <p>Se och hantera användare från alla organisationer. Filtrera per domän, tilldela roller.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- PUB-avtal Section -->
+<div class="row mb-5" id="pub-avtal">
+    <div class="col-12">
+        <div class="section-header">
+            <span class="section-icon" style="background: linear-gradient(135deg, #667eea 0%, #00b09b 100%);"><i class="bi bi-file-earmark-lock-fill"></i></span>
+            <h2>PUB-avtal (Personuppgiftsbiträdesavtal)</h2>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <div class="row align-items-start">
+                    <div class="col-lg-7">
+                        <h5 class="mb-3"><i class="bi bi-shield-lock me-2 text-success"></i>Vad är ett PUB-avtal?</h5>
+                        <p class="text-muted">Ett PUB-avtal (Personuppgiftsbiträdesavtal) reglerar hur personuppgifter hanteras mellan din organisation och Sambruk. Enligt GDPR krävs detta avtal innan personuppgifter behandlas i systemet.</p>
+
+                        <div class="tip-box warning mt-3">
+                            <div class="tip-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                            <div class="tip-content">
+                                <strong>Viktigt!</strong>
+                                <p class="mb-0 mt-1">Organisationer utan tecknat PUB-avtal ser en varningsruta i systemet. Kontakta din organisations administratör för att teckna avtalet.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-5">
+                        <div class="mini-card">
+                            <h6><i class="bi bi-check-circle me-2 text-success"></i>PUB-status visas i menyn</h6>
+                            <p class="small text-muted mb-2">Admin och redaktörer ser PUB-avtalets status som en badge i sidhuvudet:</p>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>PUB tecknat</span>
+                                <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>PUB saknas</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0 pt-4 pb-0 px-4">
+                <h5><i class="bi bi-pencil-square me-2 text-primary"></i>Teckna PUB-avtal - steg för steg</h5>
+                <p class="text-muted mb-0">Behörig person i organisationen tecknar avtalet digitalt</p>
+            </div>
+            <div class="card-body p-4">
+                <div class="login-steps">
+                    <div class="login-step">
+                        <div class="step-number">1</div>
+                        <div class="step-content">
+                            <strong>Granska avtalet</strong>
+                            <p class="mb-0 small text-muted">Läs igenom PUB-avtalets PDF-dokument som visas på sidan. Avtalet måste först vara kontrasignerat av Sambruk.</p>
+                        </div>
+                    </div>
+                    <div class="login-step">
+                        <div class="step-number">2</div>
+                        <div class="step-content">
+                            <strong>Fyll i uppgifter och verifiera med SMS</strong>
+                            <p class="mb-0 small text-muted">Ange namn, titel och e-post. Verifiera din identitet med en 6-siffrig SMS-kod. Intyga att du har behörighet att teckna avtal för organisationen.</p>
+                        </div>
+                    </div>
+                    <div class="login-step">
+                        <div class="step-number">3</div>
+                        <div class="step-content">
+                            <strong>Ange organisationsuppgifter och signera</strong>
+                            <p class="mb-0 small text-muted">Fyll i organisationsnamn och organisationsnummer. Klicka "Signera avtal". Ett stämplat PDF-avtal skapas och skickas per e-post.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tip-box success mt-4">
+                    <div class="tip-icon"><i class="bi bi-envelope-check-fill"></i></div>
+                    <div class="tip-content">
+                        <strong>Efter signering</strong>
+                        <p class="mb-0 mt-1">Det stämplade avtalet skickas automatiskt till undertecknarens e-post, organisationens registrator och till Sambruk. Avtalet loggas med tidsstämpel, IP-adress och PDF-hash för spårbarhet.</p>
                     </div>
                 </div>
             </div>
@@ -630,6 +955,125 @@ require_once 'include/header.php';
     </div>
 </div>
 
+<!-- REST API & Användarsynk -->
+<div class="row mb-5" id="api">
+    <div class="col-12">
+        <div class="section-header">
+            <span class="section-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"><i class="bi bi-cloud-arrow-up"></i></span>
+            <h2>REST API &amp; Användarsynk</h2>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-key me-2 text-warning"></i>API-nycklar</h5>
+                <p class="text-muted">API-nycklar genereras under <strong>Admin → API-nycklar</strong>. Varje nyckel är knuten till en domän och börjar med <code>stm_</code>.</p>
+                <ul class="config-list">
+                    <li><i class="bi bi-plus-circle"></i> <strong>Skapa nyckel</strong> – välj domän, nyckeln visas en gång vid skapande</li>
+                    <li><i class="bi bi-toggle-on"></i> <strong>Aktivera synk</strong> – slå på "Synkronisering" för domänen för att tillåta API-anrop</li>
+                    <li><i class="bi bi-journal-text"></i> <strong>Synkloggar</strong> – se alla API-anrop under Admin → Synkloggar</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-people me-2 text-primary"></i>Användarsynk-endpoint</h5>
+                <p class="text-muted"><code>POST /api/sync_users.php</code> – synkronisera en komplett användarlista per domän.</p>
+
+                <div class="row">
+                    <div class="col-lg-6">
+                        <h6 class="mb-3">Request</h6>
+<pre class="bg-dark text-light p-3 rounded" style="font-size: 0.85rem;"><code>POST /api/sync_users.php
+Authorization: Bearer stm_din_nyckel_här
+Content-Type: application/json
+
+{
+  "users": [
+    {
+      "email": "anna@example.se",
+      "name": "Anna Svensson",
+      "role": "student",
+      "organization": "Avd1/Enhet2"
+    }
+  ],
+  "deactivate_missing": true
+}</code></pre>
+                    </div>
+                    <div class="col-lg-6">
+                        <h6 class="mb-3">Response</h6>
+<pre class="bg-dark text-light p-3 rounded" style="font-size: 0.85rem;"><code>{
+  "success": true,
+  "summary": {
+    "total_in_payload": 1,
+    "created": 1,
+    "updated": 0,
+    "deactivated": 0,
+    "reactivated": 0
+  },
+  "sync_id": 42
+}</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-check-circle me-2 text-success"></i>Kursstatus-endpoint</h5>
+                <p class="text-muted"><code>GET /api/course_status.php?email=...&amp;course_id=...</code> – kontrollera om en användare har slutfört en kurs.</p>
+
+                <div class="tip-box info mb-3">
+                    <div class="tip-icon"><i class="bi bi-info-circle-fill"></i></div>
+                    <div class="tip-content">
+                        <strong>Var hittar jag kurs-ID?</strong>
+                        <p class="mb-0 mt-1">Kurs-ID visas som en kolumn i kurslistan under Admin → Kurser, samt som en badge vid redigering av en kurs.</p>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-lg-6">
+                        <h6 class="mb-3">Request</h6>
+<pre class="bg-dark text-light p-3 rounded" style="font-size: 0.85rem;"><code>GET /api/course_status.php?email=anna@example.se&amp;course_id=25
+Authorization: Bearer stm_din_nyckel_här</code></pre>
+                    </div>
+                    <div class="col-lg-6">
+                        <h6 class="mb-3">Response (slutförd)</h6>
+<pre class="bg-dark text-light p-3 rounded" style="font-size: 0.85rem;"><code>{
+  "success": true,
+  "status": 1,
+  "email": "anna@example.se",
+  "course_id": 25,
+  "course_title": "Grundkurs GDPR",
+  "completed_at": "2026-03-04"
+}</code></pre>
+                        <h6 class="mb-3 mt-3">Response (pågående)</h6>
+<pre class="bg-dark text-light p-3 rounded" style="font-size: 0.85rem;"><code>{
+  "success": true,
+  "status": 0,
+  "email": "anna@example.se",
+  "course_id": 25,
+  "course_title": "Grundkurs GDPR",
+  "progress": "3/5"
+}</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tip-box warning mb-4">
+            <div class="tip-icon"><i class="bi bi-shield-lock-fill"></i></div>
+            <div class="tip-content">
+                <strong>Begränsningar</strong>
+                <ul class="mb-0 mt-2">
+                    <li>Max 10 anrop per timme per API-nyckel</li>
+                    <li>E-postadressens domän måste matcha API-nyckelns domän</li>
+                    <li>Synkronisering måste vara aktiverad för domänen</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Troubleshooting -->
 <div class="row mb-5">
     <div class="col-12">
@@ -671,8 +1115,30 @@ require_once 'include/header.php';
                 <div class="troubleshoot-card">
                     <h6><i class="bi bi-question-circle text-danger me-2"></i>Quiz sparas inte</h6>
                     <ul class="mb-0">
-                        <li>Fyll i alla fält (fråga, tre svar, rätt svar)</li>
-                        <li>Kontrollera att rätt svar är 1, 2 eller 3</li>
+                        <li>Fyll i alla obligatoriska fält (fråga, svar, rätt svar)</li>
+                        <li>Enkelval: ange korrekt svar (1-5)</li>
+                        <li>Flerval: ange korrekta svar kommaseparerat (t.ex. 1,3)</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="troubleshoot-card">
+                    <h6><i class="bi bi-stars text-danger me-2"></i>AI-kursgenerering misslyckas</h6>
+                    <ul class="mb-0">
+                        <li>Kontrollera att API-nyckeln är konfigurerad</li>
+                        <li>Ge en tydlig och detaljerad kursbeskrivning</li>
+                        <li>Försök med färre lektioner om det tar för lång tid</li>
+                        <li>Bildgenerering kan misslyckas separat - kursen skapas ändå</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="troubleshoot-card">
+                    <h6><i class="bi bi-file-earmark-lock text-danger me-2"></i>PUB-avtal kan inte signeras</h6>
+                    <ul class="mb-0">
+                        <li>Avtalet måste först vara kontrasignerat av Sambruk</li>
+                        <li>SMS-verifiering krävs - kontrollera telefonnumret</li>
+                        <li>Verifieringskoden är giltig i 10 minuter</li>
                     </ul>
                 </div>
             </div>
@@ -738,6 +1204,8 @@ require_once 'include/header.php';
 .quick-nav-card.admin:hover { border-color: #4facfe; }
 .quick-nav-card.superadmin { background: linear-gradient(135deg, rgba(250,112,154,0.1) 0%, rgba(254,225,64,0.1) 100%); color: #fa709a; }
 .quick-nav-card.superadmin:hover { border-color: #fa709a; }
+.quick-nav-card.pub { background: linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(0,176,155,0.1) 100%); color: #00b09b; }
+.quick-nav-card.pub:hover { border-color: #00b09b; }
 .quick-nav-card.permissions { background: linear-gradient(135deg, rgba(17,153,142,0.1) 0%, rgba(56,239,125,0.1) 100%); color: #11998e; }
 .quick-nav-card.permissions:hover { border-color: #11998e; }
 

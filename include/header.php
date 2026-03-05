@@ -101,27 +101,35 @@
 
                 <!-- Right side section with user info and action buttons -->
                 <div class="d-flex align-items-center">
-                    <!-- User email display with truncation for long addresses -->
-                    <div class="btn btn-text text-muted p-1 d-inline-flex align-items-center justify-content-center" 
-                         title="<?= htmlspecialchars($_SESSION['user_email'] ?? '') ?>"
-                         aria-label="Your email address">
-                        <?= htmlspecialchars($_SESSION['user_email'] ?? '') ?>
-                    </div>
-                    
-                    <!-- Admin and logout buttons -->
-                    <?php 
+                    <?php
                     // Check if user has admin privileges or is a course editor
                     $isAdmin = false;
                     $isCourseEditor = false;
-                    
+                    $headerUserName = '';
+                    $headerUserRole = 'student';
+                    $headerUserOrgTags = [];
+
                     if (isset($_SESSION['user_id'])) {
-                        // Check admin status
-                        $user = queryOne("SELECT is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
+                        $user = queryOne("SELECT name, is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
                         $isAdmin = $user ? (bool)$user['is_admin'] : false;
                         $isCourseEditor = $user ? (bool)$user['is_editor'] : false;
+                        $headerUserName = $user['name'] ?? '';
+                        if ($isAdmin) {
+                            $headerUserRole = 'admin';
+                        } elseif ($isCourseEditor) {
+                            $headerUserRole = 'editor';
+                        }
+                        $headerUserOrgTags = getUserOrgTags($_SESSION['user_id']);
                     }
-                    
                     ?>
+                    <!-- Profile button -->
+                    <button class="btn btn-link text-muted p-1 d-inline-flex align-items-center justify-content-center text-decoration-none"
+                            type="button" data-bs-toggle="offcanvas" data-bs-target="#profilePanel"
+                            aria-controls="profilePanel"
+                            title="Min profil">
+                        <i class="bi bi-person-circle me-1" style="font-size: 1.2rem;"></i>
+                        <span class="d-none d-md-inline"><?= htmlspecialchars($headerUserName ?: ($_SESSION['user_email'] ?? '')) ?></span>
+                    </button>
                     <!-- Dashboard link -->
                     <a href="dashboard.php"
                        class="btn btn-link p-1 me-2 d-inline-flex align-items-center justify-content-center"
@@ -156,4 +164,54 @@
             </div>
         </div>
     </nav>
+
+    <!-- Profile Offcanvas Panel -->
+    <div class="offcanvas offcanvas-end" tabindex="-1" id="profilePanel" aria-labelledby="profilePanelLabel">
+        <div class="offcanvas-header border-bottom">
+            <h5 class="offcanvas-title" id="profilePanelLabel">Min profil</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Stäng"></button>
+        </div>
+        <div class="offcanvas-body">
+            <div class="text-center mb-4">
+                <?php
+                $initial = mb_strtoupper(mb_substr($headerUserName ?: ($_SESSION['user_email'] ?? '?'), 0, 1));
+                ?>
+                <div class="rounded-circle bg-primary text-white d-inline-flex align-items-center justify-content-center mb-3" style="width: 64px; height: 64px; font-size: 1.8rem;">
+                    <?= htmlspecialchars($initial) ?>
+                </div>
+                <?php if ($headerUserName): ?>
+                <h5 class="mb-1"><?= htmlspecialchars($headerUserName) ?></h5>
+                <?php endif; ?>
+                <p class="text-muted mb-0"><?= htmlspecialchars($_SESSION['user_email'] ?? '') ?></p>
+            </div>
+
+            <ul class="list-group list-group-flush mb-3">
+                <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                    <span class="text-muted">Domän</span>
+                    <span class="fw-semibold"><?= htmlspecialchars($userDomain) ?></span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                    <span class="text-muted">Roll</span>
+                    <?php if ($headerUserRole === 'admin'): ?>
+                        <span class="badge bg-danger">Admin</span>
+                    <?php elseif ($headerUserRole === 'editor'): ?>
+                        <span class="badge bg-warning text-dark">Redaktör</span>
+                    <?php else: ?>
+                        <span class="badge bg-secondary">Student</span>
+                    <?php endif; ?>
+                </li>
+            </ul>
+
+            <?php if (!empty($headerUserOrgTags)): ?>
+            <div class="mb-3">
+                <h6 class="text-muted mb-2">Organisationstaggar</h6>
+                <div>
+                    <?php foreach ($headerUserOrgTags as $orgTag): ?>
+                    <span class="badge bg-success me-1 mb-1"><?= htmlspecialchars($orgTag['tag']) ?></span>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+        </div>
+    </div>
 <?php endif; ?>

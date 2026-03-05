@@ -1,6 +1,9 @@
 # Stimma Root Security
 # Block access to sensitive files and directories
 
+# Pass Authorization header to PHP (needed for API Bearer tokens)
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+
 # Block dotfiles (except .htaccess itself)
 <FilesMatch "^\.(?!htaccess)">
     Require all denied

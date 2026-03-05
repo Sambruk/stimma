@@ -17,44 +17,6 @@ require_once '../include/auth.php';
 // Include centralized authentication and authorization check
 require_once 'include/auth_check.php';
 
-// Hantera radering av kurs
-if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])) {
-    $courseId = (int)$_GET['id'];
-    
-    // Kontrollera om användaren har behörighet att radera kursen
-    if (!isAdmin($_SESSION['user_email'])) {
-        // Kontrollera om användaren är redaktör för kursen
-        $isEditor = queryOne("SELECT 1 FROM " . DB_DATABASE . ".course_editors WHERE course_id = ? AND email = ?", [$courseId, $_SESSION['user_email']]);
-        if (!$isEditor) {
-            $_SESSION['message'] = 'Du har inte behörighet att radera denna kurs.';
-            $_SESSION['message_type'] = 'danger';
-            header('Location: courses.php');
-            exit;
-        }
-    }
-    
-    // Kontrollera om kursen har lektioner
-    $lessons = query("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".lessons WHERE course_id = ?", [$courseId]);
-    $lessonCount = $lessons[0]['count'];
-
-    if ($lessonCount > 0) {
-        $_SESSION['message'] = 'Kursen kan inte raderas eftersom den innehåller lektioner. Ta bort alla lektioner först.';
-        $_SESSION['message_type'] = 'warning';
-    } else {
-        try {
-            execute("DELETE FROM " . DB_DATABASE . ".courses WHERE id = ?", [$courseId]);
-            $_SESSION['message'] = 'Kursen har raderats.';
-            $_SESSION['message_type'] = 'success';
-        } catch (Exception $e) {
-            $_SESSION['message'] = 'Ett fel uppstod när kursen skulle raderas.';
-            $_SESSION['message_type'] = 'danger';
-        }
-    }
-    
-    header('Location: courses.php');
-    exit;
-}
-
 // Sätt sidtitel
 $page_title = 'Kurshantering';
 
@@ -92,6 +54,25 @@ if ($isAdmin) {
     ", [$userDomain, $userId, $userEmail]);
 }
 
+// Hämta organisationstaggar per kurs
+$courseOrgTagsMap = [];
+if (!empty($courses)) {
+    $allCourseIds = array_column($courses, 'id');
+    $placeholders = implode(',', array_fill(0, count($allCourseIds), '?'));
+    $allCourseOrgTags = query(
+        "SELECT course_id, tag FROM " . DB_DATABASE . ".course_org_tags WHERE course_id IN ($placeholders) ORDER BY tag",
+        $allCourseIds
+    );
+    foreach ($allCourseOrgTags as $cot) {
+        $courseOrgTagsMap[$cot['course_id']][] = $cot['tag'];
+    }
+}
+
+// Hämta max antal lektioner från AI-inställningar
+$maxLessonSetting = queryOne("SELECT setting_value FROM " . DB_DATABASE . ".ai_settings WHERE setting_key = 'max_lesson_count'");
+$maxLessonCount = (int)($maxLessonSetting['setting_value'] ?? 20);
+if ($maxLessonCount < 1) $maxLessonCount = 20;
+
 // Inkludera header
 require_once 'include/header.php';
 ?>
@@ -127,6 +108,7 @@ require_once 'include/header.php';
                 <thead>
                     <tr>
                         <th style="width: 50px;"></th>
+                        <th style="width: 60px;">ID</th>
                         <th>Titel</th>
                         <th>Status</th>
                         <th>Antal lektioner</th>
@@ -142,11 +124,17 @@ require_once 'include/header.php';
                         <td>
                             <i class="bi bi-grip-vertical grip-handle text-muted"></i>
                         </td>
+                        <td><span class="text-muted"><?= $course['id'] ?></span></td>
                         <td>
-                            <div class="d-flex align-items-center">
+                            <div class="d-flex align-items-center flex-wrap gap-1">
                                 <a href="lessons.php?course_id=<?= $course['id'] ?>" class="text-decoration-none">
                                     <?= htmlspecialchars($course['title']) ?>
                                 </a>
+                                <?php if (!empty($courseOrgTagsMap[$course['id']])): ?>
+                                    <?php foreach ($courseOrgTagsMap[$course['id']] as $orgTag): ?>
+                                    <span class="badge bg-success" style="font-size: 0.7rem;"><?= htmlspecialchars($orgTag) ?></span>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
                             </div>
                         </td>
                         <td>
@@ -191,84 +179,185 @@ require_once 'include/header.php';
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Stäng"></button>
             </div>
             <form id="aiGenerateForm">
-                <div class="modal-body">
-                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
-                    <input type="hidden" name="action" value="create_job">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                <input type="hidden" name="action" value="create_job">
 
-                    <!-- Kursnamn -->
-                    <div class="mb-3">
-                        <label for="course_name" class="form-label">Kursnamn <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="course_name" name="course_name" required maxlength="255"
-                               placeholder="T.ex. Introduktion till projektledning">
-                    </div>
+                <!-- STEP 1: Basic settings -->
+                <div id="aiStep1">
+                    <div class="modal-body">
+                        <!-- Step indicator -->
+                        <div class="d-flex align-items-center mb-3">
+                            <span class="badge bg-success me-2">Steg 1</span>
+                            <small class="text-muted">Grundinställningar</small>
+                        </div>
 
-                    <!-- Beskrivning -->
-                    <div class="mb-3">
-                        <label for="course_description" class="form-label">Beskrivning av kursen <span class="text-danger">*</span></label>
-                        <textarea class="form-control" id="course_description" name="course_description" rows="4" required
-                                  placeholder="Beskriv vad kursen ska handla om, vilka ämnen som ska täckas, målgrupp etc."></textarea>
-                        <div class="form-text">Ju mer detaljerad beskrivning, desto bättre resultat från AI.</div>
-                    </div>
+                        <!-- Kursnamn -->
+                        <div class="mb-3">
+                            <label for="course_name" class="form-label">Kursnamn <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="course_name" name="course_name" required maxlength="255"
+                                   placeholder="T.ex. Introduktion till projektledning">
+                        </div>
 
-                    <!-- Antal lektioner -->
-                    <div class="mb-3">
-                        <label for="lesson_count" class="form-label">Antal lektioner <span class="text-danger">*</span></label>
-                        <input type="number" class="form-control" id="lesson_count" name="lesson_count"
-                               min="1" max="20" value="5" required style="max-width: 150px;">
-                        <div class="form-text">Minst 1, max 20 lektioner.</div>
-                    </div>
+                        <!-- Beskrivning -->
+                        <div class="mb-3">
+                            <label for="course_description" class="form-label">Beskrivning av kursen <span class="text-danger">*</span></label>
+                            <textarea class="form-control" id="course_description" name="course_description" rows="4" required
+                                      placeholder="Beskriv vad kursen ska handla om, vilka ämnen som ska täckas, målgrupp etc."></textarea>
+                            <div class="form-text">Ju mer detaljerad beskrivning, desto bättre resultat från AI.</div>
+                        </div>
 
-                    <!-- Svårighetsnivå -->
-                    <div class="mb-3">
-                        <label for="difficulty_level" class="form-label">Svårighetsnivå</label>
-                        <select class="form-select" id="difficulty_level" name="difficulty_level" style="max-width: 200px;">
-                            <option value="beginner">Nybörjare</option>
-                            <option value="intermediate">Mellannivå</option>
-                            <option value="advanced">Avancerad</option>
-                        </select>
-                    </div>
+                        <div class="row">
+                            <!-- Antal lektioner -->
+                            <div class="col-md-4 mb-3">
+                                <label for="lesson_count" class="form-label">Antal lektioner <span class="text-danger">*</span></label>
+                                <input type="number" class="form-control" id="lesson_count" name="lesson_count"
+                                       min="1" max="<?= $maxLessonCount ?>" value="5" required>
+                                <div class="form-text">Minst 1, max <?= $maxLessonCount ?> lektioner.</div>
+                            </div>
 
-                    <hr>
+                            <!-- Svårighetsnivå -->
+                            <div class="col-md-4 mb-3">
+                                <label for="difficulty_level" class="form-label">Svårighetsnivå</label>
+                                <select class="form-select" id="difficulty_level" name="difficulty_level">
+                                    <option value="beginner">Nybörjare</option>
+                                    <option value="intermediate">Mellannivå</option>
+                                    <option value="advanced">Avancerad</option>
+                                </select>
+                            </div>
 
-                    <!-- Quiz -->
-                    <div class="mb-3">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="include_quiz" name="include_quiz" value="1">
-                            <label class="form-check-label" for="include_quiz">
-                                <strong>Quiz ska skapas</strong>
-                            </label>
-                            <div class="form-text">AI genererar ett quiz per lektion baserat på innehållet.</div>
+                            <!-- Textlängd -->
+                            <div class="col-md-4 mb-3">
+                                <label for="text_length" class="form-label">Textlängd per lektion</label>
+                                <select class="form-select" id="text_length" name="text_length">
+                                    <option value="short">Kort (~5-8 meningar)</option>
+                                    <option value="medium" selected>Mellan (~12-18 meningar)</option>
+                                    <option value="long">Lång (~25-35 meningar)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <hr>
+                        <h6 class="text-muted mb-3"><i class="bi bi-sliders me-1"></i> Kursinställningar</h6>
+
+                        <div class="row">
+                            <!-- Tonalitet -->
+                            <div class="col-md-6 mb-3">
+                                <label for="tone" class="form-label">Tonalitet</label>
+                                <select class="form-select" id="tone" name="tone">
+                                    <option value="pedagogical" selected>Pedagogisk</option>
+                                    <option value="formal">Formell</option>
+                                    <option value="casual">Avslappnad</option>
+                                    <option value="inspiring">Inspirerande</option>
+                                </select>
+                            </div>
+
+                            <!-- Språkstil -->
+                            <div class="col-md-6 mb-3">
+                                <label for="language_style" class="form-label">Språkstil</label>
+                                <select class="form-select" id="language_style" name="language_style">
+                                    <option value="formal" selected>Formell</option>
+                                    <option value="informal">Informell</option>
+                                    <option value="academic">Akademisk</option>
+                                    <option value="conversational">Vardaglig</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <!-- Målgrupp -->
+                            <div class="col-md-8 mb-3">
+                                <label for="target_audience" class="form-label">Målgrupp</label>
+                                <input type="text" class="form-control" id="target_audience" name="target_audience"
+                                       placeholder="T.ex. nyanställda inom vården">
+                                <div class="form-text">Valfritt. Hjälper AI att anpassa innehållet.</div>
+                            </div>
+
+                            <!-- Färgtema -->
+                            <div class="col-md-4 mb-3">
+                                <label for="color_theme" class="form-label">Färgtema för bilder</label>
+                                <div class="d-flex align-items-center gap-2">
+                                    <input type="color" class="form-control form-control-color" id="color_theme" name="color_theme" value="#007bff">
+                                    <small class="text-muted">Bildernas palette</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        <!-- Checkboxar -->
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="include_quiz" name="include_quiz" value="1">
+                                    <label class="form-check-label" for="include_quiz">
+                                        <strong>Quiz per lektion</strong>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="include_ai_tutor" name="include_ai_tutor" value="1">
+                                    <label class="form-check-label" for="include_ai_tutor">
+                                        <strong>AI-handledare</strong>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="generate_images" name="generate_images" value="1" checked>
+                                    <label class="form-check-label" for="generate_images">
+                                        <strong>Generera bilder</strong>
+                                    </label>
+                                    <div class="form-text">Kurs + lektioner + diplom</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Info -->
+                        <div class="alert alert-info mb-0">
+                            <i class="bi bi-info-circle me-2"></i>
+                            Kursen skapas som inaktiv så du kan granska den innan publicering.
                         </div>
                     </div>
-
-                    <!-- AI-handledare -->
-                    <div class="mb-3">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="include_ai_tutor" name="include_ai_tutor" value="1">
-                            <label class="form-check-label" for="include_ai_tutor">
-                                <strong>AI-handledare</strong>
-                            </label>
-                            <div class="form-text">AI genererar instruktioner för interaktiv AI-dialog per lektion.</div>
-                        </div>
-                    </div>
-
-                    <hr>
-
-                    <!-- Info om asynkron process -->
-                    <div class="alert alert-info">
-                        <i class="bi bi-info-circle me-2"></i>
-                        <strong>OBS:</strong> Genereringen sker i bakgrunden och kan ta flera minuter beroende på antal lektioner och valda alternativ.
-                        Du kommer att meddelas när kursen är klar. Kursen skapas som inaktiv så du kan granska den innan publicering.
-                        <br><br>
-                        Observera också att inga bilder läggs till i kursen och inte heller några länkar till eventuella filmer från Youtube.
-                        Alla eventuella bilder och filmer lägger redaktören till efter att AI har skapat kursens stomme.
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
+                        <button type="button" class="btn btn-success" id="submitStep1Btn" onclick="submitStep1()">
+                            <i class="bi bi-arrow-right me-2"></i>Nästa - Låt AI ställa frågor
+                        </button>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
-                    <button type="button" class="btn btn-success" id="submitAiGenerate" onclick="submitAiGenerateForm()">
-                        <i class="bi bi-robot me-2"></i>Starta generering
-                    </button>
+
+                <!-- STEP 2: AI Questions -->
+                <div id="aiStep2" style="display: none;">
+                    <div class="modal-body">
+                        <!-- Step indicator -->
+                        <div class="d-flex align-items-center mb-3">
+                            <span class="badge bg-secondary me-2">Steg 1</span>
+                            <span class="badge bg-success me-2">Steg 2</span>
+                            <small class="text-muted">AI-frågor</small>
+                        </div>
+
+                        <div class="alert alert-success">
+                            <i class="bi bi-robot me-2"></i>
+                            <strong>AI har analyserat din kursbeskrivning</strong> och har några frågor som hjälper till att skapa en bättre kurs.
+                            Svaren är valfria men rekommenderade.
+                        </div>
+
+                        <div id="aiQuestionsContainer">
+                            <!-- Dynamic questions will be inserted here -->
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" onclick="goBackToStep1()">
+                            <i class="bi bi-arrow-left me-2"></i>Tillbaka
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="skipQuestionsAndGenerate()">
+                            Hoppa över
+                        </button>
+                        <button type="button" class="btn btn-success" id="submitStep2Btn" onclick="submitStep2()">
+                            <i class="bi bi-robot me-2"></i>Starta generering
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>
@@ -308,6 +397,7 @@ $extra_scripts = '<script>
     // CSRF_TOKEN is already defined in header.php
     let currentJobId = null;
     let statusCheckInterval = null;
+    const MAX_LESSON_COUNT = ' . $maxLessonCount . ';
 
     // Check localStorage for active job on page load
     (function checkSavedJob() {
@@ -319,18 +409,6 @@ $extra_scripts = '<script>
             statusCheckInterval = setInterval(checkJobStatus, 2000);
         }
     })();
-
-    function deleteCourse(id) {
-        if (confirm(\'Är du säker på att du vill ta bort denna kurs? Alla lektioner i kursen kommer också att tas bort.\')) {
-            $.post(\'delete_course.php\', { id: id }, function(response) {
-                if (response.success) {
-                    location.reload();
-                } else {
-                    alert(\'Ett fel uppstod vid borttagning av kursen.\');
-                }
-            });
-        }
-    }
 
     function showProgressIndicator() {
         var indicator = document.getElementById("aiProgressIndicator");
@@ -412,14 +490,17 @@ $extra_scripts = '<script>
         });
     }
 
-    // Standalone function called by button onclick
-    function submitAiGenerateForm() {
-        var form = document.getElementById("aiGenerateForm");
-        var submitBtn = document.getElementById("submitAiGenerate");
+    // Store AI questions for step 2
+    var aiGeneratedQuestions = [];
 
-        // Validera obligatoriska fält
+    // Step 1: Send course info to AI for follow-up questions
+    function submitStep1() {
+        var form = document.getElementById("aiGenerateForm");
+        var submitBtn = document.getElementById("submitStep1Btn");
+
         var courseName = form.querySelector("[name=course_name]").value.trim();
         var courseDesc = form.querySelector("[name=course_description]").value.trim();
+        var lessonCount = parseInt(form.querySelector("[name=lesson_count]").value) || 0;
 
         if (!courseName) {
             alert("Ange ett kursnamn");
@@ -429,15 +510,121 @@ $extra_scripts = '<script>
             alert("Ange en kursbeskrivning");
             return;
         }
+        if (lessonCount < 1 || lessonCount > MAX_LESSON_COUNT) {
+            alert("Antal lektioner måste vara mellan 1 och " + MAX_LESSON_COUNT + ".");
+            return;
+        }
 
-        // Visa spinner på knappen
         submitBtn.disabled = true;
-        submitBtn.innerHTML = \'<span class="spinner-border spinner-border-sm me-2"></span>Startar...\';
+        submitBtn.innerHTML = \'<span class="spinner-border spinner-border-sm me-2"></span>AI analyserar...\';
 
-        // Skapa FormData
+        var formData = new FormData();
+        formData.append("action", "ask_questions");
+        formData.append("csrf_token", form.querySelector("[name=csrf_token]").value);
+        formData.append("course_name", courseName);
+        formData.append("course_description", courseDesc);
+        formData.append("tone", form.querySelector("[name=tone]").value);
+        formData.append("target_audience", form.querySelector("[name=target_audience]").value);
+        formData.append("difficulty_level", form.querySelector("[name=difficulty_level]").value);
+
+        fetch("ajax/ai_generate_course.php", {
+            method: "POST",
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = \'<i class="bi bi-arrow-right me-2"></i>Nästa - Låt AI ställa frågor\';
+
+            if (data.success && data.questions) {
+                aiGeneratedQuestions = data.questions;
+                renderAiQuestions(data.questions);
+                document.getElementById("aiStep1").style.display = "none";
+                document.getElementById("aiStep2").style.display = "block";
+            } else {
+                alert(data.message || "Kunde inte generera frågor. Försöker starta generering direkt.");
+                // Fallback: start generation directly
+                startGeneration();
+            }
+        })
+        .catch(error => {
+            console.error("Error:", error);
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = \'<i class="bi bi-arrow-right me-2"></i>Nästa - Låt AI ställa frågor\';
+            alert("Ett fel uppstod. Försöker starta generering direkt.");
+            startGeneration();
+        });
+    }
+
+    function renderAiQuestions(questions) {
+        var container = document.getElementById("aiQuestionsContainer");
+        container.innerHTML = "";
+        questions.forEach(function(q, index) {
+            var div = document.createElement("div");
+            div.className = "mb-3";
+            var label = document.createElement("label");
+            label.className = "form-label";
+            label.setAttribute("for", "ai_q_" + index);
+            label.textContent = q.question;
+            var input = document.createElement("input");
+            input.type = "text";
+            input.className = "form-control";
+            input.id = "ai_q_" + index;
+            input.name = "ai_answer_" + index;
+            input.placeholder = q.placeholder || "";
+            div.appendChild(label);
+            div.appendChild(input);
+            container.appendChild(div);
+        });
+    }
+
+    function goBackToStep1() {
+        document.getElementById("aiStep2").style.display = "none";
+        document.getElementById("aiStep1").style.display = "block";
+    }
+
+    function skipQuestionsAndGenerate() {
+        startGeneration();
+    }
+
+    // Step 2: Collect answers and start generation
+    function submitStep2() {
+        startGeneration();
+    }
+
+    function startGeneration() {
+        var form = document.getElementById("aiGenerateForm");
+        var submitBtn = document.getElementById("submitStep2Btn");
+        var step1Btn = document.getElementById("submitStep1Btn");
+
+        // Disable all submit buttons
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = \'<span class="spinner-border spinner-border-sm me-2"></span>Startar...\';
+        }
+        if (step1Btn) {
+            step1Btn.disabled = true;
+        }
+
         var formData = new FormData(form);
+        formData.set("action", "create_job");
 
-        // Skicka AJAX request med fetch
+        // Collect AI questions and answers
+        if (aiGeneratedQuestions.length > 0) {
+            var questionsJson = JSON.stringify(aiGeneratedQuestions);
+            formData.append("ai_questions", questionsJson);
+
+            var answers = [];
+            aiGeneratedQuestions.forEach(function(q, index) {
+                var input = document.getElementById("ai_q_" + index);
+                answers.push({
+                    question: q.question,
+                    answer: input ? input.value.trim() : ""
+                });
+            });
+            formData.append("ai_answers", JSON.stringify(answers));
+        }
+
         fetch("ajax/ai_generate_course.php", {
             method: "POST",
             body: formData
@@ -446,35 +633,37 @@ $extra_scripts = '<script>
         .then(data => {
             if (data.success) {
                 currentJobId = data.job_id;
-
-                // Spara job_id till localStorage för att behålla vid sidbyte
                 localStorage.setItem("stimma_ai_job_id", data.job_id);
 
-                // Stäng modalen
                 var modalEl = document.getElementById("aiGenerateModal");
                 var modal = bootstrap.Modal.getInstance(modalEl);
                 if (modal) modal.hide();
 
-                // Visa progress-indikatorn i headern
                 showProgressIndicator();
-
-                // Starta bakgrundsprocessen
                 startBackgroundProcess();
-
-                // Börja polla status
                 checkJobStatus();
                 statusCheckInterval = setInterval(checkJobStatus, 2000);
             } else {
                 alert(data.message || "Ett fel uppstod");
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = \'<i class="bi bi-robot me-2"></i>Starta generering\';
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = \'<i class="bi bi-robot me-2"></i>Starta generering\';
+                }
+                if (step1Btn) {
+                    step1Btn.disabled = false;
+                }
             }
         })
         .catch(error => {
             console.error("Error:", error);
             alert("Ett fel uppstod vid start av generering: " + error);
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = \'<i class="bi bi-robot me-2"></i>Starta generering\';
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = \'<i class="bi bi-robot me-2"></i>Starta generering\';
+            }
+            if (step1Btn) {
+                step1Btn.disabled = false;
+            }
         });
     }
 
@@ -482,7 +671,23 @@ $extra_scripts = '<script>
         // Reset generate form when modal is closed
         $("#aiGenerateModal").on("hidden.bs.modal", function() {
             $("#aiGenerateForm")[0].reset();
-            $("#submitAiGenerate").prop("disabled", false).html(\'<i class="bi bi-robot me-2"></i>Starta generering\');
+            // Reset to step 1
+            document.getElementById("aiStep1").style.display = "block";
+            document.getElementById("aiStep2").style.display = "none";
+            document.getElementById("aiQuestionsContainer").innerHTML = "";
+            aiGeneratedQuestions = [];
+            var step1Btn = document.getElementById("submitStep1Btn");
+            if (step1Btn) {
+                step1Btn.disabled = false;
+                step1Btn.innerHTML = \'<i class="bi bi-arrow-right me-2"></i>Nästa - Låt AI ställa frågor\';
+            }
+            var step2Btn = document.getElementById("submitStep2Btn");
+            if (step2Btn) {
+                step2Btn.disabled = false;
+                step2Btn.innerHTML = \'<i class="bi bi-robot me-2"></i>Starta generering\';
+            }
+            // Re-check the generate_images checkbox after reset
+            document.getElementById("generate_images").checked = true;
         });
 
         // Hantera expandering av lektionslistan

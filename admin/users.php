@@ -283,15 +283,30 @@ if ($isSuperAdmin && empty($selectedDomain)) {
         WHERE c.organization_domain = ?", [$domainForLessons])['count'] ?? 0;
 }
 
+// Synk-filter
+$syncFilter = $_GET['sync'] ?? '';
+
+// Bygg WHERE-villkor för synk-filter
+$syncWhere = '';
+$syncParams = [];
+if ($syncFilter === 'synced') {
+    $syncWhere = ' AND u.is_synced = 1';
+} elseif ($syncFilter === 'inactive') {
+    $syncWhere = ' AND u.is_synced = 1 AND u.sync_status = \'inactive\'';
+}
+
 // Hämta användare med statistik - filtrera på organisation om inte superadmin
 if ($isSuperAdmin && empty($selectedDomain)) {
     // Superadmin utan filter: visa alla, sortera på domän sedan e-post
     $users = queryAll("
         SELECT u.*,
                COUNT(p.id) as completed_lessons,
-               SUBSTRING_INDEX(u.email, '@', -1) as user_domain
+               SUBSTRING_INDEX(u.email, '@', -1) as user_domain,
+               (SELECT GROUP_CONCAT(uot.tag ORDER BY uot.tag SEPARATOR ', ')
+                FROM " . DB_DATABASE . ".user_org_tags uot WHERE uot.user_id = u.id) as org_tags
         FROM " . DB_DATABASE . ".users u
         LEFT JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id AND p.status = 'completed'
+        WHERE 1=1 $syncWhere
         GROUP BY u.id
         ORDER BY user_domain ASC, u.email ASC
     ");
@@ -300,10 +315,12 @@ if ($isSuperAdmin && empty($selectedDomain)) {
     $users = queryAll("
         SELECT u.*,
                COUNT(p.id) as completed_lessons,
-               SUBSTRING_INDEX(u.email, '@', -1) as user_domain
+               SUBSTRING_INDEX(u.email, '@', -1) as user_domain,
+               (SELECT GROUP_CONCAT(uot.tag ORDER BY uot.tag SEPARATOR ', ')
+                FROM " . DB_DATABASE . ".user_org_tags uot WHERE uot.user_id = u.id) as org_tags
         FROM " . DB_DATABASE . ".users u
         LEFT JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id AND p.status = 'completed'
-        WHERE u.email LIKE ?
+        WHERE u.email LIKE ? $syncWhere
         GROUP BY u.id
         ORDER BY user_domain ASC, u.email ASC
     ", ['%@' . $selectedDomain]);
@@ -312,10 +329,12 @@ if ($isSuperAdmin && empty($selectedDomain)) {
     $users = queryAll("
         SELECT u.*,
                COUNT(p.id) as completed_lessons,
-               SUBSTRING_INDEX(u.email, '@', -1) as user_domain
+               SUBSTRING_INDEX(u.email, '@', -1) as user_domain,
+               (SELECT GROUP_CONCAT(uot.tag ORDER BY uot.tag SEPARATOR ', ')
+                FROM " . DB_DATABASE . ".user_org_tags uot WHERE uot.user_id = u.id) as org_tags
         FROM " . DB_DATABASE . ".users u
         LEFT JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id AND p.status = 'completed'
-        WHERE u.email LIKE ?
+        WHERE u.email LIKE ? $syncWhere
         GROUP BY u.id
         ORDER BY u.email ASC
     ", ['%@' . $currentUserDomain]);
@@ -353,7 +372,7 @@ require_once 'include/header.php';
                             + Användare
                         </button>
                     </div>
-                    <div class="d-flex align-items-center gap-3">
+                    <div class="d-flex align-items-center gap-3 flex-wrap">
                         <?php if ($isSuperAdmin && count($availableDomains) > 0): ?>
                         <div class="d-flex align-items-center">
                             <label for="domainFilter" class="me-2 text-muted small text-nowrap">Domän:</label>
@@ -367,6 +386,14 @@ require_once 'include/header.php';
                             </select>
                         </div>
                         <?php endif; ?>
+                        <div class="d-flex align-items-center">
+                            <label for="syncFilter" class="me-2 text-muted small text-nowrap">Synk:</label>
+                            <select id="syncFilter" class="form-select form-select-sm" style="width: 170px;" onchange="filterBySync(this.value)">
+                                <option value="" <?= $syncFilter === '' ? 'selected' : '' ?>>Alla användare</option>
+                                <option value="synced" <?= $syncFilter === 'synced' ? 'selected' : '' ?>>Synkade</option>
+                                <option value="inactive" <?= $syncFilter === 'inactive' ? 'selected' : '' ?>>Inaktiva i synk</option>
+                            </select>
+                        </div>
                         <div class="input-group" style="width: 250px;">
                             <span class="input-group-text bg-light border-0">
                                 <i class="bi bi-search"></i>
@@ -383,6 +410,7 @@ require_once 'include/header.php';
                                     <th>E-post</th>
                                     <th>Verifierad</th>
                                     <th>Roll</th>
+                                    <th>Org-taggar</th>
                                     <th>Admin</th>
                                     <th>Redaktör</th>
                                     <th>Framsteg</th>
@@ -393,7 +421,17 @@ require_once 'include/header.php';
                                 <?php if (count($users) > 0): ?>
                                     <?php foreach ($users as $user): ?>
                                         <tr class="user-row" data-email="<?= htmlspecialchars(strtolower($user['email'])) ?>" data-id="<?= $user['id'] ?>">
-                                            <td><?= htmlspecialchars($user['email']) ?></td>
+                                            <td>
+                                                <?= htmlspecialchars($user['email']) ?>
+                                                <?php if (!empty($user['is_synced'])): ?>
+                                                    <i class="bi bi-arrow-repeat text-primary ms-1" title="Synkad användare"></i>
+                                                    <?php if (($user['sync_status'] ?? 'active') === 'active'): ?>
+                                                        <span class="badge bg-success ms-1" style="font-size: 0.65em;">Aktiv i synk</span>
+                                                    <?php else: ?>
+                                                        <span class="badge bg-warning text-dark ms-1" style="font-size: 0.65em;">Ej i senaste synk</span>
+                                                    <?php endif; ?>
+                                                <?php endif; ?>
+                                            </td>
                                             <td>
                                                 <?php if ($user['verified_at']): ?>
                                                     <span class="badge bg-success">Ja</span>
@@ -413,6 +451,16 @@ require_once 'include/header.php';
                                                 $roleInfo = $roleLabels[$role] ?? $roleLabels['student'];
                                                 ?>
                                                 <span class="badge <?= $roleInfo['class'] ?>"><?= $roleInfo['text'] ?></span>
+                                            </td>
+                                            <td>
+                                                <?php if (!empty($user['org_tags'])):
+                                                    $tags = explode(', ', $user['org_tags']);
+                                                    foreach ($tags as $tag): ?>
+                                                    <span class="badge bg-light text-dark border me-1 mb-1" style="font-size: 0.75em;"><?= htmlspecialchars($tag) ?></span>
+                                                    <?php endforeach;
+                                                else: ?>
+                                                    <span class="text-muted">-</span>
+                                                <?php endif; ?>
                                             </td>
                                             <td>
                                                 <?php
@@ -484,7 +532,7 @@ require_once 'include/header.php';
                                     <?php endforeach; ?>
                                 <?php else: ?>
                                     <tr>
-                                        <td colspan="7" class="text-center">Inga användare hittades</td>
+                                        <td colspan="8" class="text-center">Inga användare hittades</td>
                                     </tr>
                                 <?php endif; ?>
                             </tbody>
@@ -541,6 +589,17 @@ require_once 'include/header.php';
 $csrfToken = htmlspecialchars($_SESSION['csrf_token']);
 ?>
 <script>
+    // Funktion för att filtrera på synk-status
+    function filterBySync(sync) {
+        const url = new URL(window.location.href);
+        if (sync) {
+            url.searchParams.set('sync', sync);
+        } else {
+            url.searchParams.delete('sync');
+        }
+        window.location.href = url.toString();
+    }
+
     // Funktion för att filtrera på domän (laddar om sidan med GET-parameter)
     function filterByDomain(domain) {
         const url = new URL(window.location.href);
@@ -559,7 +618,7 @@ $csrfToken = htmlspecialchars($_SESSION['csrf_token']);
         const noResultsRow = document.createElement("tr");
         const userTableBody = document.getElementById("userTableBody");
 
-        noResultsRow.innerHTML = "<td colspan=\"7\" class=\"text-center\">Inga användare matchar filtret</td>";
+        noResultsRow.innerHTML = "<td colspan=\"8\" class=\"text-center\">Inga användare matchar filtret</td>";
         noResultsRow.classList.add("no-results");
         noResultsRow.style.display = "none";
         userTableBody.appendChild(noResultsRow);

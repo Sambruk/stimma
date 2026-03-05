@@ -214,28 +214,49 @@ else:
     $user = queryOne("SELECT email FROM " . DB_DATABASE . ".users WHERE id = ?", [$userId]);
     $userDomain = substr(strrchr($user['email'], "@"), 1);
 
-    // Fetch active lessons and courses - ONLY from user's organization
+    // Hämta användarens organisationstaggar
+    $userOrgTags = getUserOrgTags($userId);
+    $userOrgTagValues = array_column($userOrgTags, 'tag');
+
+    // Bygg org-tagg-filter för SQL
+    $orgTagFilter = "";
+    $orgTagParams = [$userDomain];
+    if (!empty($userOrgTagValues)) {
+        $placeholders = implode(',', array_fill(0, count($userOrgTagValues), '?'));
+        $orgTagFilter = "AND (
+            NOT EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_org_tags cot WHERE cot.course_id = c.id)
+            OR EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_org_tags cot WHERE cot.course_id = c.id AND cot.tag IN ($placeholders))
+        )";
+        $orgTagParams = array_merge($orgTagParams, $userOrgTagValues);
+    } else {
+        // Användare utan org-taggar ser bara kurser utan org-tagg-begränsning
+        $orgTagFilter = "AND NOT EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_org_tags cot WHERE cot.course_id = c.id)";
+    }
+
+    // Fetch active lessons and courses - ONLY from user's organization, filtered by org-tags
     $lessons = query("
-        SELECT l.*, c.title as course_title, c.status as course_status, c.image_url as course_image_url, c.id as course_id
+        SELECT l.*, c.title as course_title, c.status as course_status, c.image_url as course_image_url, c.id as course_id, c.sequential_mode
         FROM " . DB_DATABASE . ".lessons l
         JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
         WHERE c.status = 'active'
         AND c.organization_domain = ?
+        $orgTagFilter
         ORDER BY c.sort_order, l.sort_order
-    ", [$userDomain]);
+    ", $orgTagParams);
 
     // Get user's progress
     $progress = query("SELECT * FROM " . DB_DATABASE . ".progress WHERE user_id = ?", [$userId]);
 
-    // Fetch organization courses (for the organization section with tags)
+    // Fetch organization courses (for the organization section with tags), filtered by org-tags
     $orgCourses = query("
-        SELECT DISTINCT c.*, u.email as author_email
+        SELECT DISTINCT c.*, c.sequential_mode, u.email as author_email
         FROM " . DB_DATABASE . ".courses c
         LEFT JOIN " . DB_DATABASE . ".users u ON c.author_id = u.id
         WHERE c.status = 'active'
         AND c.organization_domain = ?
+        $orgTagFilter
         ORDER BY c.sort_order
-    ", [$userDomain]);
+    ", $orgTagParams);
 
     // Fetch tags for the user's organization (for filtering)
     $orgTags = query("
@@ -274,6 +295,16 @@ else:
     foreach ($progress as $item) {
         $userProgress[$item['lesson_id']] = $item;
     }
+
+    // Hämta stegvis kurs-schedule för användaren
+    $sequentialSchedules = query(
+        "SELECT sls.* FROM " . DB_DATABASE . ".sequential_lesson_schedule sls WHERE sls.user_id = ?",
+        [$userId]
+    );
+    $userSchedule = [];
+    foreach ($sequentialSchedules as $s) {
+        $userSchedule[$s['lesson_id']] = $s;
+    }
     
     // Find next available lesson
     $nextLesson = null;
@@ -286,6 +317,7 @@ else:
             $courseGroups[$lesson['course_id']] = [
                 'title' => $lesson['course_title'],
                 'sort_order' => $lesson['sort_order'],
+                'sequential_mode' => $lesson['sequential_mode'] ?? 0,
                 'lessons' => []
             ];
         }
@@ -472,14 +504,41 @@ else:
                                                  aria-labelledby="heading<?= $courseData['id'] ?>" data-bs-parent="#courseAccordion<?= $courseData['id'] ?>">
                                                 <div class="accordion-body p-0">
                                                     <ul class="list-group list-group-flush">
-                                                        <?php foreach ($courseLessons as $index => $lesson): 
+                                                        <?php
+                                                        $isSequentialCourse = !empty($firstLessonInGroup['sequential_mode']);
+                                                        foreach ($courseLessons as $index => $lesson):
                                                             $isCompleted = isset($userProgress[$lesson['id']]) && $userProgress[$lesson['id']]['status'] === 'completed';
                                                             $isCurrent = $nextLessonInCourse && $lesson['id'] == $nextLessonInCourse['id'];
+                                                            $schedule = $userSchedule[$lesson['id']] ?? null;
+                                                            $isLocked = false;
+                                                            $isAvailableSeq = false;
+                                                            $availableDate = '';
+                                                            if ($isSequentialCourse && $schedule) {
+                                                                if ($schedule['available_at'] === null) {
+                                                                    $isLocked = true;
+                                                                } elseif (strtotime($schedule['available_at']) > time() && !$isCompleted) {
+                                                                    $isLocked = true;
+                                                                    $availableDate = date('j/n', strtotime($schedule['available_at']));
+                                                                } elseif (!$isCompleted) {
+                                                                    $isAvailableSeq = true;
+                                                                }
+                                                            }
                                                         ?>
-                                                            <li class="list-group-item py-2 px-3 <?= $isCurrent ? 'bg-light' : '' ?>">
+                                                            <li class="list-group-item py-2 px-3 <?= $isCurrent && !$isLocked ? 'bg-light' : '' ?>">
+                                                                <?php if ($isLocked): ?>
+                                                                    <span class="text-decoration-none text-muted d-flex align-items-center">
+                                                                        <i class="bi bi-lock text-muted me-2" aria-hidden="true"></i>
+                                                                        <span><?= sanitize($lesson['title']) ?></span>
+                                                                        <?php if ($availableDate): ?>
+                                                                            <small class="ms-auto text-muted"><?= $availableDate ?></small>
+                                                                        <?php endif; ?>
+                                                                    </span>
+                                                                <?php else: ?>
                                                                 <a href="lesson.php?id=<?= $lesson['id'] ?>" class="text-decoration-none text-dark d-flex align-items-center">
                                                                     <?php if ($isCompleted): ?>
                                                                         <i class="bi bi-check-circle-fill text-success me-2" aria-hidden="true"></i>
+                                                                    <?php elseif ($isAvailableSeq): ?>
+                                                                        <i class="bi bi-clock text-primary me-2" aria-hidden="true"></i>
                                                                     <?php elseif ($isCurrent): ?>
                                                                         <i class="bi bi-arrow-right-circle text-primary me-2" aria-hidden="true"></i>
                                                                     <?php else: ?>
@@ -487,6 +546,7 @@ else:
                                                                     <?php endif; ?>
                                                                     <span><?= sanitize($lesson['title']) ?></span>
                                                                 </a>
+                                                                <?php endif; ?>
                                                             </li>
                                                         <?php endforeach; ?>
                                                     </ul>
@@ -596,6 +656,11 @@ else:
                                     
                                     <div class="card-body d-flex flex-column px-3 py-3">
                                         <h5 class="card-title text-truncate"><?= sanitize($course['title']) ?></h5>
+                                        <?php if (!empty($course['sequential_mode'])): ?>
+                                        <div class="mb-1">
+                                            <span class="badge bg-info"><i class="bi bi-signpost-split me-1"></i>Stegvis kurs</span>
+                                        </div>
+                                        <?php endif; ?>
                                         <?php if (!empty($thisCourseTags)): ?>
                                         <div class="mb-2">
                                             <?php foreach ($thisCourseTags as $tag): ?>

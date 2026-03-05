@@ -1,13 +1,78 @@
 # Stimma - Utvecklingsuppgifter
 
 ## Pågående
+- [x] API Kursstatus + Synligt kurs-ID (2026-03-04)
+  - [x] admin/courses.php: ID-kolumn i kurstabellen
+  - [x] admin/edit_course.php: kurs-ID badge i formulärhuvudet
+  - [x] api/course_status.php: GET-endpoint med Bearer-auth, email+course_id, certifikatkontroll + progress
+  - [x] admin/user_guide.php: nya sektioner (stegvisa kurser, kursstatistik, REST API med endpoint-dokumentation)
+  - [x] docs/SYSTEM_DOCUMENTATION.md: REST API-endpoints tabell (sync_users + course_status)
+- [x] Fix: "Kom ihåg mig" token matchade inte UI (720h→168h = 7 dagar) (2026-03-04)
+  - [x] .env: REMEMBER_TOKEN_HOURS 720→168
+  - [x] include/auth.php: fallback-värde och kommentarer uppdaterade
+  - [x] admin/user_guide.php: "30 dagar"→"7 dagar" i sessionsinformationen
+- [x] Regenerera API-nyckel i domänöversikten (2026-03-04)
+  - [x] admin/api_keys.php: "Regenerera nyckel"-knapp + bekräftelsemodal i synk-per-domän-tabellen
+  - [x] admin/api_keys.php: kursstatus-endpoint dokumenterad i API-dokumentationssektionen
+- [x] Videouppladdning och streaming i lektioner (2026-03-04)
+  - [x] Migration 019: video_type ENUM('youtube','local') i lessons + backfill
+  - [x] upload/videos/ katalog + .htaccess säkerhet
+  - [x] docker-compose.yml: PHP upload-gränser höjda (105M/110M, max_execution_time 300s)
+  - [x] admin/upload_video.php: MP4/WebM uppladdning (max 100 MB, finfo MIME-validering)
+  - [x] admin/edit_lesson.php: flikbaserat videogränssnitt (YouTube/Ladda upp) med progress bar
+  - [x] lesson.php: HTML5 videospelare för lokala videor, YouTube iframe bibehållen
+  - [x] admin/delete_lesson.php: raderar lokal videofil vid lektionsborttagning
+  - [x] admin/copy_course.php: kopierar lokala videofiler med nytt filnamn
+  - [x] admin/export.php: inkluderar video_type i exportdata (lokala videor exporteras ej)
+  - [x] admin/import.php: hanterar video_type vid import (bara YouTube importeras)
+  - [x] nginx: client_max_body_size 150M för stimma.sambruk.se
+- [x] Dynamisk maxgräns för lektioner (superadmin-inställning i ai_settings)
+- [x] Textlängd-inställning (kort/mellan/lång) i AI-genereringsmodalen
+- [x] Tvåfas-generering: kursstruktur + individuellt lektionsinnehåll (fixar problemet med för få lektioner)
+- [x] Höjd maxgräns för lektioner till 50 (var 20)
+- [x] Fix: Kursradering blockerad av FK-constraints (certificates, course_tags, resources, ai_course_jobs, user_progress)
+- [x] Uppdaterad användarhandbok med AI-kursgenerering, PUB-avtal, import/export, diplom m.m.
 - [ ] Säkerhetsåtgärder fas 3: magic link-invalidering, credential rotation (se SECURITY.md)
+- [x] Stegvisa lektioner + Kursstatistik med org-tagg-drill-down (2026-03-03)
+  - [x] Migration 018: sequential_mode/interval/reminder-kolumner i courses, sequential_lesson_schedule, sequential_reminder_log
+  - [x] include/functions.php: enrollUserInSequentialCourse(), unlockNextSequentialLesson(), isLessonAvailableForUser(), getSequentialCourseStatusForUser()
+  - [x] admin/edit_course.php: stegvis-checkbox + intervall-/påminnelsefält
+  - [x] lesson.php: enrollment vid första lektion, åtkomstkontroll, upplåsning vid avklarad lektion, AJAX-svar med tillgänglighetsinfo
+  - [x] index.php: lås-/klock-ikoner, stegvis-badge i kurskatalogen
+  - [x] cron/send_sequential_notifications.php: dagligt cron-jobb för ny-lektion och påminnelse-mail
+  - [x] admin/course_stats.php: kursöversikt + detaljvy med org-tagg-gruppering
+  - [x] admin/ajax/send_manual_sequential_reminder.php: manuell påminnelse med valfritt meddelande
+  - [x] admin/include/header.php: nytt menyval "Kursstatistik"
+  - [x] cron/send_reminders.php: exkluderar stegvisa kurser (sequential_mode = 0)
+  - [x] admin/edit_course.php: ersatt checkbox-lista för organisationstaggar med sökbar klick-lista, valda visas som badges, "Alla"/"Rensa"-knappar, bokstavsordning
+- [x] REST API Användarsynk (2026-03-02)
+  - [x] Migration 015: api_keys-tabell + sync_enabled i domain_settings
+  - [x] Migration 016: is_synced/sync_status/synced_at på users, user_org_tags, sync_log
+  - [x] include/api_helpers.php: autentisering, rate limit, validering
+  - [x] api/sync_users.php: POST-endpoint med full transaktionslogik
+  - [x] admin/api_keys.php: nyckelhantering + synk-toggle per domän
+  - [x] admin/sync_logs.php: paginerad synklogg
+  - [x] admin/users.php: org-taggar, synk-ikon, synk-statusbadge, synk-filter
+  - [x] admin/include/header.php: nya menyval (API-nycklar, Synkloggar)
 
 ## Framtida förbättringar
 - [ ] Lägg till förhandsvisning av e-postmall
 - [ ] Statistik per e-postkampanj
+- [x] Kursdistribution per org-tagg + profilpanel (2026-03-03)
+  - [x] Migration 017: course_org_tags-tabell
+  - [x] include/functions.php: getOrgTagsForDomain(), getUserOrgTags()
+  - [x] admin/edit_course.php: org-tagg checkboxar + POST-handler
+  - [x] index.php: org-tagg-filtrering i $lessons och $orgCourses
+  - [x] include/header.php: profilknapp + offcanvas-panel (namn, domän, roll, org-taggar)
+  - [x] admin/courses.php: org-tagg badges i kurslistan
+- [x] Statistik per kurs + org-tagg med drill-down till användarnivå
 
 ## Slutfört
+- [x] Uppdaterad användarhandbok (2026-02-28): Nytt avsnitt AI-kursgenerering (tvåstegsflöde, inställningar, textlängd, bildgenerering), PUB-avtal (steg-för-steg signering, SMS-verifiering), import/export av kurser (ZIP), diplom/certifikat för studenter, domänhantering för superadmin, uppdaterade quiz- och felsökningsavsnitt
+- [x] Fix kursradering (2026-02-28): delete_course.php raderar nu alla relaterade data (user_progress, resources, course_tags, certificates, course_enrollments, reminder_log, ai_course_jobs) innan kursen tas bort. Samma fix i delete_lesson.php. Borttagen duplicerad deleteCourse JS-funktion och gammal GET-baserad raderingshanterare.
+- [x] Tvåfas AI-generering + höjd maxgräns (2026-02-28): Fas 1 genererar kursstruktur (titlar+quiz), fas 2 genererar innehåll per lektion individuellt. Garanterar korrekt antal lektioner. Max höjt från 20 till 50.
+- [x] Dynamisk maxgräns för lektioner + textlängdsval (2026-02-28): Superadmin styr max via ai_settings, validering i UI+backend, kort/mellan/lång textlängd (~5-8/~12-18/~25-35 meningar)
+- [x] AI Course Generation Upgrade (2026-02-28): Tvåstegsflöde med AI-frågor, tonalitet/färgtema/målgrupp-inställningar, automatisk bildgenerering (kurs+lektioner+diplom), rikare lektionsformatering (tip/info/example/warning/summary-rutor), cleanHtml stöd för lesson-* CSS-klasser och h3/h4
 - [x] Säkerhetsfix fas 2 (2026-02-19): CSRF på edit-formulär, delete→POST, DB-port stängd
 - [x] Säkerhetsfix fas 1 (2026-02-19): .htaccess, XSS, CSRF timing-safe, CLI-guards, display_errors, htmlspecialchars
 - [x] ZIP-baserad kursexport med bilder (export.php)
