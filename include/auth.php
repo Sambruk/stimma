@@ -221,13 +221,13 @@ function logout() {
  * Skapa en "kom ihåg mig" token för användaren
  *
  * @param int $userId Användarens ID
- * @param int|null $hours Antal timmar token ska vara giltig (standard från REMEMBER_TOKEN_HOURS eller 720 = 30 dagar)
+ * @param int|null $hours Antal timmar token ska vara giltig (standard från REMEMBER_TOKEN_HOURS eller 168 = 7 dagar)
  * @return bool True om det lyckades
  */
 function createRememberToken($userId, $hours = null) {
-    // Använd miljövariabel eller standardvärde (720 timmar = 30 dagar)
+    // Använd miljövariabel eller standardvärde (168 timmar = 7 dagar)
     if ($hours === null) {
-        $hours = (int)(getenv('REMEMBER_TOKEN_HOURS') ?: 720);
+        $hours = (int)(getenv('REMEMBER_TOKEN_HOURS') ?: 168);
     }
 
     // Generera en säker token

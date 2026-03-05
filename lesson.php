@@ -66,7 +66,7 @@ if ($isPreviewMode) {
 
 // Fetch lesson information including course details
 $lesson = queryOne("
-    SELECT l.*, c.title as course_title, c.status as course_status
+    SELECT l.*, c.title as course_title, c.status as course_status, c.sequential_mode
     FROM " . DB_DATABASE . ".lessons l
     JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
     WHERE l.id = ?
@@ -78,6 +78,28 @@ if (!$lesson) {
     $_SESSION['flash_type'] = 'danger';
     redirect('index.php');
     exit;
+}
+
+// Handle sequential course enrollment and access control (skip in preview mode)
+if (!$isPreviewMode && !empty($lesson['sequential_mode'])) {
+    // Check if this is the first lesson in the course (for enrollment)
+    $firstLesson = queryOne(
+        "SELECT id FROM " . DB_DATABASE . ".lessons WHERE course_id = ? ORDER BY sort_order ASC LIMIT 1",
+        [$lesson['course_id']]
+    );
+
+    if ($firstLesson && $firstLesson['id'] == $lessonId) {
+        // First lesson - enroll user if not already enrolled
+        enrollUserInSequentialCourse($userId, $lesson['course_id']);
+    }
+
+    // Check if the lesson is available
+    if (!isLessonAvailableForUser($userId, $lessonId, $lesson['course_id'])) {
+        $_SESSION['flash_message'] = 'Denna lektion är inte tillgänglig ännu.';
+        $_SESSION['flash_type'] = 'warning';
+        redirect('index.php');
+        exit;
+    }
 }
 
 // Get user's progress for this lesson (skip in preview mode)
@@ -214,7 +236,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasQuizAnswer($_POST) && !$isPrevie
         }
         
         $isCompleted = true;
-        
+
+        // Unlock next sequential lesson if applicable
+        if (!empty($lesson['sequential_mode'])) {
+            unlockNextSequentialLesson($userId, $lesson['course_id'], $lessonId);
+        }
+
         // Get next lesson in the course
         $nextLesson = queryOne("
             SELECT l.*, c.title as course_title
@@ -228,12 +255,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasQuizAnswer($_POST) && !$isPrevie
         // Handle AJAX response
         if (isAjaxRequest()) {
             header('Content-Type: application/json');
+            $nextLessonData = null;
+            if ($nextLesson) {
+                $nextLessonData = [
+                    'id' => $nextLesson['id'],
+                    'title' => $nextLesson['title'],
+                    'available' => true
+                ];
+                // Check if next lesson is available for sequential courses
+                if (!empty($lesson['sequential_mode'])) {
+                    $available = isLessonAvailableForUser($userId, $nextLesson['id'], $lesson['course_id']);
+                    $nextLessonData['available'] = $available;
+                    if (!$available) {
+                        $course = queryOne("SELECT sequential_interval_days FROM " . DB_DATABASE . ".courses WHERE id = ?", [$lesson['course_id']]);
+                        $nextLessonData['available_in_days'] = $course ? (int)$course['sequential_interval_days'] : 7;
+                    }
+                }
+            }
             echo json_encode([
                 'success' => true,
-                'nextLesson' => $nextLesson ? [
-                    'id' => $nextLesson['id'],
-                    'title' => $nextLesson['title']
-                ] : null
+                'nextLesson' => $nextLessonData
             ]);
             exit;
         }
@@ -304,6 +345,55 @@ function convertYoutubeUrl($url) {
     return str_replace('youtube.com', 'youtube-nocookie.com', $url);
 }
 ?>
+
+<style>
+.lesson-intro {
+    font-size: 1.1em;
+    color: #555;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+}
+.lesson-tip {
+    background: #e8f5e9;
+    border-left: 4px solid #4caf50;
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 8px 8px 0;
+}
+.lesson-info {
+    background: #e3f2fd;
+    border-left: 4px solid #2196f3;
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 8px 8px 0;
+}
+.lesson-example {
+    background: #fff3e0;
+    border-left: 4px solid #ff9800;
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 8px 8px 0;
+}
+.lesson-warning {
+    background: #fce4ec;
+    border-left: 4px solid #f44336;
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 8px 8px 0;
+}
+.lesson-summary {
+    background: #f3e5f5;
+    border: 1px solid #ce93d8;
+    padding: 16px;
+    margin: 20px 0;
+    border-radius: 8px;
+}
+.lesson-summary h4 {
+    margin-top: 0;
+    color: #7b1fa2;
+}
+</style>
 
 <!-- Preview mode banner -->
 <?php if ($isPreviewMode): ?>
@@ -381,40 +471,63 @@ function convertYoutubeUrl($url) {
                 <?php if (!empty($lesson['video_url'])): ?>
                 <div class="card mb-4">
                     <div class="card-header">
-                        <i class="bi bi-youtube me-2"></i> Video
+                        <?php if (($lesson['video_type'] ?? '') === 'local'): ?>
+                            <i class="bi bi-camera-video me-2"></i> Video
+                        <?php else: ?>
+                            <i class="bi bi-youtube me-2"></i> Video
+                        <?php endif; ?>
                     </div>
                     <div class="card-body">
+                        <?php if (($lesson['video_type'] ?? '') === 'local'): ?>
+                        <?php
+                            $videoFile = basename($lesson['video_url']);
+                            $videoExt = strtolower(pathinfo($videoFile, PATHINFO_EXTENSION));
+                            $videoMime = $videoExt === 'webm' ? 'video/webm' : 'video/mp4';
+                        ?>
                         <div class="ratio ratio-16x9">
-                            <iframe 
-                                src="<?= htmlspecialchars(convertYoutubeUrl($lesson['video_url'])) ?>" 
-                                title="Lesson video" 
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                            <video controls preload="metadata">
+                                <source src="upload/videos/<?= htmlspecialchars($videoFile) ?>" type="<?= $videoMime ?>">
+                                Din webbläsare stöder inte videouppspelning.
+                            </video>
+                        </div>
+                        <?php else: ?>
+                        <div class="ratio ratio-16x9">
+                            <iframe
+                                src="<?= htmlspecialchars(convertYoutubeUrl($lesson['video_url'])) ?>"
+                                title="Lesson video"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                                 allowfullscreen
                                 loading="lazy">
                             </iframe>
                         </div>
+                        <?php endif; ?>
                     </div>
                 </div>
                 <?php endif; ?>
                 
                 <!-- AI chat interface card -->
-                <?php if (!empty($lesson['ai_instruction'])): ?>
+                <?php if (!empty($lesson['ai_instruction']) || !empty($lesson['ai_prompt'])): ?>
                 <div class="card mb-4">
                     <div class="card-header d-flex align-items-center" id="aiChatToggle">
                         <i class="bi bi-robot me-2"></i> Fråga AI om detta ämne
                     </div>
                     <div class="card-body" id="aiChatBody">
                         <div class="mb-3" id="aiMessages">
+                            <?php
+                                $aiInstructionClean = trim(strip_tags($lesson['ai_instruction'] ?? ''));
+                                if ($aiInstructionClean !== ''):
+                            ?>
                             <div class="alert alert-info">
                                 <div>
                                     <?= cleanHtml($lesson['ai_instruction']) ?>
                                 </div>
                             </div>
+                            <?php endif; ?>
                         </div>
                         <div class="input-group">
-                            <textarea id="aiInput" class="form-control" 
-                                    placeholder="Skriv här för att chatta med AI..." 
-                                    rows="1" 
+                            <textarea id="aiInput" class="form-control"
+                                    placeholder="Skriv här för att chatta med AI..."
+                                    rows="1"
                                     style="resize: none; overflow-y: hidden;"
                             ></textarea>
                             <button id="aiSendBtn" class="btn btn-primary">
@@ -583,8 +696,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
 	<?php
-		// The objects below are not defined if ai_instruction isn't set
-		if (!empty($lesson['ai_instruction'])):
+		if (!empty($lesson['ai_instruction']) || !empty($lesson['ai_prompt'])):
 	?>
 
     // Toggle AI chat
@@ -609,15 +721,15 @@ document.addEventListener('DOMContentLoaded', function() {
     function addMessage(message, isUser = false) {
         const messageDiv = document.createElement('div');
         messageDiv.className = isUser ? 'alert alert-primary mb-3' : 'alert alert-info mb-3';
-        
+
         if (isUser) {
             // User messages: use textContent (safe)
             messageDiv.textContent = message;
         } else {
-            // AI responses: escape HTML to prevent XSS
-            messageDiv.textContent = message;
+            // AI responses: already sanitized by server-side parseMarkdown()
+            messageDiv.innerHTML = message;
         }
-        
+
         aiMessages.appendChild(messageDiv);
         aiMessages.scrollTop = aiMessages.scrollHeight;
     }
@@ -668,9 +780,8 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-	<?php 
-		// The objects below are not defined if ai_instruction isn't set
-		if (!empty($lesson['ai_instruction'])):
+	<?php
+		if (!empty($lesson['ai_instruction']) || !empty($lesson['ai_prompt'])):
 	?>
 
     // Event listeners för att skicka meddelande
@@ -726,18 +837,33 @@ document.addEventListener('DOMContentLoaded', function() {
                             </div>
                         `;
                     } else {
+                        let nextLessonHtml = '';
+                        if (data.nextLesson) {
+                            if (data.nextLesson.available) {
+                                nextLessonHtml = `
+                                    <div class="d-grid">
+                                        <a href="lesson.php?id=${parseInt(data.nextLesson.id)}" class="btn btn-success btn-lg">
+                                            <i class="bi bi-arrow-right-circle-fill me-2"></i> Fortsätt till nästa lektion: <strong>${escapeHtml(data.nextLesson.title)}</strong>
+                                        </a>
+                                    </div>`;
+                            } else {
+                                const days = data.nextLesson.available_in_days || '?';
+                                nextLessonHtml = `
+                                    <div class="alert alert-info mt-3">
+                                        <i class="bi bi-clock me-2"></i>
+                                        Nästa lektion <strong>${escapeHtml(data.nextLesson.title)}</strong> öppnas om <strong>${days} dagar</strong>.
+                                        Du får ett mejl när den blir tillgänglig.
+                                    </div>`;
+                            }
+                        } else {
+                            nextLessonHtml = '<p class="text-muted">Detta var sista lektionen i denna kurs!</p>';
+                        }
                         quizSection.innerHTML = `
                             <div class="text-center">
                                 <i class="bi bi-trophy-fill text-success" style="font-size: 3rem;"></i>
                                 <h3 class="mt-3">Bra jobbat!</h3>
                                 <p class="text-muted mb-3">Du har klarat denna lektion!</p>
-                                ${data.nextLesson ? `
-                                    <div class="d-grid">
-                                        <a href="lesson.php?id=${parseInt(data.nextLesson.id)}" class="btn btn-success btn-lg">
-                                            <i class="bi bi-arrow-right-circle-fill me-2"></i> Fortsätt till nästa lektion: <strong>${escapeHtml(data.nextLesson.title)}</strong>
-                                        </a>
-                                    </div>
-                                ` : '<p class="text-muted">Detta var sista lektionen i denna kurs!</p>'}
+                                ${nextLessonHtml}
                             </div>
                         `;
 

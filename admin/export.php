@@ -112,11 +112,20 @@ $exportData = [
 
 // Lägg till lektionerna
 foreach ($lessons as $lesson) {
+    // For local videos: skip the video (can't be portably exported)
+    $lessonVideoUrl = $lesson['video_url'];
+    $lessonVideoType = $lesson['video_type'] ?? null;
+    if ($lessonVideoType === 'local') {
+        $lessonVideoUrl = null;
+        $lessonVideoType = null;
+    }
+
     $exportData['lessons'][] = [
         'title' => $lesson['title'],
         'estimated_duration' => $lesson['estimated_duration'],
         'image_url' => $lesson['image_url'] ?? '',
-        'video_url' => $lesson['video_url'],
+        'video_url' => $lessonVideoUrl,
+        'video_type' => $lessonVideoType,
         'content' => $lesson['content'],
         'resource_links' => $lesson['resource_links'],
         'tags' => $lesson['tags'],

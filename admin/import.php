@@ -326,28 +326,32 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'
                     $sanitizedQuizAnswer3 = isset($lesson['quiz_answer3']) ? strip_tags($lesson['quiz_answer3']) : null;
 
                     // SECURITY FIX: Validate video URL if present
+                    // Only import YouTube videos; local videos can't be imported
                     $videoUrl = null;
+                    $videoType = null;
                     if (isset($lesson['video_url']) && !empty($lesson['video_url'])) {
                         if (preg_match('/^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//', $lesson['video_url'])) {
                             $videoUrl = $lesson['video_url'];
+                            $videoType = 'youtube';
                         }
                     }
 
                     execute("
                         INSERT INTO " . DB_DATABASE . ".lessons (
                             course_id, title, estimated_duration, image_url,
-                            video_url, content, resource_links, tags, status,
+                            video_url, video_type, content, resource_links, tags, status,
                             sort_order, ai_instruction, ai_prompt,
                             quiz_question, quiz_answer1, quiz_answer2,
                             quiz_answer3, quiz_correct_answer, author_id, created_at,
                             updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
                     ", [
                         $courseId,
                         $sanitizedTitle,
                         $lesson['estimated_duration'] ?? 5,
                         $lessonImageUrl ?: null,
                         $videoUrl,
+                        $videoType,
                         $sanitizedContent,
                         $lesson['resource_links'] ?? null,
                         $lesson['tags'] ?? null,

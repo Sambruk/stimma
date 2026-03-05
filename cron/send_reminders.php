@@ -122,6 +122,7 @@ foreach ($activeSettings as $settings) {
         JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
         WHERE u.email LIKE ?
         AND c.status = 'active'
+        AND c.sequential_mode = 0
         GROUP BY u.id, c.id
         HAVING
             completed_lessons < total_lessons

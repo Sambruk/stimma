@@ -186,6 +186,9 @@ JSON-strukturen ska vara:
 
 /**
  * Process a single AI generation job
+ * Uses a two-phase approach:
+ *   Phase 1: Generate course structure (metadata + lesson titles + quizzes)
+ *   Phase 2: Generate full content for each lesson individually
  */
 function processJob($job) {
     $jobId = $job['id'];
@@ -198,98 +201,349 @@ function processJob($job) {
         [$jobId]
     );
 
-    // Build the AI prompt
+    $lessonCount = $job['lesson_count'];
     $difficultyText = [
         'beginner' => 'nybörjare',
         'intermediate' => 'mellannivå',
         'advanced' => 'avancerad'
     ][$job['difficulty_level']] ?? 'nybörjare';
 
-    $lessonCount = $job['lesson_count'];
+    $toneText = [
+        'pedagogical' => 'pedagogisk och lättförståelig',
+        'formal' => 'formell och professionell',
+        'casual' => 'avslappnad och vardaglig',
+        'inspiring' => 'inspirerande och motiverande'
+    ][$job['tone'] ?? 'pedagogical'] ?? 'pedagogisk och lättförståelig';
 
-    // Get custom prompt template or use default
-    $promptTemplate = getCourseGenerationPrompt();
+    $languageStyleText = [
+        'formal' => 'formellt språk',
+        'informal' => 'informellt och tillgängligt språk',
+        'academic' => 'akademiskt språk med korrekt terminologi',
+        'conversational' => 'vardagligt och samtalsliknande språk'
+    ][$job['language_style'] ?? 'formal'] ?? 'formellt språk';
 
-    // Replace placeholders
-    $aiInstructionValue = $job['include_ai_tutor'] ? '"Instruktion för AI-handledare..."' : 'null';
-    $aiPromptValue = $job['include_ai_tutor'] ? '"Prompt för AI-handledare..."' : 'null';
+    $textLengthText = [
+        'short' => 'cirka 5-8 meningar (ca 150-250 ord). Var koncis och fokusera på det viktigaste.',
+        'medium' => 'cirka 12-18 meningar (ca 400-600 ord). Balansera mellan detaljer och läsbarhet.',
+        'long' => 'cirka 25-35 meningar (ca 800-1200 ord). Ge utförliga förklaringar, fler exempel och djupare resonemang.'
+    ][$job['text_length'] ?? 'medium'] ?? 'cirka 12-18 meningar (ca 400-600 ord).';
 
-    $systemPrompt = str_replace(
-        ['{{lesson_count}}', '{{difficulty_level}}', '{{difficulty}}', '{{ai_instruction_value}}', '{{ai_prompt_value}}'],
-        [$lessonCount, $difficultyText, $job['difficulty_level'], $aiInstructionValue, $aiPromptValue],
-        $promptTemplate
-    );
-
-    // Add quiz-specific instructions if not included in custom prompt
-    if ($job['include_quiz'] && strpos($systemPrompt, 'quiz_type') === false) {
-        $systemPrompt .= "\n\nVIKTIGT FÖR QUIZ: För varje lektion, skapa ett quiz. VARIERA frågetyperna (single_choice, multiple_choice). Sprid korrekta svar jämnt över positionerna.";
+    // Build AI Q&A context string
+    $qaContext = '';
+    if (!empty($job['ai_answers'])) {
+        $answers = json_decode($job['ai_answers'], true);
+        if (is_array($answers) && !empty($answers)) {
+            $qaContext = "\n\nKompletterande information från kursbeställaren:";
+            foreach ($answers as $qa) {
+                if (!empty($qa['answer'])) {
+                    $qaContext .= "\n- Fråga: {$qa['question']}\n  Svar: {$qa['answer']}";
+                }
+            }
+        }
     }
 
-    // Add AI tutor instructions if needed and not in custom prompt
-    if ($job['include_ai_tutor'] && strpos($systemPrompt, 'ai_instruction') === false) {
-        $systemPrompt .= "\n\nFör varje lektion, skapa ai_instruction (instruktioner för AI-handledaren) och ai_prompt (startprompt för dialog med studenten).";
+    // ========================================
+    // PHASE 1: Generate course structure
+    // ========================================
+    updateJobStatus($jobId, 'processing', 8, 'Genererar kursstruktur...');
+    echo "  - Phase 1: Generating course structure with {$lessonCount} lessons...\n";
+
+    $structureSystemPrompt = "Du är en expert på att skapa utbildningsmaterial. Du ska generera en kursstruktur i JSON-format.
+
+VIKTIGT: Svara ENDAST med giltig JSON, ingen annan text före eller efter.
+
+Du ska skapa EXAKT {$lessonCount} lektioner. Detta är ett ABSOLUT krav - varken fler eller färre.
+
+Kursen ska:
+- Ha EXAKT {$lessonCount} lektioner (detta är obligatoriskt)
+- Vara på {$difficultyText}-nivå
+- Vara på svenska
+- Ha {$toneText} ton
+- Använda {$languageStyleText}";
+
+    if (!empty($job['target_audience'])) {
+        $structureSystemPrompt .= "\n- Målgrupp: {$job['target_audience']}";
     }
 
-    $userPrompt = "Skapa en kurs med namnet \"{$job['course_name']}\" baserat på följande beskrivning:\n\n{$job['course_description']}\n\nKursen ska ha exakt {$lessonCount} lektioner.";
-
-    updateJobStatus($jobId, 'processing', 10, 'Skickar förfrågan till AI...');
-
-    // Call OpenAI API
-    $courseJson = callOpenAI($systemPrompt, $userPrompt);
-
-    if (!$courseJson) {
-        throw new Exception('Kunde inte generera kursinnehåll från AI.');
+    // Quiz instructions
+    $quizInstructions = '';
+    if ($job['include_quiz']) {
+        $quizInstructions = '
+QUIZ: Varje lektion ska ha ett quiz.
+- VARIERA frågetyperna: single_choice (ett rätt svar) och multiple_choice (flera rätta svar)
+- single_choice: 3-5 svarsalternativ, quiz_correct_answer = nummer (1-baserat)
+- multiple_choice: 4-5 svarsalternativ, quiz_correct_answers = "1,3" (kommaseparerade)
+- Sprid korrekta svar jämnt - inte alltid samma position
+- Mestadels single_choice, men inkludera multiple_choice för variation';
     }
 
-    updateJobStatus($jobId, 'processing', 40, 'Bearbetar AI-svar...');
+    // AI tutor instructions
+    $aiTutorInstructions = '';
+    if ($job['include_ai_tutor']) {
+        $aiTutorInstructions = '
+AI-HANDLEDARE: Varje lektion ska ha:
+- "ai_instruction": Kort instruktion för AI-handledaren om lektionens ämne
+- "ai_prompt": Startprompt för dialogen med studenten';
+    }
 
-    // Parse JSON response
-    $courseData = json_decode($courseJson, true);
+    $aiInstructionValue = $job['include_ai_tutor'] ? '"Instruktion..."' : 'null';
+    $aiPromptValue = $job['include_ai_tutor'] ? '"Prompt..."' : 'null';
+
+    $structureSystemPrompt .= "
+{$quizInstructions}
+{$aiTutorInstructions}
+
+JSON-strukturen ska vara:
+{
+  \"course\": {
+    \"title\": \"Kursnamn\",
+    \"description\": \"Utförlig kursbeskrivning (2-3 meningar)\",
+    \"difficulty_level\": \"{$job['difficulty_level']}\",
+    \"duration_minutes\": <total tid>,
+    \"prerequisites\": null,
+    \"tags\": null,
+    \"status\": \"inactive\",
+    \"sort_order\": 0,
+    \"featured\": 0
+  },
+  \"lessons\": [
+    {
+      \"title\": \"Lektionsnamn\",
+      \"estimated_duration\": <minuter>,
+      \"description\": \"Kort beskrivning av vad lektionen handlar om (1-2 meningar)\",
+      \"video_url\": null,
+      \"resource_links\": null,
+      \"tags\": null,
+      \"status\": \"active\",
+      \"sort_order\": <nummer>,
+      \"ai_instruction\": {$aiInstructionValue},
+      \"ai_prompt\": {$aiPromptValue},
+      \"quiz_type\": \"single_choice\",
+      \"quiz_question\": \"Fråga?\",
+      \"quiz_answer1\": \"Alt 1\",
+      \"quiz_answer2\": \"Alt 2\",
+      \"quiz_answer3\": \"Alt 3\",
+      \"quiz_answer4\": null,
+      \"quiz_answer5\": null,
+      \"quiz_correct_answer\": 2,
+      \"quiz_correct_answers\": null
+    }
+  ]
+}
+
+VIKTIGT: Du MÅSTE generera EXAKT {$lessonCount} lektioner i lessons-arrayen. Räkna noga!";
+
+    $structureUserPrompt = "Skapa en kursstruktur med EXAKT {$lessonCount} lektioner för kursen \"{$job['course_name']}\" baserat på följande beskrivning:\n\n{$job['course_description']}{$qaContext}\n\nGENERERA EXAKT {$lessonCount} LEKTIONER.";
+
+    $structureJson = callOpenAI($structureSystemPrompt, $structureUserPrompt);
+
+    if (!$structureJson) {
+        throw new Exception('Kunde inte generera kursstruktur från AI.');
+    }
+
+    // Log phase 1 response
+    $debugLogFile = __DIR__ . '/../../upload/ai_raw_response_job' . $jobId . '_phase1.log';
+    file_put_contents($debugLogFile, $structureJson);
+    echo "  - Phase 1 response saved (" . strlen($structureJson) . " bytes)\n";
+
+    // Parse the structure JSON
+    $courseData = parseAIJson($structureJson);
 
     if (!$courseData || !isset($courseData['course']) || !isset($courseData['lessons'])) {
-        // Try to extract JSON from response
-        if (preg_match('/\{[\s\S]*\}/', $courseJson, $matches)) {
-            $courseData = json_decode($matches[0], true);
-        }
+        throw new Exception('Kunde inte tolka AI-svaret som giltig JSON (fas 1).');
+    }
 
-        if (!$courseData || !isset($courseData['course'])) {
-            throw new Exception('Kunde inte tolka AI-svaret som giltig JSON.');
+    $actualLessonCount = count($courseData['lessons']);
+    echo "  - Phase 1: Got {$actualLessonCount} lessons (requested {$lessonCount})\n";
+
+    if ($actualLessonCount < $lessonCount) {
+        echo "  - Warning: AI returned fewer lessons than requested. Attempting to fill...\n";
+        // Pad with placeholder lessons based on course topic
+        while (count($courseData['lessons']) < $lessonCount) {
+            $idx = count($courseData['lessons']) + 1;
+            $courseData['lessons'][] = [
+                'title' => "Lektion {$idx}: " . $job['course_name'] . " - fördjupning {$idx}",
+                'estimated_duration' => 10,
+                'description' => "Fördjupning i ämnet " . $job['course_name'],
+                'video_url' => null,
+                'resource_links' => null,
+                'tags' => null,
+                'status' => 'active',
+                'sort_order' => $idx,
+                'ai_instruction' => null,
+                'ai_prompt' => null,
+                'quiz_type' => 'single_choice',
+                'quiz_question' => null,
+                'quiz_answer1' => null,
+                'quiz_answer2' => null,
+                'quiz_answer3' => null,
+                'quiz_answer4' => null,
+                'quiz_answer5' => null,
+                'quiz_correct_answer' => null,
+                'quiz_correct_answers' => null
+            ];
         }
     }
 
-    // Override course name with user-specified name
+    // Trim if AI returned too many
+    if (count($courseData['lessons']) > $lessonCount) {
+        $courseData['lessons'] = array_slice($courseData['lessons'], 0, $lessonCount);
+    }
+
+    // Override course name
     $courseData['course']['title'] = $job['course_name'];
+
+    updateJobStatus($jobId, 'processing', 20, 'Kursstruktur klar. Genererar lektionsinnehåll...');
+
+    // ========================================
+    // PHASE 2: Generate content for each lesson
+    // ========================================
+    $contentSystemPrompt = "Du är en expert på att skapa utbildningsmaterial. Du ska generera innehåll för EN lektion i HTML-format.
+
+VIKTIGT: Svara ENDAST med lektionens HTML-innehåll. Ingen JSON, ingen markdown, bara ren HTML.
+
+TONALITET: {$toneText}
+SPRÅKSTIL: {$languageStyleText}
+TEXTLÄNGD: {$textLengthText}";
+
+    if (!empty($job['target_audience'])) {
+        $contentSystemPrompt .= "\nMÅLGRUPP: {$job['target_audience']} - anpassa innehåll, exempel och terminologi.";
+    }
+
+    $contentSystemPrompt .= '
+
+FORMATERING - Använd dessa HTML-element:
+
+<div class="lesson-intro"><p>Kort introduktion som sammanfattar lektionen...</p></div>
+
+<h3>Huvudrubrik 1</h3>
+<p>Stycketext med förklaringar...</p>
+
+<div class="lesson-tip"><strong>Tips:</strong> Praktiskt råd...</div>
+<div class="lesson-info"><strong>Visste du att...</strong> Intressant fakta...</div>
+<div class="lesson-example"><strong>Exempel:</strong> Konkret scenario...</div>
+<div class="lesson-warning"><strong>Obs!</strong> Viktig varning...</div>
+
+<h3>Huvudrubrik 2</h3>
+<p>Mer innehåll...</p>
+<ul><li>Punktlista...</li></ul>
+
+<div class="lesson-summary"><h4>Sammanfattning</h4><ul><li>Nyckelinsikt 1</li><li>Nyckelinsikt 2</li><li>Nyckelinsikt 3</li></ul></div>
+
+KRAV på varje lektion:
+1. Börja med en lesson-intro
+2. Minst 2-3 huvudsektioner med h3-rubriker
+3. Minst en lesson-tip ELLER lesson-info ruta
+4. Minst ett lesson-example
+5. Avsluta med lesson-summary
+6. Använd <strong> för nyckelord, <ul>/<li> för listor';
+
+    $totalLessons = count($courseData['lessons']);
+    $progressStart = 20;
+    $progressEnd = 70;
+
+    for ($i = 0; $i < $totalLessons; $i++) {
+        $lesson = &$courseData['lessons'][$i];
+        $lessonNum = $i + 1;
+        $progressPercent = $progressStart + (($i / $totalLessons) * ($progressEnd - $progressStart));
+
+        updateJobStatus($jobId, 'processing', round($progressPercent),
+            "Genererar innehåll för lektion {$lessonNum} av {$totalLessons}: {$lesson['title']}...");
+        echo "  - Phase 2: Generating content for lesson {$lessonNum}/{$totalLessons}: {$lesson['title']}\n";
+
+        $lessonDescription = $lesson['description'] ?? '';
+        $contentUserPrompt = "Skapa innehåll för lektion {$lessonNum} av {$totalLessons} i kursen \"{$job['course_name']}\".
+
+Lektionstitel: {$lesson['title']}
+Beskrivning: {$lessonDescription}
+Kursbeskrivning: {$job['course_description']}
+Svårighetsgrad: {$difficultyText}
+
+Skriv ett komplett, informativt och engagerande lektionsinnehåll i HTML.";
+
+        $contentResponse = callOpenAI($contentSystemPrompt, $contentUserPrompt, 4096);
+
+        if ($contentResponse) {
+            // Clean the response - remove any markdown wrapping
+            $content = trim($contentResponse);
+            $content = preg_replace('/^```(?:html)?\s*\n?/i', '', $content);
+            $content = preg_replace('/\n?```\s*$/', '', $content);
+            $lesson['content'] = trim($content);
+            echo "    - Content generated (" . strlen($lesson['content']) . " chars)\n";
+        } else {
+            // Fallback: minimal content
+            $lesson['content'] = '<div class="lesson-intro"><p>' . htmlspecialchars($lesson['title']) . '</p></div><p>' . htmlspecialchars($lessonDescription) . '</p>';
+            echo "    - WARNING: Failed to generate content, using fallback\n";
+        }
+
+        unset($lesson); // Break reference
+    }
+
+    // Log full course data
+    $debugLogFile = __DIR__ . '/../../upload/ai_raw_response_job' . $jobId . '.log';
+    file_put_contents($debugLogFile, json_encode($courseData, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+    echo "  - Full course data saved to: {$debugLogFile}\n";
 
     // Randomize quiz answers if quiz is included
     if ($job['include_quiz']) {
         foreach ($courseData['lessons'] as &$lesson) {
             if (!empty($lesson['quiz_question']) && !empty($lesson['quiz_answer1'])) {
-                // Get current answers and correct answer index
-                $answers = [
-                    $lesson['quiz_answer1'],
-                    $lesson['quiz_answer2'],
-                    $lesson['quiz_answer3']
-                ];
-                $correctIndex = ($lesson['quiz_correct_answer'] ?? 1) - 1; // Convert to 0-based
-                $correctAnswer = $answers[$correctIndex] ?? $answers[0];
+                $answers = [];
+                $answerCount = 0;
+                for ($a = 1; $a <= 5; $a++) {
+                    $key = 'quiz_answer' . $a;
+                    if (!empty($lesson[$key])) {
+                        $answers[] = $lesson[$key];
+                        $answerCount++;
+                    }
+                }
 
-                // Shuffle the answers
-                shuffle($answers);
+                if ($answerCount >= 2) {
+                    $quizType = $lesson['quiz_type'] ?? 'single_choice';
 
-                // Find new position of correct answer (1-based)
-                $newCorrectPosition = array_search($correctAnswer, $answers) + 1;
+                    if ($quizType === 'multiple_choice' && !empty($lesson['quiz_correct_answers'])) {
+                        // Handle multiple_choice: track correct answers by value
+                        $correctIndices = array_map('intval', explode(',', $lesson['quiz_correct_answers']));
+                        $correctValues = [];
+                        foreach ($correctIndices as $ci) {
+                            if ($ci >= 1 && $ci <= $answerCount) {
+                                $correctValues[] = $answers[$ci - 1];
+                            }
+                        }
 
-                // Update lesson with shuffled answers
-                $lesson['quiz_answer1'] = $answers[0];
-                $lesson['quiz_answer2'] = $answers[1];
-                $lesson['quiz_answer3'] = $answers[2];
-                $lesson['quiz_correct_answer'] = $newCorrectPosition;
+                        shuffle($answers);
+
+                        // Find new positions
+                        $newCorrectIndices = [];
+                        foreach ($correctValues as $cv) {
+                            $pos = array_search($cv, $answers);
+                            if ($pos !== false) {
+                                $newCorrectIndices[] = $pos + 1;
+                            }
+                        }
+                        sort($newCorrectIndices);
+                        $lesson['quiz_correct_answers'] = implode(',', $newCorrectIndices);
+                    } else {
+                        // Handle single_choice
+                        $correctIndex = ($lesson['quiz_correct_answer'] ?? 1) - 1;
+                        $correctAnswer = $answers[$correctIndex] ?? $answers[0];
+
+                        shuffle($answers);
+
+                        $lesson['quiz_correct_answer'] = array_search($correctAnswer, $answers) + 1;
+                    }
+
+                    // Write back shuffled answers
+                    for ($a = 0; $a < 5; $a++) {
+                        $lesson['quiz_answer' . ($a + 1)] = $answers[$a] ?? null;
+                    }
+                }
             }
         }
-        unset($lesson); // Break reference
+        unset($lesson);
     }
 
-    updateJobStatus($jobId, 'processing', 50, 'Söker efter videolänkar...');
+    updateJobStatus($jobId, 'processing', 70, 'Söker efter videolänkar...');
 
     // Add YouTube links if requested
     if ($job['include_video_links']) {
@@ -298,18 +552,85 @@ function processJob($job) {
             if ($videoUrl) {
                 $lesson['video_url'] = $videoUrl;
             }
-            updateJobStatus($jobId, 'processing', 50 + (($index + 1) / count($courseData['lessons']) * 20),
+            updateJobStatus($jobId, 'processing', 70 + (($index + 1) / count($courseData['lessons']) * 5),
                 "Söker video för lektion " . ($index + 1) . "...");
         }
     }
 
-    updateJobStatus($jobId, 'processing', 80, 'Importerar kursen...');
+    updateJobStatus($jobId, 'processing', 75, 'Importerar kursen...');
 
     // Import the course
     $courseId = importCourse($courseData, $job['user_id'], $job['organization_domain']);
 
     if (!$courseId) {
         throw new Exception('Kunde inte importera kursen till databasen.');
+    }
+
+    updateJobStatus($jobId, 'processing', 80, 'Kursen importerad.');
+
+    // Generate images if enabled
+    $generateImages = isset($job['generate_images']) ? (int)$job['generate_images'] : 0;
+
+    if ($generateImages) {
+        $tone = $job['tone'] ?? 'pedagogical';
+        $colorTheme = $job['color_theme'] ?? '#007bff';
+        $targetAudience = $job['target_audience'] ?? '';
+        $courseName = $job['course_name'];
+
+        // Generate course cover image
+        updateJobStatus($jobId, 'processing', 82, 'Genererar kursbild...');
+        $courseImagePrompt = "Educational course cover illustration for '{$courseName}'. Theme: {$tone}. Color palette inspired by {$colorTheme}. " .
+            (!empty($targetAudience) ? "Target audience: {$targetAudience}. " : "") .
+            "Clean, modern, professional design suitable for e-learning. Abstract and conceptual. No text in image.";
+        $courseImage = generateAIImageWithPrompt($courseImagePrompt, '1792x1024');
+        if ($courseImage) {
+            execute(
+                "UPDATE " . DB_DATABASE . ".courses SET image_url = ? WHERE id = ?",
+                [$courseImage, $courseId]
+            );
+            echo "  - Course image saved: {$courseImage}\n";
+        }
+
+        // Generate lesson images
+        $lessons = query(
+            "SELECT id, title FROM " . DB_DATABASE . ".lessons WHERE course_id = ? ORDER BY sort_order",
+            [$courseId]
+        );
+
+        $lessonTotal = count($lessons);
+        foreach ($lessons as $lIndex => $lessonRow) {
+            $progressPercent = 84 + (($lIndex + 1) / $lessonTotal * 9); // 84-93%
+            updateJobStatus($jobId, 'processing', round($progressPercent),
+                "Genererar bild för lektion " . ($lIndex + 1) . " av {$lessonTotal}...");
+
+            $lessonImagePrompt = "Educational illustration for lesson '{$lessonRow['title']}' in course '{$courseName}'. " .
+                "Style: {$tone}, color accent: {$colorTheme}. " .
+                "Clean, suitable for e-learning. No text in image.";
+            $lessonImage = generateAIImageWithPrompt($lessonImagePrompt, '1024x1024');
+            if ($lessonImage) {
+                execute(
+                    "UPDATE " . DB_DATABASE . ".lessons SET image_url = ? WHERE id = ?",
+                    [$lessonImage, $lessonRow['id']]
+                );
+                echo "  - Lesson image saved for '{$lessonRow['title']}': {$lessonImage}\n";
+            }
+        }
+
+        // Generate certificate/diploma image
+        updateJobStatus($jobId, 'processing', 94, 'Genererar diplombild...');
+        $diplomaImagePrompt = "Elegant certificate decoration for a course about '{$courseName}'. " .
+            "Achievement theme, celebratory. Color accent: {$colorTheme}. " .
+            "Abstract ornamental design, elegant borders and flourishes. No text in image.";
+        $diplomaImage = generateAIImageWithPrompt($diplomaImagePrompt, '1792x1024');
+        if ($diplomaImage) {
+            execute(
+                "UPDATE " . DB_DATABASE . ".courses SET certificate_image_url = ? WHERE id = ?",
+                [$diplomaImage, $courseId]
+            );
+            echo "  - Diploma image saved: {$diplomaImage}\n";
+        }
+
+        updateJobStatus($jobId, 'processing', 95, 'Bilder genererade.');
     }
 
     // Save generated JSON and mark as completed
@@ -328,18 +649,65 @@ function processJob($job) {
  * Update job status
  */
 function updateJobStatus($jobId, $status, $progress, $message) {
-    execute(
-        "UPDATE " . DB_DATABASE . ".ai_course_jobs
-         SET status = ?, progress_percent = ?, progress_message = ?
-         WHERE id = ?",
-        [$status, $progress, $message, $jobId]
-    );
+    if ($status === 'failed') {
+        execute(
+            "UPDATE " . DB_DATABASE . ".ai_course_jobs
+             SET status = ?, progress_percent = ?, progress_message = ?, error_message = ?, completed_at = NOW()
+             WHERE id = ?",
+            [$status, $progress, $message, $message, $jobId]
+        );
+    } else {
+        execute(
+            "UPDATE " . DB_DATABASE . ".ai_course_jobs
+             SET status = ?, progress_percent = ?, progress_message = ?
+             WHERE id = ?",
+            [$status, $progress, $message, $jobId]
+        );
+    }
+}
+
+/**
+ * Parse AI response JSON, handling markdown code blocks and nested JSON
+ */
+function parseAIJson($responseText) {
+    $cleaned = trim($responseText);
+
+    // Remove markdown code block markers
+    $cleaned = preg_replace('/^```(?:json)?\s*\n?/i', '', $cleaned);
+    $cleaned = preg_replace('/\n?```\s*$/', '', $cleaned);
+    $cleaned = trim($cleaned);
+
+    $data = json_decode($cleaned, true);
+    if ($data && (isset($data['course']) || isset($data['lessons']))) {
+        return $data;
+    }
+
+    // Try greedy match for outermost braces
+    if (preg_match('/\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{[^{}]*\}))*\}))*\}/s', $cleaned, $matches)) {
+        $data = json_decode($matches[0], true);
+        if ($data && (isset($data['course']) || isset($data['lessons']))) {
+            return $data;
+        }
+    }
+
+    // Fallback: broadest possible match
+    if (preg_match('/\{[\s\S]*\}/', $responseText, $matches)) {
+        $data = json_decode($matches[0], true);
+        if ($data) {
+            return $data;
+        }
+    }
+
+    $jsonError = json_last_error_msg();
+    echo "  - JSON parse error: {$jsonError}\n";
+    echo "  - First 500 chars: " . substr($responseText, 0, 500) . "\n";
+    return null;
 }
 
 /**
  * Call OpenAI API
  */
-function callOpenAI($systemPrompt, $userPrompt) {
+function callOpenAI($systemPrompt, $userPrompt, $maxTokens = 16384) {
     // Use defined constants from config.php
     $apiServer = defined('AI_SERVER') && AI_SERVER ? AI_SERVER : 'https://api.openai.com/v1/chat/completions';
     $apiKey = defined('AI_API_KEY') ? AI_API_KEY : '';
@@ -356,7 +724,7 @@ function callOpenAI($systemPrompt, $userPrompt) {
             ['role' => 'system', 'content' => $systemPrompt],
             ['role' => 'user', 'content' => $userPrompt]
         ],
-        'max_tokens' => 16384,
+        'max_tokens' => $maxTokens,
         'temperature' => 0.7
     ];
 
@@ -513,6 +881,90 @@ function generateAIImage($lessonTitle, $courseName) {
             $uploadDir = __DIR__ . '/../../upload/';
 
             // Ensure upload directory exists
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0755, true);
+            }
+
+            $fileName = 'ai_' . uniqid() . '.png';
+            $filePath = $uploadDir . $fileName;
+
+            if (file_put_contents($filePath, $imageContent)) {
+                echo "  - Image saved: {$fileName}\n";
+                return $fileName;
+            } else {
+                echo "  - Failed to save image to: {$filePath}\n";
+            }
+        } else {
+            echo "  - Failed to download image from URL\n";
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Generate AI image using DALL-E with custom prompt and size
+ */
+function generateAIImageWithPrompt($prompt, $size = '1024x1024') {
+    $apiKey = defined('AI_API_KEY') ? AI_API_KEY : '';
+    $imageApiServer = 'https://api.openai.com/v1/images/generations';
+
+    if (empty($apiKey)) {
+        echo "  - No API key for image generation\n";
+        return null;
+    }
+
+    // Validate size
+    $validSizes = ['1024x1024', '1792x1024', '1024x1792'];
+    if (!in_array($size, $validSizes)) {
+        $size = '1024x1024';
+    }
+
+    $data = [
+        'model' => 'dall-e-3',
+        'prompt' => $prompt,
+        'n' => 1,
+        'size' => $size,
+        'quality' => 'standard'
+    ];
+
+    echo "  - Generating DALL-E image ({$size}): " . substr($prompt, 0, 80) . "...\n";
+
+    $ch = curl_init($imageApiServer);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Content-Type: application/json',
+        'Authorization: Bearer ' . $apiKey
+    ]);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 120);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    if ($curlError) {
+        echo "  - cURL error: {$curlError}\n";
+        return null;
+    }
+
+    if ($httpCode !== 200) {
+        $errorData = json_decode($response, true);
+        $errorMsg = $errorData['error']['message'] ?? 'Unknown error';
+        echo "  - DALL-E API error ({$httpCode}): {$errorMsg}\n";
+        return null;
+    }
+
+    $result = json_decode($response, true);
+
+    if (isset($result['data'][0]['url'])) {
+        $imageUrl = $result['data'][0]['url'];
+        $imageContent = @file_get_contents($imageUrl);
+
+        if ($imageContent) {
+            $uploadDir = __DIR__ . '/../../upload/';
             if (!is_dir($uploadDir)) {
                 mkdir($uploadDir, 0755, true);
             }

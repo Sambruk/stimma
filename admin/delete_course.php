@@ -77,13 +77,51 @@ if (!$isAdmin) {
     }
 }
 
-// Radera kursen och alla dess lektioner
+// Radera kursen och alla relaterade data
 try {
+    execute("START TRANSACTION");
+
     $lessonCount = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".lessons WHERE course_id = ?", [$courseId])['count'];
 
+    // Get lesson IDs for cascade deletion
+    $lessonIds = query("SELECT id FROM " . DB_DATABASE . ".lessons WHERE course_id = ?", [$courseId]);
+
+    // Delete user_progress for all lessons in this course (FK: user_progress.lesson_id -> lessons.id)
+    foreach ($lessonIds as $lid) {
+        execute("DELETE FROM " . DB_DATABASE . ".user_progress WHERE lesson_id = ?", [$lid['id']]);
+    }
+
+    // Delete resources linked to lessons or course (FK: resources.lesson_id -> lessons.id, resources.course_id -> courses.id)
+    foreach ($lessonIds as $lid) {
+        execute("DELETE FROM " . DB_DATABASE . ".resources WHERE lesson_id = ?", [$lid['id']]);
+    }
+    execute("DELETE FROM " . DB_DATABASE . ".resources WHERE course_id = ?", [$courseId]);
+
+    // Delete lessons (FK: lessons.course_id -> courses.id)
     execute("DELETE FROM " . DB_DATABASE . ".lessons WHERE course_id = ?", [$courseId]);
+
+    // Delete course_editors (FK: course_editors.course_id -> courses.id)
     execute("DELETE FROM " . DB_DATABASE . ".course_editors WHERE course_id = ?", [$courseId]);
+
+    // Delete course_tags (FK: course_tags.course_id -> courses.id)
+    execute("DELETE FROM " . DB_DATABASE . ".course_tags WHERE course_id = ?", [$courseId]);
+
+    // Delete certificates (FK: certificates.course_id -> courses.id)
+    execute("DELETE FROM " . DB_DATABASE . ".certificates WHERE course_id = ?", [$courseId]);
+
+    // Unlink ai_course_jobs (FK: ai_course_jobs.result_course_id -> courses.id)
+    execute("UPDATE " . DB_DATABASE . ".ai_course_jobs SET result_course_id = NULL WHERE result_course_id = ?", [$courseId]);
+
+    // Delete course_enrollments (no FK but contains course data)
+    execute("DELETE FROM " . DB_DATABASE . ".course_enrollments WHERE course_id = ?", [$courseId]);
+
+    // Delete reminder_log entries (no FK but contains course data)
+    execute("DELETE FROM " . DB_DATABASE . ".reminder_log WHERE course_id = ?", [$courseId]);
+
+    // Finally delete the course
     execute("DELETE FROM " . DB_DATABASE . ".courses WHERE id = ?", [$courseId]);
+
+    execute("COMMIT");
 
     logActivity($_SESSION['user_email'], "Raderade kursen '" . $course['title'] . "' (ID: " . $courseId . ") med " . $lessonCount . " lektioner");
 
@@ -94,6 +132,7 @@ try {
     }
     $_SESSION['message_type'] = 'success';
 } catch (Exception $e) {
+    execute("ROLLBACK");
     error_log("Course deletion error: " . $e->getMessage());
     $_SESSION['message'] = 'Ett fel uppstod när kursen skulle raderas.';
     $_SESSION['message_type'] = 'danger';

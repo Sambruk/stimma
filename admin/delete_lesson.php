@@ -79,7 +79,26 @@ if (!$isAdmin && $isEditor) {
 }
 
 try {
+    // Delete local video file if applicable
+    if (($lesson['video_type'] ?? '') === 'local' && !empty($lesson['video_url'])) {
+        $videoPath = __DIR__ . '/../upload/videos/' . basename($lesson['video_url']);
+        if (file_exists($videoPath)) {
+            unlink($videoPath);
+        }
+    }
+
+    execute("START TRANSACTION");
+
+    // Delete user_progress for this lesson (FK: user_progress.lesson_id -> lessons.id)
+    execute("DELETE FROM " . DB_DATABASE . ".user_progress WHERE lesson_id = ?", [$lessonId]);
+
+    // Delete resources for this lesson (FK: resources.lesson_id -> lessons.id)
+    execute("DELETE FROM " . DB_DATABASE . ".resources WHERE lesson_id = ?", [$lessonId]);
+
+    // Delete the lesson
     execute("DELETE FROM " . DB_DATABASE . ".lessons WHERE id = ?", [$lessonId]);
+
+    execute("COMMIT");
 
     logActivity($_SESSION['user_email'], "Raderade lektionen '" . $lesson['title'] . "' (ID: " . $lessonId . ")");
 
@@ -95,6 +114,7 @@ try {
     }
     exit;
 } catch (Exception $e) {
+    execute("ROLLBACK");
     error_log("Lesson deletion error: " . $e->getMessage());
     $_SESSION['message'] = 'Ett fel uppstod vid radering av lektionen.';
     $_SESSION['message_type'] = 'danger';

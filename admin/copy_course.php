@@ -94,18 +94,35 @@ function copyCourse($sourceCourseId, $targetDomain, $newAuthorId) {
 
     $lessonsCopied = 0;
     foreach ($sourceLessons as $lesson) {
+        // Copy local video file with new random name if applicable
+        $videoUrl = $lesson['video_url'];
+        $videoType = $lesson['video_type'] ?? null;
+        if ($videoType === 'local' && !empty($videoUrl)) {
+            $srcVideoPath = realpath(__DIR__ . '/../upload/videos/') . '/' . basename($videoUrl);
+            if (file_exists($srcVideoPath)) {
+                $ext = strtolower(pathinfo($videoUrl, PATHINFO_EXTENSION));
+                $newVideoFilename = bin2hex(random_bytes(16)) . '.' . $ext;
+                $destVideoPath = __DIR__ . '/../upload/videos/' . $newVideoFilename;
+                if (copy($srcVideoPath, $destVideoPath)) {
+                    chmod($destVideoPath, 0644);
+                    $videoUrl = $newVideoFilename;
+                }
+            }
+        }
+
         $lessonResult = execute(
             "INSERT INTO " . DB_DATABASE . ".lessons
-            (course_id, title, estimated_duration, image_url, video_url, content, resource_links, tags,
+            (course_id, title, estimated_duration, image_url, video_url, video_type, content, resource_links, tags,
              status, sort_order, ai_instruction, ai_prompt, quiz_question, quiz_answer1, quiz_answer2,
              quiz_answer3, quiz_correct_answer, author_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
             [
                 $newCourseId,
                 $lesson['title'],
                 $lesson['estimated_duration'],
                 $lesson['image_url'],
-                $lesson['video_url'],
+                $videoUrl,
+                $videoType,
                 $lesson['content'],
                 $lesson['resource_links'],
                 $lesson['tags'],

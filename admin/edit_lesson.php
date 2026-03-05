@@ -129,11 +129,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
+    // Hantera video (YouTube eller lokal uppladdning)
+    $video_type_input = $_POST['video_type'] ?? '';
+    $video_filename = $_POST['video_filename'] ?? '';
+    $video_url_input = $_POST['video_url'] ?? '';
+    $video_url = null;
+    $video_type = null;
+
+    if ($video_type_input === 'local' && !empty($video_filename)) {
+        $video_url = basename($video_filename); // Prevent path traversal
+        $video_type = 'local';
+    } elseif ($video_type_input === 'youtube' && !empty($video_url_input)) {
+        $video_url = $video_url_input;
+        $video_type = 'youtube';
+    }
+
+    // Om vi byter från local till annat: radera gammal videofil
+    if (isset($lesson) && ($lesson['video_type'] ?? '') === 'local' && !empty($lesson['video_url'])) {
+        if ($video_type !== 'local' || $video_url !== $lesson['video_url']) {
+            $oldVideoPath = __DIR__ . '/../upload/videos/' . basename($lesson['video_url']);
+            if (file_exists($oldVideoPath)) {
+                unlink($oldVideoPath);
+            }
+        }
+    }
+
     if (empty($title)) {
         $error = 'Titel är obligatoriskt.';
     } else {
 
-        
+
         if (isset($_GET['id'])) {
             // Uppdatera befintlig lektion
             execute("UPDATE " . DB_DATABASE . ".lessons SET
@@ -142,6 +167,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     course_id = ?,
                     image_url = ?,
                     video_url = ?,
+                    video_type = ?,
                     status = ?,
                     ai_instruction = ?,
                     ai_prompt = ?,
@@ -156,7 +182,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     quiz_correct_answers = ?,
                     updated_at = NOW()
                     WHERE id = ?",
-                    [$title, $content, $course_id, $image_url, $_POST['video_url'], $status,
+                    [$title, $content, $course_id, $image_url, $video_url, $video_type, $status,
                      $ai_instruction, $ai_prompt, $quiz_question, $quiz_type,
                      $quiz_answer1, $quiz_answer2, $quiz_answer3, $quiz_answer4, $quiz_answer5,
                      $quiz_correct_answer, $quiz_correct_answers, $_GET['id']]);
@@ -175,13 +201,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             // Skapa ny lektion
             execute("INSERT INTO " . DB_DATABASE . ".lessons
-                    (title, content, course_id, image_url, video_url, status,
+                    (title, content, course_id, image_url, video_url, video_type, status,
                      ai_instruction, ai_prompt, quiz_question, quiz_type,
                      quiz_answer1, quiz_answer2, quiz_answer3, quiz_answer4, quiz_answer5,
                      quiz_correct_answer, quiz_correct_answers,
                      sort_order, author_id, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
-                    [$title, $content, $course_id, $image_url, $_POST['video_url'], $status,
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                    [$title, $content, $course_id, $image_url, $video_url, $video_type, $status,
                      $ai_instruction, $ai_prompt, $quiz_question, $quiz_type,
                      $quiz_answer1, $quiz_answer2, $quiz_answer3, $quiz_answer4, $quiz_answer5,
                      $quiz_correct_answer, $quiz_correct_answers,
@@ -209,6 +235,7 @@ $id = null;
 $courseId = null;
 $imageUrl = '';
 $videoUrl = '';
+$videoType = '';
 $aiInstruction = '';
 $aiPrompt = '';
 $quizQuestion = '';
@@ -233,6 +260,7 @@ if (isset($_GET['id']) && is_numeric($_GET['id'])) {
         $courseId = $lesson['course_id'] ?? null;
         $imageUrl = $lesson['image_url'] ?? '';
         $videoUrl = $lesson['video_url'] ?? '';
+        $videoType = $lesson['video_type'] ?? '';
         $aiInstruction = $lesson['ai_instruction'] ?? '';
         $aiPrompt = $lesson['ai_prompt'] ?? '';
         $quizQuestion = $lesson['quiz_question'] ?? '';
@@ -350,12 +378,68 @@ $courses = queryAll("SELECT * FROM " . DB_DATABASE . ".courses ORDER BY sort_ord
                         </div>
 
                         <div class="mb-3">
-                            <div class="form-floating">
-                                <input type="url" class="form-control" id="video_url" name="video_url" 
-                                       value="<?= htmlspecialchars($videoUrl ?? '') ?>">
-                                <label for="video_url">YouTube-länk</label>
+                            <label class="form-label fw-normal">Video</label>
+                            <input type="hidden" name="video_type" id="video_type_field" value="<?= htmlspecialchars($videoType) ?>">
+                            <input type="hidden" name="video_filename" id="video_filename_field" value="<?= $videoType === 'local' ? htmlspecialchars($videoUrl) : '' ?>">
+
+                            <style>
+                                #videoTabs .nav-link { color: #495057 !important; background: none; border-left: none; }
+                                #videoTabs .nav-link:hover { color: #007bff !important; background: none; border-left: none; }
+                                #videoTabs .nav-link.active { color: #212529 !important; background-color: #fff !important; border-left: none; border-bottom-color: #fff !important; }
+                            </style>
+                            <ul class="nav nav-tabs" id="videoTabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link <?= $videoType !== 'local' ? 'active' : '' ?>" id="youtube-tab" data-bs-toggle="tab" data-bs-target="#youtube-pane" type="button" role="tab" onclick="switchVideoTab('youtube')"><i class="bi bi-youtube me-1"></i> YouTube</button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link <?= $videoType === 'local' ? 'active' : '' ?>" id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload-pane" type="button" role="tab" onclick="switchVideoTab('local')"><i class="bi bi-upload me-1"></i> Ladda upp video</button>
+                                </li>
+                            </ul>
+                            <div class="tab-content border border-top-0 rounded-bottom p-3" id="videoTabContent">
+                                <!-- YouTube tab -->
+                                <div class="tab-pane fade <?= $videoType !== 'local' ? 'show active' : '' ?>" id="youtube-pane" role="tabpanel">
+                                    <div class="form-floating">
+                                        <input type="url" class="form-control" id="video_url" name="video_url"
+                                               value="<?= $videoType !== 'local' ? htmlspecialchars($videoUrl ?? '') : '' ?>">
+                                        <label for="video_url">YouTube-länk</label>
+                                    </div>
+                                    <div class="form-text">Klistra in en YouTube-länk (t.ex. https://www.youtube.com/watch?v=...) eller en embed-länk</div>
+                                </div>
+                                <!-- Upload tab -->
+                                <div class="tab-pane fade <?= $videoType === 'local' ? 'show active' : '' ?>" id="upload-pane" role="tabpanel">
+                                    <?php if ($videoType === 'local' && !empty($videoUrl)): ?>
+                                    <div id="video-preview-container" class="mb-3">
+                                        <p class="text-muted mb-1">Nuvarande video:</p>
+                                        <video controls preload="metadata" style="max-width: 400px; max-height: 240px;" class="rounded border">
+                                            <source src="../upload/videos/<?= htmlspecialchars(basename($videoUrl)) ?>" type="video/<?= pathinfo($videoUrl, PATHINFO_EXTENSION) === 'webm' ? 'webm' : 'mp4' ?>">
+                                        </video>
+                                        <div class="mt-2">
+                                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeLocalVideo()">
+                                                <i class="bi bi-trash"></i> Ta bort video
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <?php else: ?>
+                                    <div id="video-preview-container" class="mb-3" style="display:none;">
+                                        <p class="text-muted mb-1">Uppladdad video:</p>
+                                        <video id="video-preview" controls preload="metadata" style="max-width: 400px; max-height: 240px;" class="rounded border"></video>
+                                        <div class="mt-2">
+                                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeLocalVideo()">
+                                                <i class="bi bi-trash"></i> Ta bort video
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <?php endif; ?>
+                                    <input type="file" class="form-control" id="video_file_input" accept="video/mp4,video/webm">
+                                    <div class="form-text">Max 100 MB. Tillåtna format: MP4, WebM</div>
+                                    <div id="video-upload-progress" class="mt-2" style="display:none;">
+                                        <div class="progress" style="height: 20px;">
+                                            <div id="video-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%">0%</div>
+                                        </div>
+                                        <small id="video-upload-status" class="text-muted mt-1 d-block"></small>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="form-text">Klistra in en YouTube-länk (t.ex. https://www.youtube.com/watch?v=...) eller en embed-länk</div>
                         </div>
 
                         <div class="mb-3">
@@ -629,4 +713,123 @@ document.querySelectorAll('.quiz-correct-checkbox').forEach(function(checkbox) {
 
 // Initialize UI on page load
 updateQuizTypeUI();
+
+// Video tab switching
+function switchVideoTab(type) {
+    document.getElementById('video_type_field').value = type;
+}
+
+// Video file upload with progress
+document.getElementById('video_file_input').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate type
+    const allowedTypes = ['video/mp4', 'video/webm'];
+    if (!allowedTypes.includes(file.type)) {
+        alert('Endast MP4 och WebM-videor är tillåtna.');
+        e.target.value = '';
+        return;
+    }
+
+    // Validate size (100MB)
+    const maxSize = 100 * 1024 * 1024;
+    if (file.size > maxSize) {
+        alert('Filen är för stor. Max storlek är 100 MB.');
+        e.target.value = '';
+        return;
+    }
+
+    // Show progress bar
+    const progressContainer = document.getElementById('video-upload-progress');
+    const progressBar = document.getElementById('video-progress-bar');
+    const statusText = document.getElementById('video-upload-status');
+    progressContainer.style.display = 'block';
+    progressBar.style.width = '0%';
+    progressBar.textContent = '0%';
+    statusText.textContent = 'Laddar upp...';
+
+    const formData = new FormData();
+    formData.append('video', file);
+    formData.append('csrf_token', '<?= htmlspecialchars($_SESSION['csrf_token']) ?>');
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', 'upload_video.php', true);
+
+    xhr.upload.addEventListener('progress', function(evt) {
+        if (evt.lengthComputable) {
+            const pct = Math.round((evt.loaded / evt.total) * 100);
+            progressBar.style.width = pct + '%';
+            progressBar.textContent = pct + '%';
+            statusText.textContent = 'Laddar upp... ' + (evt.loaded / 1024 / 1024).toFixed(1) + ' / ' + (evt.total / 1024 / 1024).toFixed(1) + ' MB';
+        }
+    });
+
+    xhr.onload = function() {
+        if (xhr.status === 200) {
+            try {
+                const data = JSON.parse(xhr.responseText);
+                if (data.success) {
+
+                    progressBar.classList.remove('progress-bar-animated', 'progress-bar-striped');
+                    progressBar.classList.add('bg-success');
+                    progressBar.style.width = '100%';
+                    progressBar.textContent = 'Klar!';
+                    statusText.textContent = '';
+
+                    // Set hidden fields
+                    document.getElementById('video_type_field').value = 'local';
+                    document.getElementById('video_filename_field').value = data.url;
+
+                    // Show preview
+                    const previewContainer = document.getElementById('video-preview-container');
+                    const previewVideo = document.getElementById('video-preview');
+                    if (previewVideo) {
+                        const ext = data.url.split('.').pop();
+                        previewVideo.innerHTML = '';
+                        const source = document.createElement('source');
+                        source.src = '../upload/videos/' + data.url;
+                        source.type = ext === 'webm' ? 'video/webm' : 'video/mp4';
+                        previewVideo.appendChild(source);
+                        previewVideo.load();
+                    }
+                    previewContainer.style.display = 'block';
+                } else {
+                    progressBar.classList.add('bg-danger');
+                    statusText.textContent = 'Fel: ' + (data.error || 'Okänt fel');
+                }
+            } catch (err) {
+                progressBar.classList.add('bg-danger');
+                console.error('Upload response:', xhr.responseText);
+                statusText.textContent = 'Fel: ' + xhr.responseText.substring(0, 200);
+            }
+        } else {
+            progressBar.classList.add('bg-danger');
+            statusText.textContent = 'Uppladdningen misslyckades (HTTP ' + xhr.status + ')';
+        }
+    };
+
+    xhr.onerror = function() {
+        progressBar.classList.add('bg-danger');
+        statusText.textContent = 'Nätverksfel vid uppladdning.';
+    };
+
+    xhr.send(formData);
+});
+
+// Remove local video
+function removeLocalVideo() {
+    document.getElementById('video_type_field').value = '';
+    document.getElementById('video_filename_field').value = '';
+    document.getElementById('video-preview-container').style.display = 'none';
+    document.getElementById('video_file_input').value = '';
+
+    // Reset progress
+    const progressContainer = document.getElementById('video-upload-progress');
+    const progressBar = document.getElementById('video-progress-bar');
+    progressContainer.style.display = 'none';
+    progressBar.className = 'progress-bar progress-bar-striped progress-bar-animated';
+    progressBar.style.width = '0%';
+    progressBar.textContent = '0%';
+}
 </script>
