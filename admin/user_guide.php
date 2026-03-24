@@ -60,9 +60,9 @@ require_once 'include/header.php';
                 <h5 class="card-title mb-4"><i class="bi bi-signpost-2 me-2 text-primary"></i>Snabbnavigering</h5>
                 <div class="row g-3">
                     <div class="col-md-3 col-6">
-                        <a href="#studenter" class="quick-nav-card student">
+                        <a href="#anvandare" class="quick-nav-card student">
                             <div class="icon"><i class="bi bi-person-fill"></i></div>
-                            <div class="label">Studenter</div>
+                            <div class="label">Användare</div>
                         </a>
                     </div>
                     <div class="col-md-3 col-6">
@@ -113,7 +113,7 @@ require_once 'include/header.php';
             <div class="col-md-6 col-lg-3">
                 <div class="role-card student">
                     <div class="role-icon"><i class="bi bi-person-fill"></i></div>
-                    <h5>Student</h5>
+                    <h5>Användare</h5>
                     <p>Tar kurser och följer sin progress genom utbildningen.</p>
                     <ul class="role-features">
                         <li><i class="bi bi-check2"></i> Ta kurser</li>
@@ -260,12 +260,12 @@ require_once 'include/header.php';
     </div>
 </div>
 
-<!-- Student Guide -->
-<div class="row mb-5" id="studenter">
+<!-- Användare Guide -->
+<div class="row mb-5" id="anvandare">
     <div class="col-12">
         <div class="section-header">
             <span class="section-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"><i class="bi bi-person-fill"></i></span>
-            <h2>Guide för studenter</h2>
+            <h2>Guide för användare</h2>
         </div>
 
         <div class="row g-4">
@@ -678,7 +678,7 @@ require_once 'include/header.php';
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-body p-4">
                 <h5><i class="bi bi-skip-forward me-2 text-primary"></i>Stegvisa kurser</h5>
-                <p class="text-muted">Kurser kan konfigureras med stegvis leverans, där studenter får tillgång till en lektion i taget istället för alla på en gång.</p>
+                <p class="text-muted">Kurser kan konfigureras med stegvis leverans, där användare får tillgång till en lektion i taget istället för alla på en gång.</p>
 
                 <div class="row">
                     <div class="col-lg-6">
@@ -690,7 +690,7 @@ require_once 'include/header.php';
                         </ul>
                     </div>
                     <div class="col-lg-6">
-                        <h6 class="mb-3">Studentens upplevelse</h6>
+                        <h6 class="mb-3">Användarens upplevelse</h6>
                         <ul class="config-list">
                             <li><i class="bi bi-lock"></i> Låsikon visas på lektioner som ännu inte är tillgängliga</li>
                             <li><i class="bi bi-clock"></i> Klockikon och datum visas för nästa planerade lektion</li>
@@ -705,7 +705,7 @@ require_once 'include/header.php';
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-body p-4">
                 <h5><i class="bi bi-graph-up me-2 text-success"></i>Kursstatistik</h5>
-                <p class="text-muted">Under menyn <strong>Kursstatistik</strong> får du en detaljerad översikt över hur studenter genomför varje kurs.</p>
+                <p class="text-muted">Under menyn <strong>Kursstatistik</strong> får du en detaljerad översikt över hur användare genomför varje kurs.</p>
 
                 <div class="row">
                     <div class="col-lg-6">
@@ -713,7 +713,7 @@ require_once 'include/header.php';
                         <ul class="config-list">
                             <li><i class="bi bi-bar-chart-line"></i> <strong>Kursöversikt</strong> – se andel påbörjade och slutförda per kurs</li>
                             <li><i class="bi bi-diagram-3"></i> <strong>Organisationstaggar</strong> – drill-down per org-tagg (avdelning/enhet)</li>
-                            <li><i class="bi bi-person"></i> <strong>Användarnivå</strong> – se individuell progress för varje student</li>
+                            <li><i class="bi bi-person"></i> <strong>Användarnivå</strong> – se individuell progress för varje användare</li>
                         </ul>
                     </div>
                     <div class="col-lg-6">

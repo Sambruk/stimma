@@ -77,6 +77,32 @@ body {
     box-shadow: var(--stimma-shadow);
 }
 
+/* Drag-and-drop sortable styles */
+.grip-handle {
+    cursor: grab;
+    color: var(--medium-gray);
+    font-size: 1.2rem;
+    padding: 4px 8px;
+    user-select: none;
+    -webkit-user-select: none;
+}
+.grip-handle:hover {
+    color: var(--stimma-blue);
+}
+.grip-handle:active {
+    cursor: grabbing;
+}
+.sortable-row.ui-sortable-helper {
+    background: var(--white) !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1000;
+}
+.sortable-row.ui-sortable-placeholder {
+    visibility: visible !important;
+    background: #e3f2fd !important;
+    border: 2px dashed var(--accent-blue) !important;
+}
+
 /* Table Styles */
 .table {
     background: var(--white);

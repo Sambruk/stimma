@@ -48,13 +48,14 @@ $lessons = query("SELECT * FROM " . DB_DATABASE . ".lessons WHERE course_id = ? 
 
 // Definiera extra JavaScript för drag-and-drop sortering
 $extra_scripts = '<script>
-    const CSRF_TOKEN = \'' . htmlspecialchars($_SESSION['csrf_token']) . '\';
-    
     $(document).ready(function() {
         $("#sortable-lessons").sortable({
-            items: "tr",
+            items: "tr.sortable-row",
             handle: ".grip-handle",
             axis: "y",
+            cursor: "grabbing",
+            opacity: 0.8,
+            placeholder: "ui-sortable-placeholder",
             helper: function(e, tr) {
                 var $originals = tr.children();
                 var $helper = tr.clone();
@@ -63,16 +64,20 @@ $extra_scripts = '<script>
                 });
                 return $helper;
             },
+            start: function(e, ui) {
+                // Gör placeholder lika hög som raden
+                ui.placeholder.height(ui.helper.outerHeight());
+            },
             update: function(event, ui) {
                 // Samla in den nya ordningen
-                const lessonIds = [];
-                $("#sortable-lessons tr").each(function(index) {
+                var lessonIds = [];
+                $("#sortable-lessons tr.sortable-row").each(function(index) {
                     lessonIds.push({
                         id: $(this).data("id"),
                         order: index
                     });
                 });
-                
+
                 // Skicka den nya ordningen till servern
                 $.ajax({
                     url: "update_lesson_order.php",
@@ -80,15 +85,19 @@ $extra_scripts = '<script>
                     headers: {
                         "X-CSRF-Token": CSRF_TOKEN
                     },
-                    data: { 
+                    data: {
                         lessons: JSON.stringify(lessonIds),
                         course_id: ' . $courseId . '
                     },
                     success: function(response) {
-                        console.log("Lektionsordning uppdaterad");
+                        // Uppdatera ordningsnummer i tabellen
+                        $("#sortable-lessons tr.sortable-row").each(function(index) {
+                            $(this).find(".sort-order-display").text(index);
+                        });
                     },
                     error: function(error) {
-                        console.error("Fel vid uppdatering av lektionsordning", error);
+                        alert("Kunde inte spara den nya ordningen. Ladda om sidan och försök igen.");
+                        location.reload();
                     }
                 });
             }
@@ -161,7 +170,7 @@ require_once 'include/header.php';
                                         </span>
                                     <?php endif; ?>
                                 </td>
-                                <td><?= $lesson['sort_order'] ?></td>
+                                <td><span class="sort-order-display"><?= $lesson['sort_order'] ?></span></td>
                                 <td><?= date('Y-m-d', strtotime($lesson['created_at'])) ?></td>
                                 <td>
                                     <a href="../lesson.php?id=<?= $lesson['id'] ?>&preview=1" target="_blank"

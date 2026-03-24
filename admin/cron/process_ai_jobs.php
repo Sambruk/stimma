@@ -283,7 +283,7 @@ QUIZ: Varje lektion ska ha ett quiz.
         $aiTutorInstructions = '
 AI-HANDLEDARE: Varje lektion ska ha:
 - "ai_instruction": Kort instruktion för AI-handledaren om lektionens ämne
-- "ai_prompt": Startprompt för dialogen med studenten';
+- "ai_prompt": Startprompt för dialogen med användaren';
     }
 
     $aiInstructionValue = $job['include_ai_tutor'] ? '"Instruktion..."' : 'null';

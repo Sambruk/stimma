@@ -197,7 +197,7 @@
                     <?php elseif ($headerUserRole === 'editor'): ?>
                         <span class="badge bg-warning text-dark">Redaktör</span>
                     <?php else: ?>
-                        <span class="badge bg-secondary">Student</span>
+                        <span class="badge bg-secondary">Användare</span>
                     <?php endif; ?>
                 </li>
             </ul>
