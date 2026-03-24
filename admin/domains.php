@@ -349,8 +349,8 @@ require_once 'include/header.php';
                                             <th class="text-center" style="width: 80px;" title="Redaktörer">
                                                 <i class="bi bi-pencil-fill text-warning"></i> Red.
                                             </th>
-                                            <th class="text-center" style="width: 80px;" title="Studenter">
-                                                <i class="bi bi-person-fill text-info"></i> Stud.
+                                            <th class="text-center" style="width: 80px;" title="Användare">
+                                                <i class="bi bi-person-fill text-info"></i> Anv.
                                             </th>
                                             <th class="text-center" style="width: 80px;" title="Totalt antal användare">
                                                 <i class="bi bi-people-fill text-primary"></i> Totalt

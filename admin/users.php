@@ -366,11 +366,15 @@ require_once 'include/header.php';
         <div class="col-12">
             <div class="card shadow mb-4">
                 <div class="card-header py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <div class="d-flex align-items-center">
+                    <div class="d-flex align-items-center gap-2">
                         <h6 class="m-0 font-weight-bold text-muted me-3">Användare <span class="badge bg-secondary"><?= count($users) ?></span></h6>
                         <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addUserModal">
                             + Användare
                         </button>
+                        <a href="export_users.php?<?= $isSuperAdmin && !empty($selectedDomain) ? 'domain=' . urlencode($selectedDomain) : '' ?><?= !empty($syncFilter) ? ($isSuperAdmin && !empty($selectedDomain) ? '&' : '') . 'sync=' . urlencode($syncFilter) : '' ?>"
+                           class="btn btn-outline-success btn-sm">
+                            <i class="bi bi-download me-1"></i>Exportera CSV
+                        </a>
                     </div>
                     <div class="d-flex align-items-center gap-3 flex-wrap">
                         <?php if ($isSuperAdmin && count($availableDomains) > 0): ?>
@@ -445,7 +449,7 @@ require_once 'include/header.php';
                                                     'super_admin' => ['text' => 'Superadmin', 'class' => 'bg-danger'],
                                                     'admin' => ['text' => 'Admin', 'class' => 'bg-primary'],
                                                     'teacher' => ['text' => 'Lärare', 'class' => 'bg-info'],
-                                                    'student' => ['text' => 'Student', 'class' => 'bg-secondary']
+                                                    'student' => ['text' => 'Användare', 'class' => 'bg-secondary']
                                                 ];
                                                 $role = $user['role'] ?? 'student';
                                                 $roleInfo = $roleLabels[$role] ?? $roleLabels['student'];

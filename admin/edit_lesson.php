@@ -31,8 +31,9 @@ if (isset($_GET['id'])) {
     }
 }
 
-// Hämta alla kurser för dropdown
-$courses = queryAll("SELECT * FROM " . DB_DATABASE . ".courses ORDER BY sort_order ASC");
+// Hämta kurser för dropdown (filtrerat på användarens organisation)
+$userDomain = substr(strrchr($_SESSION['user_email'], "@"), 1);
+$courses = queryAll("SELECT * FROM " . DB_DATABASE . ".courses WHERE organization_domain = ? ORDER BY sort_order ASC", [$userDomain]);
 
 // Hantera formulär
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -297,8 +298,8 @@ if (isset($_GET['id']) && is_numeric($_GET['id'])) {
     exit;
 }
 
-// Hämta alla kurser för dropdown
-$courses = queryAll("SELECT * FROM " . DB_DATABASE . ".courses ORDER BY sort_order ASC");
+// Hämta kurser för dropdown (filtrerat på användarens organisation)
+$courses = queryAll("SELECT * FROM " . DB_DATABASE . ".courses WHERE organization_domain = ? ORDER BY sort_order ASC", [$userDomain]);
 ?>
 
 <div class="container-fluid">
