@@ -116,52 +116,62 @@ require_once 'include/header.php';
                     </tr>
                 </thead>
                 <tbody id="sortable-courses">
-                    <?php foreach ($courses as $course): 
-                        $lessons = query("SELECT * FROM " . DB_DATABASE . ".lessons WHERE course_id = ? ORDER BY sort_order, title", [$course['id']]);
-                        $lessonCount = count($lessons);
-                    ?>
-                    <tr data-id="<?= $course['id'] ?>">
-                        <td>
-                            <i class="bi bi-grip-vertical grip-handle text-muted"></i>
-                        </td>
-                        <td><span class="text-muted"><?= $course['id'] ?></span></td>
-                        <td>
-                            <div class="d-flex align-items-center flex-wrap gap-1">
-                                <a href="lessons.php?course_id=<?= $course['id'] ?>" class="text-decoration-none">
-                                    <?= htmlspecialchars($course['title']) ?>
-                                </a>
-                                <?php if (!empty($courseOrgTagsMap[$course['id']])): ?>
-                                    <?php foreach ($courseOrgTagsMap[$course['id']] as $orgTag): ?>
-                                    <span class="badge bg-success" style="font-size: 0.7rem;"><?= htmlspecialchars($orgTag) ?></span>
-                                    <?php endforeach; ?>
-                                <?php endif; ?>
-                            </div>
-                        </td>
-                        <td>
-                            <span class="badge bg-<?= $course['status'] === 'active' ? 'success' : 'secondary' ?>">
-                                <?= $course['status'] === 'active' ? 'Aktiv' : 'Inaktiv' ?>
-                            </span>
-                        </td>
-                        <td><?= $lessonCount ?></td>
-                        <td>
-                            <div class="d-flex gap-2">
-                                <a href="lessons.php?course_id=<?= $course['id'] ?>" class="btn btn-sm btn-outline-primary">
-                                    <i class="bi bi-list-ul"></i>
-                                </a>
-                                <a href="edit_course.php?id=<?= $course['id'] ?>" class="btn btn-sm btn-outline-secondary">
-                                    <i class="bi bi-pencil"></i>
-                                </a>
-                                <a href="export.php?id=<?= $course['id'] ?>" class="btn btn-sm btn-outline-secondary" title="Exportera kurs">
-                                    <i class="bi bi-box-arrow-up"></i>
-                                </a>
-                                <button type="button" onclick="deleteCourse(<?= $course['id'] ?>)"
-                                   class="btn btn-sm btn-outline-danger">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
+                    <?php if (count($courses) === 0): ?>       
+                        <tr>
+                            <td colspan="6" style="text-align: center; padding: 3rem 0;">Inga kurser tillagda ännu.</td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach ($courses as $course): ?>
+                            <?php
+                                $lessons = query(
+                                    'SELECT * FROM ' . DB_DATABASE . '.lessons WHERE course_id = ? ORDER BY sort_order, title',
+                                    [$course['id']]
+                                );
+                                $lessonCount = count($lessons);
+                            ?>
+                            <tr data-id="<?= $course['id'] ?>">
+                                <td>
+                                    <i class="bi bi-grip-vertical grip-handle text-muted"></i>
+                                </td>
+                                <td><span class="text-muted"><?= $course['id'] ?></span></td>
+                                <td>
+                                    <div class="d-flex align-items-center flex-wrap gap-1">
+                                        <a href="lessons.php?course_id=<?= $course['id'] ?>" class="text-decoration-none">
+                                            <?= htmlspecialchars($course['title']) ?>
+                                        </a>
+                                        <?php if (!empty($courseOrgTagsMap[$course['id']])): ?>
+                                            <?php foreach ($courseOrgTagsMap[$course['id']] as $orgTag): ?>
+                                            <span class="badge bg-success" style="font-size: 0.7rem;"><?= htmlspecialchars($orgTag) ?></span>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-<?= $course['status'] === 'active' ? 'success' : 'secondary' ?>">
+                                        <?= $course['status'] === 'active' ? 'Aktiv' : 'Inaktiv' ?>
+                                    </span>
+                                </td>
+                                <td><?= $lessonCount ?></td>
+                                <td>
+                                    <div class="d-flex gap-2">
+                                        <a href="lessons.php?course_id=<?= $course['id'] ?>" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-list-ul"></i>
+                                        </a>
+                                        <a href="edit_course.php?id=<?= $course['id'] ?>" class="btn btn-sm btn-outline-secondary">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <a href="export.php?id=<?= $course['id'] ?>" class="btn btn-sm btn-outline-secondary" title="Exportera kurs">
+                                            <i class="bi bi-box-arrow-up"></i>
+                                        </a>
+                                        <button type="button" onclick="deleteCourse(<?= $course['id'] ?>)"
+                                        class="btn btn-sm btn-outline-danger">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
                 </tbody>
             </table>
         </div>
