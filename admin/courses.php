@@ -104,19 +104,19 @@ require_once 'include/header.php';
     </div>
     <div class="card-body">
         <div class="table-responsive">
-            <table class="table table-hover">
+            <table class="table table-hover" aria-label="Kurslista">
                 <thead>
                     <tr>
-                        <th style="width: 50px;"></th>
-                        <th style="width: 60px;">ID</th>
-                        <th>Titel</th>
-                        <th>Status</th>
-                        <th>Antal lektioner</th>
-                        <th style="width: 120px;">Åtgärder</th>
+                        <th scope="col" style="width: 50px;"></th>
+                        <th scope="col" style="width: 60px;">ID</th>
+                        <th scope="col">Titel</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Antal lektioner</th>
+                        <th scope="col" style="width: 120px;">Åtgärder</th>
                     </tr>
                 </thead>
                 <tbody id="sortable-courses">
-                    <?php if (count($courses) === 0): ?>       
+                    <?php if (empty($courses)): ?>
                         <tr>
                             <td colspan="6" style="text-align: center; padding: 3rem 0;">Inga kurser tillagda ännu.</td>
                         </tr>
