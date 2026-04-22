@@ -265,16 +265,54 @@ Kursen ska:
         $structureSystemPrompt .= "\n- Målgrupp: {$job['target_audience']}";
     }
 
-    // Quiz instructions
+    // Quiz instructions — stöder 11 frågetyper, AI väljer typ efter innehåll
     $quizInstructions = '';
     if ($job['include_quiz']) {
         $quizInstructions = '
-QUIZ: Varje lektion ska ha ett quiz.
-- VARIERA frågetyperna: single_choice (ett rätt svar) och multiple_choice (flera rätta svar)
-- single_choice: 3-5 svarsalternativ, quiz_correct_answer = nummer (1-baserat)
-- multiple_choice: 4-5 svarsalternativ, quiz_correct_answers = "1,3" (kommaseparerade)
-- Sprid korrekta svar jämnt - inte alltid samma position
-- Mestadels single_choice, men inkludera multiple_choice för variation';
+QUIZ: Varje lektion ska ha 2-4 frågor i en "questions"-array. VÄLJ frågetyp
+som passar bäst för innehållet — variera över lektionerna. För ren faktafråga
+räcker enkelval, men för sekventiellt innehåll passar "order" bättre osv.
+
+FRÅGETYPER och när de passar BÄST:
+- "single_choice"   : Faktafråga med ett rätt svar bland 3-5 alternativ. Default.
+- "multiple_choice" : Fråga där flera alternativ är korrekta (3-5 alt). Använd sparsamt.
+- "true_false"      : Påstående som är sant/falskt. Snabb variation.
+- "fill_blank"      : Text med glömda ord som deltagaren ska fylla i. Passar
+                      termer, årtal, namn. Mall med {{0}}, {{1}} platshållare.
+- "order"           : När steg/händelser har en korrekt KRONOLOGISK eller
+                      LOGISK ordning (ex: "steg i en process", "tidslinje").
+- "match_pairs"     : När fakta naturligt parar ihop (term→definition,
+                      land→huvudstad, författare→bok).
+- "categorize"      : När objekt ska grupperas i 2-4 kategorier (ex:
+                      "organiska/oorganiska föreningar", "vokaler/konsonanter").
+- "numeric"         : Beräknings- eller mätfråga där svaret är ett tal.
+                      Använd "tolerance" för avrundning.
+- "short_text"      : Kort fritt textsvar (1-3 ord). Ange flera accepterade
+                      svar vid synonymer ("svar1", "svar2").
+
+(Du ska INTE välja "image_choice" eller "hotspot" — dessa kräver bildfiler
+som AI inte kan leverera. Välj en av de andra 9 typerna.)
+
+REGLER:
+- Välj EN typ per fråga som verkligen matchar innehållet
+- Minst 3 olika typer totalt över kursen (variera!)
+- Sprid korrekta svar jämnt (inte alltid position 0)
+
+quiz_data-SCHEMA per typ (följ EXAKT):
+
+single_choice:   { "answers": ["A","B","C"], "correct": 1 }       // index 0-baserat
+multiple_choice: { "answers": ["A","B","C","D"], "correct": [0,2] }
+true_false:      { "correct": true }                               // eller false
+fill_blank:      { "template": "Sverige gick med i EU år {{0}}.",
+                   "blanks": [ { "answers": ["1995"], "case_sensitive": false } ] }
+order:           { "items": ["Första steget","Andra","Tredje"] }   // EXAKT rätt ordning
+match_pairs:     { "pairs": [ { "left": "Frankrike", "right": "Paris" } ] }
+categorize:      { "categories": ["Regelbundna","Oregelbundna"],
+                   "items": [ { "text": "arbeta", "category": 0 },
+                              { "text": "springa", "category": 1 } ] }
+numeric:         { "correct": 3.14, "tolerance": 0.01, "unit": "m" }
+short_text:      { "answers": ["Paris","paris"], "case_sensitive": false }
+';
     }
 
     // AI tutor instructions
@@ -318,15 +356,18 @@ JSON-strukturen ska vara:
       \"sort_order\": <nummer>,
       \"ai_instruction\": {$aiInstructionValue},
       \"ai_prompt\": {$aiPromptValue},
-      \"quiz_type\": \"single_choice\",
-      \"quiz_question\": \"Fråga?\",
-      \"quiz_answer1\": \"Alt 1\",
-      \"quiz_answer2\": \"Alt 2\",
-      \"quiz_answer3\": \"Alt 3\",
-      \"quiz_answer4\": null,
-      \"quiz_answer5\": null,
-      \"quiz_correct_answer\": 2,
-      \"quiz_correct_answers\": null
+      \"questions\": [
+        {
+          \"question_type\": \"single_choice\",
+          \"question_text\": \"Frågan?\",
+          \"quiz_data\": { \"answers\": [\"A\",\"B\",\"C\"], \"correct\": 1 }
+        },
+        {
+          \"question_type\": \"order\",
+          \"question_text\": \"Placera stegen i rätt ordning.\",
+          \"quiz_data\": { \"items\": [\"Första\",\"Andra\",\"Tredje\"] }
+        }
+      ]
     }
   ]
 }
@@ -372,15 +413,7 @@ VIKTIGT: Du MÅSTE generera EXAKT {$lessonCount} lektioner i lessons-arrayen. R�
                 'sort_order' => $idx,
                 'ai_instruction' => null,
                 'ai_prompt' => null,
-                'quiz_type' => 'single_choice',
-                'quiz_question' => null,
-                'quiz_answer1' => null,
-                'quiz_answer2' => null,
-                'quiz_answer3' => null,
-                'quiz_answer4' => null,
-                'quiz_answer5' => null,
-                'quiz_correct_answer' => null,
-                'quiz_correct_answers' => null
+                'questions' => [],
             ];
         }
     }
@@ -484,61 +517,42 @@ Skriv ett komplett, informativt och engagerande lektionsinnehåll i HTML.";
     file_put_contents($debugLogFile, json_encode($courseData, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
     echo "  - Full course data saved to: {$debugLogFile}\n";
 
-    // Randomize quiz answers if quiz is included
+    // Slumpa svar för single_choice/multiple_choice/image_choice så rätt svar
+    // inte alltid hamnar i samma position. För andra typer (order, fill_blank,
+    // hotspot etc) har ordningen betydelse — rör inte.
     if ($job['include_quiz']) {
         foreach ($courseData['lessons'] as &$lesson) {
-            if (!empty($lesson['quiz_question']) && !empty($lesson['quiz_answer1'])) {
-                $answers = [];
-                $answerCount = 0;
-                for ($a = 1; $a <= 5; $a++) {
-                    $key = 'quiz_answer' . $a;
-                    if (!empty($lesson[$key])) {
-                        $answers[] = $lesson[$key];
-                        $answerCount++;
+            if (empty($lesson['questions']) || !is_array($lesson['questions'])) continue;
+            foreach ($lesson['questions'] as &$q) {
+                $type = $q['question_type'] ?? '';
+                $data = $q['quiz_data'] ?? [];
+                if (!is_array($data)) continue;
+
+                if ($type === 'single_choice' && !empty($data['answers']) && isset($data['correct'])) {
+                    $correctIdx = (int)$data['correct'];
+                    $correctValue = $data['answers'][$correctIdx] ?? null;
+                    shuffle($data['answers']);
+                    $newIdx = array_search($correctValue, $data['answers'], true);
+                    $data['correct'] = ($newIdx === false) ? 0 : (int)$newIdx;
+                    $q['quiz_data'] = $data;
+                } elseif ($type === 'multiple_choice' && !empty($data['answers']) && !empty($data['correct'])) {
+                    $correctIdxs = array_map('intval', (array)$data['correct']);
+                    $correctValues = [];
+                    foreach ($correctIdxs as $ci) {
+                        if (isset($data['answers'][$ci])) $correctValues[] = $data['answers'][$ci];
                     }
-                }
-
-                if ($answerCount >= 2) {
-                    $quizType = $lesson['quiz_type'] ?? 'single_choice';
-
-                    if ($quizType === 'multiple_choice' && !empty($lesson['quiz_correct_answers'])) {
-                        // Handle multiple_choice: track correct answers by value
-                        $correctIndices = array_map('intval', explode(',', $lesson['quiz_correct_answers']));
-                        $correctValues = [];
-                        foreach ($correctIndices as $ci) {
-                            if ($ci >= 1 && $ci <= $answerCount) {
-                                $correctValues[] = $answers[$ci - 1];
-                            }
-                        }
-
-                        shuffle($answers);
-
-                        // Find new positions
-                        $newCorrectIndices = [];
-                        foreach ($correctValues as $cv) {
-                            $pos = array_search($cv, $answers);
-                            if ($pos !== false) {
-                                $newCorrectIndices[] = $pos + 1;
-                            }
-                        }
-                        sort($newCorrectIndices);
-                        $lesson['quiz_correct_answers'] = implode(',', $newCorrectIndices);
-                    } else {
-                        // Handle single_choice
-                        $correctIndex = ($lesson['quiz_correct_answer'] ?? 1) - 1;
-                        $correctAnswer = $answers[$correctIndex] ?? $answers[0];
-
-                        shuffle($answers);
-
-                        $lesson['quiz_correct_answer'] = array_search($correctAnswer, $answers) + 1;
+                    shuffle($data['answers']);
+                    $newIdxs = [];
+                    foreach ($correctValues as $cv) {
+                        $p = array_search($cv, $data['answers'], true);
+                        if ($p !== false) $newIdxs[] = (int)$p;
                     }
-
-                    // Write back shuffled answers
-                    for ($a = 0; $a < 5; $a++) {
-                        $lesson['quiz_answer' . ($a + 1)] = $answers[$a] ?? null;
-                    }
+                    sort($newIdxs);
+                    $data['correct'] = $newIdxs;
+                    $q['quiz_data'] = $data;
                 }
             }
+            unset($q);
         }
         unset($lesson);
     }
@@ -1028,25 +1042,18 @@ function importCourse($courseData, $userId, $organizationDomain) {
             [$courseId, $userId]
         );
 
-        // Create lessons
+        // Create lessons (quiz-frågor hanteras separat i quiz_questions-tabellen)
         if (isset($courseData['lessons']) && is_array($courseData['lessons'])) {
+            $validTypes = ['single_choice','multiple_choice','true_false','fill_blank',
+                           'image_choice','order','match_pairs','categorize','numeric',
+                           'hotspot','short_text'];
             foreach ($courseData['lessons'] as $index => $lesson) {
-                // Determine quiz type, default to single_choice for backwards compatibility
-                $quizType = $lesson['quiz_type'] ?? 'single_choice';
-                // Validate quiz type
-                $validTypes = ['single_choice', 'multiple_choice', 'drag_drop', 'image_choice'];
-                if (!in_array($quizType, $validTypes)) {
-                    $quizType = 'single_choice';
-                }
-
                 execute(
                     "INSERT INTO " . DB_DATABASE . ".lessons
                      (course_id, title, estimated_duration, image_url, video_url, content,
                       resource_links, tags, status, sort_order, ai_instruction, ai_prompt,
-                      quiz_type, quiz_question, quiz_answer1, quiz_answer2, quiz_answer3, quiz_answer4, quiz_answer5,
-                      quiz_correct_answer, quiz_correct_answers,
                       author_id, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
                     [
                         $courseId,
                         $lesson['title'] ?? 'Lektion ' . ($index + 1),
@@ -1060,18 +1067,28 @@ function importCourse($courseData, $userId, $organizationDomain) {
                         $lesson['sort_order'] ?? $index,
                         $lesson['ai_instruction'] ?? null,
                         $lesson['ai_prompt'] ?? null,
-                        $quizType,
-                        $lesson['quiz_question'] ?? null,
-                        $lesson['quiz_answer1'] ?? null,
-                        $lesson['quiz_answer2'] ?? null,
-                        $lesson['quiz_answer3'] ?? null,
-                        $lesson['quiz_answer4'] ?? null,
-                        $lesson['quiz_answer5'] ?? null,
-                        $lesson['quiz_correct_answer'] ?? null,
-                        $lesson['quiz_correct_answers'] ?? null,
-                        $userId
+                        $userId,
                     ]
                 );
+                $lessonId = (int)(queryOne("SELECT LAST_INSERT_ID() AS id")['id'] ?? 0);
+
+                // Lägg in quiz-frågor i quiz_questions
+                if ($lessonId > 0 && !empty($lesson['questions']) && is_array($lesson['questions'])) {
+                    foreach ($lesson['questions'] as $qIndex => $q) {
+                        $qType = $q['question_type'] ?? 'single_choice';
+                        if (!in_array($qType, $validTypes, true)) $qType = 'single_choice';
+                        $qText = $q['question_text'] ?? '';
+                        $qData = $q['quiz_data'] ?? [];
+                        if (!is_array($qData)) $qData = [];
+                        $qJson = json_encode($qData, JSON_UNESCAPED_UNICODE);
+                        execute(
+                            "INSERT INTO " . DB_DATABASE . ".quiz_questions
+                             (lesson_id, sort_order, question_type, question_text, quiz_data, points)
+                             VALUES (?, ?, ?, ?, ?, 1)",
+                            [$lessonId, $qIndex, $qType, $qText, $qJson]
+                        );
+                    }
+                }
             }
         }
 
