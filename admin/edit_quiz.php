@@ -356,11 +356,149 @@ require_once 'include/header.php';
     </div>
 
     <script>
-    document.getElementById('type_selector').addEventListener('change', function() {
-        document.querySelectorAll('.type-specific').forEach(function(el) { el.style.display = 'none'; });
-        var target = document.querySelector('.type-specific[data-type="' + this.value + '"]');
-        if (target) target.style.display = 'block';
-    });
+    (function() {
+        // Typ-väljare
+        var typeSel = document.getElementById('type_selector');
+        if (typeSel) typeSel.addEventListener('change', function() {
+            document.querySelectorAll('.type-specific').forEach(function(el) { el.style.display = 'none'; });
+            var target = document.querySelector('.type-specific[data-type="' + this.value + '"]');
+            if (target) target.style.display = 'block';
+        });
+
+        // Gemensam "ta bort rad"-hanterare (event delegation)
+        document.addEventListener('click', function(ev) {
+            var btn = ev.target.closest('.btn-remove-row');
+            if (btn) {
+                var row = btn.closest('.choice-row, .img-row, .order-row, .pair-row, .cat-item-row');
+                if (row) row.remove();
+            }
+        });
+
+        // Order-rad
+        var addOrder = document.getElementById('add-order-row-btn');
+        if (addOrder) addOrder.addEventListener('click', function() {
+            var c = document.getElementById('order-rows');
+            var n = c.querySelectorAll('.order-row').length + 1;
+            var d = document.createElement('div');
+            d.className = 'input-group mb-2 order-row';
+            d.innerHTML = '<span class="input-group-text">' + n + '</span>'
+                + '<input type="text" class="form-control" name="order_items[]">'
+                + '<button type="button" class="btn btn-outline-danger btn-remove-row"><i class="bi bi-x"></i></button>';
+            c.appendChild(d);
+        });
+
+        // Pair-rad
+        var addPair = document.getElementById('add-pair-row-btn');
+        if (addPair) addPair.addEventListener('click', function() {
+            var c = document.getElementById('pair-rows');
+            var d = document.createElement('div');
+            d.className = 'row g-2 mb-2 pair-row';
+            d.innerHTML = '<div class="col"><input type="text" class="form-control" name="pair_left[]" placeholder="Vänster"></div>'
+                + '<div class="col-auto align-self-center"><i class="bi bi-arrow-left-right"></i></div>'
+                + '<div class="col"><input type="text" class="form-control" name="pair_right[]" placeholder="Höger"></div>'
+                + '<div class="col-auto"><button type="button" class="btn btn-outline-danger btn-remove-row"><i class="bi bi-x"></i></button></div>';
+            c.appendChild(d);
+        });
+
+        // Kategori-rad
+        var addCat = document.getElementById('add-cat-row-btn');
+        if (addCat) addCat.addEventListener('click', function() {
+            var c = document.getElementById('cat-cats');
+            var n = c.querySelectorAll('.cat-cat-row').length + 1;
+            var d = document.createElement('div');
+            d.className = 'input-group mb-2 cat-cat-row';
+            d.innerHTML = '<span class="input-group-text">' + n + '</span>'
+                + '<input type="text" class="form-control" name="categories[]">';
+            c.appendChild(d);
+            refreshCatSelects();
+        });
+
+        // Kategori-objekt-rad
+        var addCatItem = document.getElementById('add-cat-item-btn');
+        if (addCatItem) addCatItem.addEventListener('click', function() {
+            var c = document.getElementById('cat-items');
+            var catsCount = document.querySelectorAll('#cat-cats .cat-cat-row').length;
+            var opts = '';
+            for (var i = 0; i < catsCount; i++) opts += '<option value="' + i + '">Kategori ' + (i+1) + '</option>';
+            var d = document.createElement('div');
+            d.className = 'row g-2 mb-2 cat-item-row';
+            d.innerHTML = '<div class="col"><input type="text" class="form-control" name="cat_item_text[]" placeholder="Objekt"></div>'
+                + '<div class="col-auto"><select class="form-select cat-item-select" name="cat_item_cat[]">' + opts + '</select></div>'
+                + '<div class="col-auto"><button type="button" class="btn btn-outline-danger btn-remove-row"><i class="bi bi-x"></i></button></div>';
+            c.appendChild(d);
+        });
+
+        // Uppdatera alla cat-item-select när kategorilistan ändras
+        function refreshCatSelects() {
+            var count = document.querySelectorAll('#cat-cats .cat-cat-row').length;
+            document.querySelectorAll('.cat-item-select').forEach(function(sel) {
+                var current = sel.value;
+                sel.innerHTML = '';
+                for (var i = 0; i < count; i++) {
+                    var opt = document.createElement('option');
+                    opt.value = i;
+                    opt.textContent = 'Kategori ' + (i + 1);
+                    if (String(i) === current) opt.selected = true;
+                    sel.appendChild(opt);
+                }
+            });
+        }
+
+        // Image-choice: lägg till rad
+        var addImg = document.getElementById('add-img-row-btn');
+        if (addImg) addImg.addEventListener('click', function() {
+            var c = document.getElementById('img-rows');
+            var n = c.querySelectorAll('.img-row').length;
+            var d = document.createElement('div');
+            d.className = 'input-group mb-2 img-row';
+            d.innerHTML = '<span class="input-group-text" title="Markera som korrekt"><input type="checkbox" name="img_correct[' + n + ']" value="1"></span>'
+                + '<input type="text" class="form-control img-filename-input" name="img_files[]" placeholder="filnamn.jpg">'
+                + '<input type="text" class="form-control" name="img_labels[]" placeholder="Etikett (valfri)">'
+                + '<button type="button" class="btn btn-outline-secondary btn-upload-to-row" title="Ladda upp bild"><i class="bi bi-cloud-upload"></i></button>'
+                + '<button type="button" class="btn btn-outline-danger btn-remove-row"><i class="bi bi-x"></i></button>';
+            c.appendChild(d);
+        });
+
+        // Image-choice: ladda upp bild inline (AJAX med CSRF) — skapar en dold file-input per klick
+        var csrfToken = <?= json_encode($_SESSION['csrf_token']) ?>;
+        document.addEventListener('click', function(ev) {
+            var btn = ev.target.closest('.btn-upload-to-row');
+            if (!btn) return;
+            var row = btn.closest('.img-row');
+            if (!row) return;
+            var fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'image/jpeg,image/png,image/gif';
+            fileInput.style.display = 'none';
+            document.body.appendChild(fileInput);
+            fileInput.addEventListener('change', function() {
+                var f = fileInput.files[0];
+                if (!f) { fileInput.remove(); return; }
+                var fd = new FormData();
+                fd.append('image', f);
+                fd.append('csrf_token', csrfToken);
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+                fetch('upload_image.php', { method: 'POST', body: fd })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success && data.url) {
+                            var inp = row.querySelector('.img-filename-input');
+                            if (inp) inp.value = data.url;
+                        } else {
+                            alert('Uppladdning misslyckades: ' + (data.error || 'okänt fel'));
+                        }
+                    })
+                    .catch(() => alert('Nätverksfel vid uppladdning.'))
+                    .finally(() => {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="bi bi-cloud-upload"></i>';
+                        fileInput.remove();
+                    });
+            });
+            fileInput.click();
+        });
+    })();
     </script>
     <?php else: ?>
     <!-- ======== FRÅGELISTA ======== -->
@@ -375,7 +513,10 @@ require_once 'include/header.php';
                     <i class="bi bi-grip-vertical text-muted handle" style="cursor: grab;"></i>
                     <span class="badge bg-secondary"><?= $idx + 1 ?></span>
                     <div class="flex-grow-1">
-                        <div><strong><?= htmlspecialchars(strip_tags($q['question_text']) ?: '(ingen frågetext)') ?></strong></div>
+                        <?php
+                        $previewText = trim(strip_tags(html_entity_decode($q['question_text'] ?? '', ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+                        ?>
+                        <div><strong><?= htmlspecialchars($previewText !== '' ? $previewText : '(ingen frågetext)') ?></strong></div>
                         <small class="text-muted"><?= htmlspecialchars(quizTypeLabel($q['question_type'])) ?> · <?= (int)$q['points'] ?> poäng</small>
                     </div>
                     <a href="?lesson_id=<?= $lessonId ?>&amp;edit_id=<?= $q['id'] ?>" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
@@ -418,21 +559,29 @@ function renderChoiceFields($data, $multiple) {
             <span class="input-group-text"><input type="radio" name="correct" value="<?= $i ?>" <?= $i === $correctSingle ? 'checked' : '' ?>></span>
             <?php endif; ?>
             <input type="text" class="form-control" name="answers[]" value="<?= htmlspecialchars($a) ?>">
-            <button type="button" class="btn btn-outline-danger" onclick="this.closest('.choice-row').remove()"><i class="bi bi-x"></i></button>
+            <button type="button" class="btn btn-outline-danger btn-remove-row"><i class="bi bi-x"></i></button>
         </div>
         <?php endforeach; ?>
     </div>
-    <button type="button" class="btn btn-sm btn-outline-primary" onclick="addChoiceRow(<?= $multiple ? 'true' : 'false' ?>)"><i class="bi bi-plus"></i> Lägg till alternativ</button>
+    <button type="button" class="btn btn-sm btn-outline-primary btn-add-choice" data-multi="<?= $multiple ? '1' : '0' ?>"><i class="bi bi-plus"></i> Lägg till alternativ</button>
     <script>
-    function addChoiceRow(multi) {
-        var container = document.getElementById('choice-rows');
-        var n = container.querySelectorAll('.choice-row').length;
-        var div = document.createElement('div');
-        div.className = 'input-group mb-2 choice-row';
-        var ctrl = multi ? '<input type="checkbox" name="correct_multi[]" value="' + n + '">' : '<input type="radio" name="correct" value="' + n + '">';
-        div.innerHTML = '<span class="input-group-text">' + ctrl + '</span><input type="text" class="form-control" name="answers[]"><button type="button" class="btn btn-outline-danger" onclick="this.closest(\'.choice-row\').remove()"><i class="bi bi-x"></i></button>';
-        container.appendChild(div);
-    }
+    document.querySelectorAll('.btn-add-choice').forEach(function(btn) {
+        if (btn.dataset.bound) return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', function() {
+            var multi = btn.dataset.multi === '1';
+            var container = document.getElementById('choice-rows');
+            var n = container.querySelectorAll('.choice-row').length;
+            var div = document.createElement('div');
+            div.className = 'input-group mb-2 choice-row';
+            var ctrlName = multi ? 'correct_multi[]' : 'correct';
+            var ctrlType = multi ? 'checkbox' : 'radio';
+            div.innerHTML = '<span class="input-group-text"><input type="' + ctrlType + '" name="' + ctrlName + '" value="' + n + '"></span>'
+                + '<input type="text" class="form-control" name="answers[]">'
+                + '<button type="button" class="btn btn-outline-danger btn-remove-row"><i class="bi bi-x"></i></button>';
+            container.appendChild(div);
+        });
+    });
     </script>
     <?php
     return ob_get_clean();
@@ -479,24 +628,15 @@ function renderImageChoiceFields($data) {
         <?php foreach ($options as $i => $o): ?>
         <div class="input-group mb-2 img-row">
             <span class="input-group-text" title="Markera som korrekt"><input type="checkbox" name="img_correct[<?= $i ?>]" value="1" <?= !empty($o['correct']) ? 'checked' : '' ?>></span>
-            <input type="text" class="form-control" name="img_files[]" placeholder="filnamn.jpg (i upload/)" value="<?= htmlspecialchars($o['image'] ?? '') ?>">
+            <input type="text" class="form-control img-filename-input" name="img_files[]" placeholder="filnamn.jpg" value="<?= htmlspecialchars($o['image'] ?? '') ?>">
             <input type="text" class="form-control" name="img_labels[]" placeholder="Etikett (valfri)" value="<?= htmlspecialchars($o['label'] ?? '') ?>">
-            <button type="button" class="btn btn-outline-danger" onclick="this.closest('.img-row').remove()"><i class="bi bi-x"></i></button>
+            <button type="button" class="btn btn-outline-secondary btn-upload-to-row" title="Ladda upp bild till denna rad"><i class="bi bi-cloud-upload"></i></button>
+            <button type="button" class="btn btn-outline-danger btn-remove-row"><i class="bi bi-x"></i></button>
         </div>
         <?php endforeach; ?>
     </div>
-    <button type="button" class="btn btn-sm btn-outline-primary" onclick="addImgRow()"><i class="bi bi-plus"></i> Lägg till bild</button>
-    <script>
-    function addImgRow() {
-        var c = document.getElementById('img-rows');
-        var n = c.querySelectorAll('.img-row').length;
-        var d = document.createElement('div');
-        d.className = 'input-group mb-2 img-row';
-        d.innerHTML = '<span class="input-group-text"><input type="checkbox" name="img_correct[' + n + ']" value="1"></span><input type="text" class="form-control" name="img_files[]" placeholder="filnamn.jpg"><input type="text" class="form-control" name="img_labels[]" placeholder="Etikett"><button type="button" class="btn btn-outline-danger" onclick="this.closest(\'.img-row\').remove()"><i class="bi bi-x"></i></button>';
-        c.appendChild(d);
-    }
-    </script>
-    <div class="form-text mt-2">Ladda upp bilder via <a href="upload_image.php" target="_blank">upload_image</a>. Kopiera filnamnet som returneras.</div>
+    <button type="button" class="btn btn-sm btn-outline-primary" id="add-img-row-btn"><i class="bi bi-plus"></i> Lägg till bild</button>
+    <div class="form-text mt-2">Klicka på <i class="bi bi-cloud-upload"></i>-knappen vid raden för att ladda upp en bild direkt.</div>
     <?php
     return ob_get_clean();
 }
@@ -512,11 +652,11 @@ function renderOrderFields($data) {
         <div class="input-group mb-2 order-row">
             <span class="input-group-text"><?= $i + 1 ?></span>
             <input type="text" class="form-control" name="order_items[]" value="<?= htmlspecialchars($it) ?>">
-            <button type="button" class="btn btn-outline-danger" onclick="this.closest('.order-row').remove()"><i class="bi bi-x"></i></button>
+            <button type="button" class="btn btn-outline-danger btn-remove-row"><i class="bi bi-x"></i></button>
         </div>
         <?php endforeach; ?>
     </div>
-    <button type="button" class="btn btn-sm btn-outline-primary" onclick="(function(){var c=document.getElementById('order-rows');var n=c.querySelectorAll('.order-row').length+1;var d=document.createElement('div');d.className='input-group mb-2 order-row';d.innerHTML='<span class=\'input-group-text\'>'+n+'</span><input type=\'text\' class=\'form-control\' name=\'order_items[]\'><button type=\'button\' class=\'btn btn-outline-danger\' onclick=\'this.closest(\\\"\\.order-row\\\").remove()\'><i class=\'bi bi-x\'></i></button>';c.appendChild(d);})()"><i class="bi bi-plus"></i> Lägg till</button>
+    <button type="button" class="btn btn-sm btn-outline-primary" id="add-order-row-btn"><i class="bi bi-plus"></i> Lägg till</button>
     <?php
     return ob_get_clean();
 }
@@ -533,11 +673,11 @@ function renderMatchFields($data) {
             <div class="col"><input type="text" class="form-control" name="pair_left[]" placeholder="Vänster" value="<?= htmlspecialchars($p['left'] ?? '') ?>"></div>
             <div class="col-auto align-self-center"><i class="bi bi-arrow-left-right"></i></div>
             <div class="col"><input type="text" class="form-control" name="pair_right[]" placeholder="Höger" value="<?= htmlspecialchars($p['right'] ?? '') ?>"></div>
-            <div class="col-auto"><button type="button" class="btn btn-outline-danger" onclick="this.closest('.pair-row').remove()"><i class="bi bi-x"></i></button></div>
+            <div class="col-auto"><button type="button" class="btn btn-outline-danger btn-remove-row"><i class="bi bi-x"></i></button></div>
         </div>
         <?php endforeach; ?>
     </div>
-    <button type="button" class="btn btn-sm btn-outline-primary" onclick="(function(){var c=document.getElementById('pair-rows');var d=document.createElement('div');d.className='row g-2 mb-2 pair-row';d.innerHTML='<div class=\'col\'><input type=\'text\' class=\'form-control\' name=\'pair_left[]\' placeholder=\'Vänster\'></div><div class=\'col-auto align-self-center\'><i class=\'bi bi-arrow-left-right\'></i></div><div class=\'col\'><input type=\'text\' class=\'form-control\' name=\'pair_right[]\' placeholder=\'Höger\'></div><div class=\'col-auto\'><button type=\'button\' class=\'btn btn-outline-danger\' onclick=\'this.closest(\\\"\\.pair-row\\\").remove()\'><i class=\'bi bi-x\'></i></button></div>';c.appendChild(d);})()"><i class="bi bi-plus"></i> Lägg till par</button>
+    <button type="button" class="btn btn-sm btn-outline-primary" id="add-pair-row-btn"><i class="bi bi-plus"></i> Lägg till par</button>
     <?php
     return ob_get_clean();
 }
@@ -558,7 +698,7 @@ function renderCategorizeFields($data) {
         </div>
         <?php endforeach; ?>
     </div>
-    <button type="button" class="btn btn-sm btn-outline-primary mb-3" onclick="(function(){var c=document.getElementById('cat-cats');var n=c.querySelectorAll('.cat-cat-row').length+1;var d=document.createElement('div');d.className='input-group mb-2 cat-cat-row';d.innerHTML='<span class=\'input-group-text\'>'+n+'</span><input type=\'text\' class=\'form-control\' name=\'categories[]\'>';c.appendChild(d);})()"><i class="bi bi-plus"></i> Lägg till kategori</button>
+    <button type="button" class="btn btn-sm btn-outline-primary mb-3" id="add-cat-row-btn"><i class="bi bi-plus"></i> Lägg till kategori</button>
 
     <label class="form-label">Objekt och deras kategori</label>
     <div id="cat-items">
@@ -566,17 +706,17 @@ function renderCategorizeFields($data) {
         <div class="row g-2 mb-2 cat-item-row">
             <div class="col"><input type="text" class="form-control" name="cat_item_text[]" placeholder="Objekt" value="<?= htmlspecialchars($it['text'] ?? '') ?>"></div>
             <div class="col-auto">
-                <select class="form-select" name="cat_item_cat[]">
+                <select class="form-select cat-item-select" name="cat_item_cat[]">
                     <?php for ($ci = 0; $ci < count($categories); $ci++): ?>
                     <option value="<?= $ci ?>" <?= (int)($it['category'] ?? 0) === $ci ? 'selected' : '' ?>>Kategori <?= $ci + 1 ?></option>
                     <?php endfor; ?>
                 </select>
             </div>
-            <div class="col-auto"><button type="button" class="btn btn-outline-danger" onclick="this.closest('.cat-item-row').remove()"><i class="bi bi-x"></i></button></div>
+            <div class="col-auto"><button type="button" class="btn btn-outline-danger btn-remove-row"><i class="bi bi-x"></i></button></div>
         </div>
         <?php endforeach; ?>
     </div>
-    <button type="button" class="btn btn-sm btn-outline-primary" onclick="window.location.reload()"><i class="bi bi-arrow-clockwise"></i> Ladda om för att uppdatera kategorival</button>
+    <button type="button" class="btn btn-sm btn-outline-primary" id="add-cat-item-btn"><i class="bi bi-plus"></i> Lägg till objekt</button>
     <?php
     return ob_get_clean();
 }
