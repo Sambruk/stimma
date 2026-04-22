@@ -50,7 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
         $_SESSION['message'] = 'Ogiltig CSRF-token.';
         $_SESSION['message_type'] = 'danger';
-        redirect('edit_quiz.php?lesson_id=' . $lessonId);
+        redirect('admin/edit_quiz.php?lesson_id=' . $lessonId);
         exit;
     }
     $action = $_POST['action'] ?? '';
@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         execute("DELETE FROM " . DB_DATABASE . ".quiz_questions WHERE id = ? AND lesson_id = ?", [$qid, $lessonId]);
         $_SESSION['message'] = 'Frågan borttagen.';
         $_SESSION['message_type'] = 'success';
-        redirect('edit_quiz.php?lesson_id=' . $lessonId);
+        redirect('admin/edit_quiz.php?lesson_id=' . $lessonId);
         exit;
     }
 
@@ -106,7 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['message'] = 'Fråga skapad.';
         }
         $_SESSION['message_type'] = 'success';
-        redirect('edit_quiz.php?lesson_id=' . $lessonId);
+        redirect('admin/edit_quiz.php?lesson_id=' . $lessonId);
         exit;
     }
 }
