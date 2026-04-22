@@ -343,15 +343,21 @@ require_once 'include/header.php';
                     </div>
                 </div>
 
-                <div class="mb-3">
-                    <label class="form-label">Frågebild (valfri)</label>
+                <?php
+                // "Frågebild" är en generell illustration som visas ovanför själva frågetexten.
+                // Den är INTE relevant för hotspot (har egen "Bildfil") eller image_choice
+                // (har egna bildalternativ), så dölj fältet för de typerna.
+                $hideQuestionImage = in_array($editQ['question_type'] ?? '', ['hotspot', 'image_choice'], true);
+                ?>
+                <div class="mb-3" id="question_image_wrapper" style="<?= $hideQuestionImage ? 'display:none;' : '' ?>">
+                    <label class="form-label">Frågebild (valfri) — illustration som visas <em>ovanför</em> frågetexten</label>
                     <div class="input-group">
                         <input type="text" class="form-control generic-image-input" id="question_image_input" name="question_image" value="<?= htmlspecialchars($editQ['question_image'] ?? '') ?>" placeholder="filnamn.jpg">
                         <button type="button" class="btn btn-outline-secondary btn-upload-generic" data-target="question_image_input" title="Ladda upp bild">
                             <i class="bi bi-cloud-upload"></i> Ladda upp
                         </button>
                     </div>
-                    <div class="form-text">Visas ovanför frågan för alla typer utom hotspot/image_choice.</div>
+                    <div class="form-text">Används <strong>inte</strong> för "Klicka i bild" eller "Bildval" (de har egna bildfält nedan).</div>
                 </div>
 
                 <button type="submit" class="btn btn-success"><i class="bi bi-save me-1"></i>Spara fråga</button>
@@ -368,6 +374,11 @@ require_once 'include/header.php';
             document.querySelectorAll('.type-specific').forEach(function(el) { el.style.display = 'none'; });
             var target = document.querySelector('.type-specific[data-type="' + this.value + '"]');
             if (target) target.style.display = 'block';
+            // Dölj generell "Frågebild" för hotspot/image_choice
+            var qImgWrap = document.getElementById('question_image_wrapper');
+            if (qImgWrap) {
+                qImgWrap.style.display = (this.value === 'hotspot' || this.value === 'image_choice') ? 'none' : '';
+            }
         });
 
         // Gemensam "ta bort rad"-hanterare (event delegation)
@@ -865,13 +876,19 @@ function renderHotspotFields($data) {
             circle.style.height = diameterPx + 'px';
         }
 
-        if (img.getAttribute('src')) {
-            img.addEventListener('load', function() { buildGrid(); updateMarker(); });
-            if (img.complete) { buildGrid(); updateMarker(); }
+        // Load-listener alltid registrerad — fångar både initial ladd OCH
+        // senare bildbyte via __hotspotSetImage (upload)
+        img.addEventListener('load', function() { buildGrid(); updateMarker(); });
+        // Om bilden redan är inläst vid DOM-ready (cachad)
+        if (img.getAttribute('src') && img.complete && img.naturalWidth > 0) {
+            buildGrid();
+            updateMarker();
         }
 
         img.addEventListener('click', function(e) {
+            if (!img.naturalWidth) return; // ingen bild inläst än
             var rect = img.getBoundingClientRect();
+            if (rect.width === 0) return;
             var x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
             var y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
             xField.value = x.toFixed(3);
