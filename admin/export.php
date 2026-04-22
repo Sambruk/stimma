@@ -122,12 +122,14 @@ foreach ($lessons as $lesson) {
         $lessonVideoType = null;
     }
 
+    // Ljudfiler kan inte portabelt exporteras — skippa dem (samma logik som video/local)
     $exportData['lessons'][] = [
         'title' => $lesson['title'],
         'estimated_duration' => $lesson['estimated_duration'],
         'image_url' => $lesson['image_url'] ?? '',
         'video_url' => $lessonVideoUrl,
         'video_type' => $lessonVideoType,
+        'audio_url' => null,
         'content' => $lesson['content'],
         'resource_links' => $lesson['resource_links'],
         'tags' => $lesson['tags'],

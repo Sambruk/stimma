@@ -573,7 +573,31 @@ function convertYoutubeUrl($url) {
                     </div>
                 </div>
                 <?php endif; ?>
-                
+
+                <!-- Audio card (tillgänglighetsalternativ / pedagogiskt ljud) -->
+                <?php if (!empty($lesson['audio_url'])): ?>
+                <?php
+                    $audioFile = basename($lesson['audio_url']);
+                    $audioExt = strtolower(pathinfo($audioFile, PATHINFO_EXTENSION));
+                    $audioMimeMap = [
+                        'mp3' => 'audio/mpeg',
+                        'ogg' => 'audio/ogg',
+                        'wav' => 'audio/wav',
+                        'm4a' => 'audio/mp4',
+                    ];
+                    $audioMime = $audioMimeMap[$audioExt] ?? 'audio/mpeg';
+                ?>
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h3 class="h6 mb-3"><i class="bi bi-volume-up me-2 text-primary" aria-hidden="true"></i>Lyssna på lektionen</h3>
+                        <audio controls preload="metadata" style="width: 100%;" aria-label="Ljudversion av lektionen <?= htmlspecialchars($lesson['title']) ?>">
+                            <source src="upload/audio/<?= htmlspecialchars($audioFile) ?>" type="<?= $audioMime ?>">
+                            Din webbläsare stöder inte uppspelning av ljud. <a href="upload/audio/<?= htmlspecialchars($audioFile) ?>" download>Ladda ner ljudfilen</a>.
+                        </audio>
+                    </div>
+                </div>
+                <?php endif; ?>
+
                 <!-- AI chat interface card -->
                 <?php if (!empty($lesson['ai_instruction']) || !empty($lesson['ai_prompt'])): ?>
                 <div class="card mb-4">

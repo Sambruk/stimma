@@ -87,6 +87,14 @@ try {
         }
     }
 
+    // Delete audio file if applicable
+    if (!empty($lesson['audio_url'])) {
+        $audioPath = __DIR__ . '/../upload/audio/' . basename($lesson['audio_url']);
+        if (file_exists($audioPath)) {
+            unlink($audioPath);
+        }
+    }
+
     execute("START TRANSACTION");
 
     // Delete user_progress for this lesson (FK: user_progress.lesson_id -> lessons.id)

@@ -121,12 +121,27 @@ function copyCourse($sourceCourseId, $targetDomain, $newAuthorId, $orgScopeDomai
             }
         }
 
+        // Copy audio file with new random name if applicable
+        $audioUrl = $lesson['audio_url'] ?? null;
+        if (!empty($audioUrl)) {
+            $srcAudioPath = realpath(__DIR__ . '/../upload/audio/') . '/' . basename($audioUrl);
+            if (file_exists($srcAudioPath)) {
+                $ext = strtolower(pathinfo($audioUrl, PATHINFO_EXTENSION));
+                $newAudioFilename = bin2hex(random_bytes(16)) . '.' . $ext;
+                $destAudioPath = __DIR__ . '/../upload/audio/' . $newAudioFilename;
+                if (copy($srcAudioPath, $destAudioPath)) {
+                    chmod($destAudioPath, 0644);
+                    $audioUrl = $newAudioFilename;
+                }
+            }
+        }
+
         $lessonResult = execute(
             "INSERT INTO " . DB_DATABASE . ".lessons
-            (course_id, title, estimated_duration, image_url, video_url, video_type, content, resource_links, tags,
+            (course_id, title, estimated_duration, image_url, video_url, video_type, audio_url, content, resource_links, tags,
              status, sort_order, ai_instruction, ai_prompt, quiz_question, quiz_answer1, quiz_answer2,
              quiz_answer3, quiz_correct_answer, author_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
             [
                 $newCourseId,
                 $lesson['title'],
@@ -134,6 +149,7 @@ function copyCourse($sourceCourseId, $targetDomain, $newAuthorId, $orgScopeDomai
                 $lesson['image_url'],
                 $videoUrl,
                 $videoType,
+                $audioUrl,
                 $lesson['content'],
                 $lesson['resource_links'],
                 $lesson['tags'],

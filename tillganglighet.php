@@ -9,6 +9,7 @@
  */
 $page_title = 'Tillgänglighetsredogörelse — Stimma';
 $lastUpdated = '2026-04-22';
+$lastChange = 'Lagt till möjlighet för kursskapare att ladda upp ett ljudklipp per lektion som tillgänglighetsalternativ för text och bild.';
 ?>
 <!DOCTYPE html>
 <html lang="sv">
@@ -63,6 +64,11 @@ $lastUpdated = '2026-04-22';
         Se avsnittet "Innehåll som inte är tillgängligt" nedan för detaljer.
     </div>
     <p class="mt-3">Stimma är i huvudsak utvecklad enligt <abbr title="Web Content Accessibility Guidelines 2.1 nivå AA">WCAG 2.1 AA</abbr>. Vi arbetar kontinuerligt med att åtgärda identifierade brister och tar gärna emot synpunkter.</p>
+
+    <div class="alert alert-success mt-3">
+        <strong><i class="bi bi-check-circle-fill me-2"></i>Tillgänglighetsalternativ i lektioner</strong>
+        <p class="mb-0 mt-2">Kursskapare kan ladda upp ett <strong>ljudklipp per lektion</strong> (MP3, OGG, WAV eller M4A) som spelas upp inline via en standard HTML5-audioavspelare. Detta ger deltagare möjlighet att lyssna på inläst innehåll som komplement till text, vilket stödjer WCAG 1.1.1 (text-alternativ) och 1.2.1 (alternativ till inspelad media).</p>
+    </div>
 
     <h2>Vad du kan göra om du inte kan använda delar av webbplatsen</h2>
     <p>Om du behöver innehållet från Stimma i något annat format, exempelvis tillgänglig PDF, lättläst, ljudinspelning eller punktskrift, kan du kontakta oss på följande sätt:</p>

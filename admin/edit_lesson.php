@@ -177,6 +177,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Hantera ljud (uppladdad fil). Tomt värde = inget ljud / ta bort.
+    $audio_filename = $_POST['audio_filename'] ?? '';
+    $audio_url = !empty($audio_filename) ? basename($audio_filename) : null;
+
+    // Om ljud ändras eller tas bort, radera gammal fil
+    if (isset($lesson) && !empty($lesson['audio_url']) && $audio_url !== $lesson['audio_url']) {
+        $oldAudioPath = __DIR__ . '/../upload/audio/' . basename($lesson['audio_url']);
+        if (file_exists($oldAudioPath)) {
+            unlink($oldAudioPath);
+        }
+    }
+
     if (empty($title)) {
         $error = 'Titel är obligatoriskt.';
     } elseif ($course_id > 0) {
@@ -210,6 +222,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     image_url = ?,
                     video_url = ?,
                     video_type = ?,
+                    audio_url = ?,
                     status = ?,
                     ai_instruction = ?,
                     ai_prompt = ?,
@@ -224,7 +237,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     quiz_correct_answers = ?,
                     updated_at = NOW()
                     WHERE id = ?",
-                    [$title, $content, $background_color ?: null, $course_id, $image_url, $video_url, $video_type, $status,
+                    [$title, $content, $background_color ?: null, $course_id, $image_url, $video_url, $video_type, $audio_url, $status,
                      $ai_instruction, $ai_prompt, $quiz_question, $quiz_type,
                      $quiz_answer1, $quiz_answer2, $quiz_answer3, $quiz_answer4, $quiz_answer5,
                      $quiz_correct_answer, $quiz_correct_answers, $_GET['id']]);
@@ -243,13 +256,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             // Skapa ny lektion
             execute("INSERT INTO " . DB_DATABASE . ".lessons
-                    (title, content, background_color, course_id, image_url, video_url, video_type, status,
+                    (title, content, background_color, course_id, image_url, video_url, video_type, audio_url, status,
                      ai_instruction, ai_prompt, quiz_question, quiz_type,
                      quiz_answer1, quiz_answer2, quiz_answer3, quiz_answer4, quiz_answer5,
                      quiz_correct_answer, quiz_correct_answers,
                      sort_order, author_id, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
-                    [$title, $content, $background_color ?: null, $course_id, $image_url, $video_url, $video_type, $status,
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                    [$title, $content, $background_color ?: null, $course_id, $image_url, $video_url, $video_type, $audio_url, $status,
                      $ai_instruction, $ai_prompt, $quiz_question, $quiz_type,
                      $quiz_answer1, $quiz_answer2, $quiz_answer3, $quiz_answer4, $quiz_answer5,
                      $quiz_correct_answer, $quiz_correct_answers,
@@ -278,6 +291,7 @@ $courseId = null;
 $imageUrl = '';
 $videoUrl = '';
 $videoType = '';
+$audioUrl = '';
 $aiInstruction = '';
 $aiPrompt = '';
 $quizQuestion = '';
@@ -304,6 +318,7 @@ if (isset($_GET['id']) && is_numeric($_GET['id'])) {
         $imageUrl = $lesson['image_url'] ?? '';
         $videoUrl = $lesson['video_url'] ?? '';
         $videoType = $lesson['video_type'] ?? '';
+        $audioUrl = $lesson['audio_url'] ?? '';
         $aiInstruction = $lesson['ai_instruction'] ?? '';
         $aiPrompt = $lesson['ai_prompt'] ?? '';
         $quizQuestion = $lesson['quiz_question'] ?? '';
@@ -518,6 +533,37 @@ if ($isAdmin) {
                                         </div>
                                         <small id="video-upload-status" class="text-muted mt-1 d-block"></small>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Ljud (tillgänglighet: inläst version, ljudinnehåll) -->
+                        <div class="mb-3">
+                            <label class="form-label fw-normal">
+                                <i class="bi bi-volume-up me-1"></i>Ljud
+                                <span class="form-text fw-normal">Ett ljudklipp kan spelas upp inline i lektionen. Bra för tillgänglighet (inläst text) eller pedagogiskt ljudmaterial.</span>
+                            </label>
+                            <input type="hidden" name="audio_filename" id="audio_filename_field" value="<?= htmlspecialchars($audioUrl ?? '') ?>">
+                            <div class="border rounded p-3">
+                                <div id="audio-preview-container" class="mb-3" <?= empty($audioUrl) ? 'style="display:none;"' : '' ?>>
+                                    <p class="text-muted mb-1 small">Nuvarande ljudfil:</p>
+                                    <audio id="audio-preview" controls preload="metadata" style="width: 100%; max-width: 400px;"
+                                           <?php if (!empty($audioUrl)): ?>src="../upload/audio/<?= htmlspecialchars(basename($audioUrl)) ?>"<?php endif; ?>>
+                                        Din webbläsare stödjer inte uppspelning av ljud.
+                                    </audio>
+                                    <div class="mt-2">
+                                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeLocalAudio()">
+                                            <i class="bi bi-trash me-1"></i>Ta bort ljud
+                                        </button>
+                                    </div>
+                                </div>
+                                <input type="file" class="form-control" id="audio_file_input" accept="audio/mpeg,audio/mp3,audio/ogg,audio/wav,audio/mp4,audio/x-m4a">
+                                <div class="form-text">Max 50 MB. Tillåtna format: MP3, OGG, WAV, M4A</div>
+                                <div id="audio-upload-progress" class="mt-2" style="display:none;">
+                                    <div class="progress" style="height: 20px;">
+                                        <div id="audio-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" role="progressbar" style="width: 0%">0%</div>
+                                    </div>
+                                    <small id="audio-upload-status" class="text-muted mt-1 d-block"></small>
                                 </div>
                             </div>
                         </div>
@@ -909,6 +955,96 @@ function removeLocalVideo() {
     const progressBar = document.getElementById('video-progress-bar');
     progressContainer.style.display = 'none';
     progressBar.className = 'progress-bar progress-bar-striped progress-bar-animated';
+    progressBar.style.width = '0%';
+    progressBar.textContent = '0%';
+}
+
+// Audio upload (same pattern as video)
+document.getElementById('audio_file_input').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const progressContainer = document.getElementById('audio-upload-progress');
+    const progressBar = document.getElementById('audio-progress-bar');
+    const statusText = document.getElementById('audio-upload-status');
+
+    progressContainer.style.display = 'block';
+    progressBar.className = 'progress-bar progress-bar-striped progress-bar-animated bg-success';
+    progressBar.style.width = '0%';
+    progressBar.textContent = '0%';
+    statusText.textContent = 'Laddar upp...';
+
+    const formData = new FormData();
+    formData.append('audio', file);
+    formData.append('csrf_token', CSRF_TOKEN);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', 'upload_audio.php', true);
+
+    xhr.upload.onprogress = function(ev) {
+        if (ev.lengthComputable) {
+            const pct = Math.round((ev.loaded / ev.total) * 100);
+            progressBar.style.width = pct + '%';
+            progressBar.textContent = pct + '%';
+        }
+    };
+
+    xhr.onload = function() {
+        if (xhr.status === 200) {
+            try {
+                const data = JSON.parse(xhr.responseText);
+                if (data.success) {
+                    progressBar.classList.remove('progress-bar-animated', 'progress-bar-striped');
+                    progressBar.style.width = '100%';
+                    progressBar.textContent = 'Klar!';
+                    statusText.textContent = '';
+
+                    document.getElementById('audio_filename_field').value = data.url;
+
+                    const previewContainer = document.getElementById('audio-preview-container');
+                    const previewAudio = document.getElementById('audio-preview');
+                    if (previewAudio) {
+                        previewAudio.src = '../upload/audio/' + data.url;
+                        previewAudio.load();
+                    }
+                    previewContainer.style.display = 'block';
+                } else {
+                    progressBar.classList.remove('bg-success');
+                    progressBar.classList.add('bg-danger');
+                    statusText.textContent = 'Fel: ' + (data.error || 'Okänt fel');
+                }
+            } catch (err) {
+                progressBar.classList.remove('bg-success');
+                progressBar.classList.add('bg-danger');
+                statusText.textContent = 'Fel: ' + xhr.responseText.substring(0, 200);
+            }
+        } else {
+            progressBar.classList.remove('bg-success');
+            progressBar.classList.add('bg-danger');
+            statusText.textContent = 'Uppladdningen misslyckades (HTTP ' + xhr.status + ')';
+        }
+    };
+
+    xhr.onerror = function() {
+        progressBar.classList.remove('bg-success');
+        progressBar.classList.add('bg-danger');
+        statusText.textContent = 'Nätverksfel vid uppladdning.';
+    };
+
+    xhr.send(formData);
+});
+
+function removeLocalAudio() {
+    document.getElementById('audio_filename_field').value = '';
+    document.getElementById('audio-preview-container').style.display = 'none';
+    document.getElementById('audio_file_input').value = '';
+    const audioEl = document.getElementById('audio-preview');
+    if (audioEl) { audioEl.pause(); audioEl.removeAttribute('src'); audioEl.load(); }
+
+    const progressContainer = document.getElementById('audio-upload-progress');
+    const progressBar = document.getElementById('audio-progress-bar');
+    progressContainer.style.display = 'none';
+    progressBar.className = 'progress-bar progress-bar-striped progress-bar-animated bg-success';
     progressBar.style.width = '0%';
     progressBar.textContent = '0%';
 }
