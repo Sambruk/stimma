@@ -134,6 +134,18 @@ require_once 'include/header.php';
                                 <a href="lessons.php?course_id=<?= $course['id'] ?>" class="text-decoration-none">
                                     <?= htmlspecialchars($course['title']) ?>
                                 </a>
+                                <?php if (!empty($course['sequential_mode'])): ?>
+                                <span class="badge bg-warning text-dark" style="font-size: 0.7rem;"
+                                      title="Lektioner låses upp stegvis med tidsintervall">
+                                    <i class="bi bi-list-ol me-1"></i>Stegvis
+                                </span>
+                                <?php endif; ?>
+                                <?php if (!empty($course['sequential_mode']) && ($course['enrollment_type'] ?? '') === 'rolling'): ?>
+                                <span class="badge bg-secondary" style="font-size: 0.7rem;"
+                                      title="Varje deltagare startar från individuellt datum (rolling enrollment)">
+                                    <i class="bi bi-calendar-event me-1"></i>Dynamiskt startdatum
+                                </span>
+                                <?php endif; ?>
                                 <?php if (!empty($courseOrgTagsMap[$course['id']])): ?>
                                     <?php foreach ($courseOrgTagsMap[$course['id']] as $orgTag): ?>
                                     <span class="badge bg-success" style="font-size: 0.7rem;"><?= htmlspecialchars($orgTag) ?></span>
