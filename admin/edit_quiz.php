@@ -1,0 +1,636 @@
+<?php
+/**
+ * Stimma — Quiz-hanterare för en lektion.
+ *
+ * Lista alla frågor i en lektion med möjlighet att lägga till, redigera,
+ * ta bort och sortera frågor. Varje frågas specifika fält renderas
+ * kontextuellt beroende på typ.
+ */
+
+require_once '../include/config.php';
+require_once '../include/database.php';
+require_once '../include/functions.php';
+require_once '../include/auth.php';
+require_once '../include/quiz.php';
+require_once 'include/auth_check.php';
+
+$lessonId = isset($_GET['lesson_id']) ? (int)$_GET['lesson_id'] : 0;
+$lesson = queryOne("SELECT l.*, c.organization_domain, c.author_id AS course_author_id, c.title AS course_title FROM " . DB_DATABASE . ".lessons l JOIN " . DB_DATABASE . ".courses c ON c.id = l.course_id WHERE l.id = ?", [$lessonId]);
+if (!$lesson) {
+    $_SESSION['message'] = 'Lektionen hittades inte.';
+    $_SESSION['message_type'] = 'danger';
+    redirect('courses.php');
+    exit;
+}
+
+$currentUser = queryOne("SELECT id, email, is_admin, is_editor, role FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
+$orgScope = getOrgScopeDomains($currentUser['email']);
+$isSuper = ($currentUser['role'] ?? '') === 'super_admin';
+
+// Behörighet: admin inom orgscope, eller editor som är författare/course_editor
+if (!$isSuper && !in_array($lesson['organization_domain'], $orgScope, true)) {
+    $_SESSION['message'] = 'Du har inte behörighet till den här lektionens organisation.';
+    $_SESSION['message_type'] = 'danger';
+    redirect('courses.php');
+    exit;
+}
+if (!$isSuper && empty($currentUser['is_admin'])) {
+    $isCourseEditor = queryOne("SELECT 1 FROM " . DB_DATABASE . ".course_editors WHERE course_id = ? AND email = ?", [$lesson['course_id'], $currentUser['email']]);
+    $isAuthor = ((int)$lesson['course_author_id'] === (int)$currentUser['id']);
+    if (!$isCourseEditor && !$isAuthor) {
+        $_SESSION['message'] = 'Du har inte behörighet till lektionens kurs.';
+        $_SESSION['message_type'] = 'danger';
+        redirect('courses.php');
+        exit;
+    }
+}
+
+// ================= POST: skapa/uppdatera/radera fråga =================
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        $_SESSION['message'] = 'Ogiltig CSRF-token.';
+        $_SESSION['message_type'] = 'danger';
+        redirect('edit_quiz.php?lesson_id=' . $lessonId);
+        exit;
+    }
+    $action = $_POST['action'] ?? '';
+
+    if ($action === 'delete') {
+        $qid = (int)($_POST['question_id'] ?? 0);
+        execute("DELETE FROM " . DB_DATABASE . ".quiz_questions WHERE id = ? AND lesson_id = ?", [$qid, $lessonId]);
+        $_SESSION['message'] = 'Frågan borttagen.';
+        $_SESSION['message_type'] = 'success';
+        redirect('edit_quiz.php?lesson_id=' . $lessonId);
+        exit;
+    }
+
+    if ($action === 'reorder') {
+        $orderCsv = $_POST['order'] ?? '';
+        $ids = array_filter(array_map('intval', explode(',', $orderCsv)));
+        foreach ($ids as $i => $qid) {
+            execute("UPDATE " . DB_DATABASE . ".quiz_questions SET sort_order = ? WHERE id = ? AND lesson_id = ?", [$i, $qid, $lessonId]);
+        }
+        echo json_encode(['success' => true]);
+        exit;
+    }
+
+    if ($action === 'save') {
+        $qid = (int)($_POST['question_id'] ?? 0);
+        $type = $_POST['question_type'] ?? 'single_choice';
+        $allowedTypes = array_keys(quizTypeOptions());
+        if (!in_array($type, $allowedTypes, true)) $type = 'single_choice';
+        $text = trim($_POST['question_text'] ?? '');
+        $image = trim($_POST['question_image'] ?? '');
+        $points = max(1, (int)($_POST['points'] ?? 1));
+
+        // Bygg quiz_data per typ från formulärfälten
+        $data = buildQuizDataFromPost($type, $_POST);
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+
+        if ($qid > 0) {
+            execute(
+                "UPDATE " . DB_DATABASE . ".quiz_questions
+                 SET question_type = ?, question_text = ?, question_image = ?, quiz_data = ?, points = ?
+                 WHERE id = ? AND lesson_id = ?",
+                [$type, $text, $image ?: null, $json, $points, $qid, $lessonId]
+            );
+            $_SESSION['message'] = 'Frågan uppdaterad.';
+        } else {
+            $maxOrder = (int)(queryOne("SELECT COALESCE(MAX(sort_order), -1) AS mo FROM " . DB_DATABASE . ".quiz_questions WHERE lesson_id = ?", [$lessonId])['mo'] ?? -1);
+            execute(
+                "INSERT INTO " . DB_DATABASE . ".quiz_questions
+                 (lesson_id, sort_order, question_type, question_text, question_image, quiz_data, points)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [$lessonId, $maxOrder + 1, $type, $text, $image ?: null, $json, $points]
+            );
+            $_SESSION['message'] = 'Fråga skapad.';
+        }
+        $_SESSION['message_type'] = 'success';
+        redirect('edit_quiz.php?lesson_id=' . $lessonId);
+        exit;
+    }
+}
+
+/**
+ * Bygg quiz_data-struktur från POST-fält baserat på typ.
+ */
+function buildQuizDataFromPost($type, $post) {
+    switch ($type) {
+        case 'single_choice': {
+            $answers = array_values(array_filter(array_map('trim', $post['answers'] ?? []), fn($v) => $v !== ''));
+            $correct = max(0, min(count($answers) - 1, (int)($post['correct'] ?? 0)));
+            return ['answers' => $answers, 'correct' => $correct];
+        }
+        case 'multiple_choice': {
+            $answers = array_values(array_filter(array_map('trim', $post['answers'] ?? []), fn($v) => $v !== ''));
+            $correct = array_values(array_unique(array_map('intval', $post['correct_multi'] ?? [])));
+            sort($correct);
+            return ['answers' => $answers, 'correct' => $correct];
+        }
+        case 'true_false':
+            return ['correct' => !empty($post['tf_correct'])];
+        case 'fill_blank': {
+            $template = trim($post['template'] ?? '');
+            $blanksRaw = $post['blank_answers'] ?? [];
+            $blanks = [];
+            foreach ($blanksRaw as $csv) {
+                $list = array_values(array_filter(array_map('trim', explode('|', $csv))));
+                $blanks[] = ['answers' => $list, 'case_sensitive' => false];
+            }
+            return ['template' => $template, 'blanks' => $blanks];
+        }
+        case 'image_choice': {
+            $multiple = !empty($post['img_multiple']);
+            $images = $post['img_files'] ?? [];
+            $labels = $post['img_labels'] ?? [];
+            $correctFlags = $post['img_correct'] ?? [];
+            $options = [];
+            foreach ($images as $i => $img) {
+                $img = trim($img);
+                if ($img === '') continue;
+                $options[] = [
+                    'image' => basename($img),
+                    'label' => trim($labels[$i] ?? ''),
+                    'correct' => !empty($correctFlags[$i]),
+                ];
+            }
+            return ['multiple' => $multiple, 'options' => $options];
+        }
+        case 'order': {
+            $items = array_values(array_filter(array_map('trim', $post['order_items'] ?? []), fn($v) => $v !== ''));
+            return ['items' => $items];
+        }
+        case 'match_pairs': {
+            $lefts = $post['pair_left'] ?? [];
+            $rights = $post['pair_right'] ?? [];
+            $pairs = [];
+            foreach ($lefts as $i => $l) {
+                $l = trim($l); $r = trim($rights[$i] ?? '');
+                if ($l === '' && $r === '') continue;
+                $pairs[] = ['left' => $l, 'right' => $r];
+            }
+            return ['pairs' => $pairs];
+        }
+        case 'categorize': {
+            $categories = array_values(array_filter(array_map('trim', $post['categories'] ?? []), fn($v) => $v !== ''));
+            $itemTexts = $post['cat_item_text'] ?? [];
+            $itemCats = $post['cat_item_cat'] ?? [];
+            $items = [];
+            foreach ($itemTexts as $i => $t) {
+                $t = trim($t);
+                if ($t === '') continue;
+                $items[] = ['text' => $t, 'category' => (int)($itemCats[$i] ?? 0)];
+            }
+            return ['categories' => $categories, 'items' => $items];
+        }
+        case 'numeric':
+            return [
+                'correct' => (float)($post['num_correct'] ?? 0),
+                'tolerance' => (float)($post['num_tolerance'] ?? 0),
+                'unit' => trim($post['num_unit'] ?? ''),
+            ];
+        case 'hotspot': {
+            $img = trim($post['hotspot_image'] ?? '');
+            $x = (float)($post['hotspot_x'] ?? 0);
+            $y = (float)($post['hotspot_y'] ?? 0);
+            $r = (float)($post['hotspot_radius'] ?? 0.08);
+            return ['image' => basename($img), 'targets' => [['x' => $x, 'y' => $y, 'radius' => $r]]];
+        }
+        case 'short_text':
+            return [
+                'answers' => array_values(array_filter(array_map('trim', explode('|', $post['short_answers'] ?? '')))),
+                'case_sensitive' => !empty($post['short_case']),
+            ];
+    }
+    return [];
+}
+
+// ================= Hämta frågor =================
+$questions = getQuizQuestionsForLesson($lessonId);
+$editQ = null;
+if (isset($_GET['edit_id'])) {
+    foreach ($questions as $q) if ($q['id'] == (int)$_GET['edit_id']) { $editQ = $q; break; }
+}
+$isNew = isset($_GET['new']) || (!$editQ && !empty($_GET['new_type']));
+if ($isNew && !$editQ) {
+    $editQ = [
+        'id' => 0,
+        'question_type' => $_GET['new_type'] ?? 'single_choice',
+        'question_text' => '',
+        'question_image' => '',
+        'quiz_data' => '',
+        'data' => [],
+        'points' => 1,
+    ];
+}
+
+$page_title = 'Quizfrågor — ' . $lesson['title'];
+require_once 'include/header.php';
+?>
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+        <div>
+            <h4 class="mb-1"><i class="bi bi-patch-question me-2 text-primary"></i>Quizfrågor</h4>
+            <div class="text-muted">
+                <a href="edit_lesson.php?id=<?= $lessonId ?>" class="text-decoration-none"><i class="bi bi-arrow-left"></i> <?= htmlspecialchars($lesson['title']) ?></a>
+                — <?= htmlspecialchars($lesson['course_title']) ?>
+            </div>
+        </div>
+        <?php if (!$editQ): ?>
+        <div class="btn-group">
+            <button class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="bi bi-plus-lg me-1"></i>Lägg till fråga
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <?php foreach (quizTypeOptions() as $tv => $tl): ?>
+                <li><a class="dropdown-item" href="?lesson_id=<?= $lessonId ?>&amp;new=1&amp;new_type=<?= htmlspecialchars($tv) ?>"><?= htmlspecialchars($tl) ?></a></li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+        <?php endif; ?>
+    </div>
+
+    <?php if (!empty($_SESSION['message'])): ?>
+    <div class="alert alert-<?= htmlspecialchars($_SESSION['message_type'] ?? 'info') ?> alert-dismissible fade show">
+        <?= htmlspecialchars($_SESSION['message']) ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    <?php unset($_SESSION['message'], $_SESSION['message_type']); endif; ?>
+
+    <?php if ($editQ): ?>
+    <!-- ======== REDIGERA/NY FRÅGA ======== -->
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><strong><?= $editQ['id'] ? 'Redigera fråga' : 'Ny fråga' ?></strong></span>
+            <a href="edit_quiz.php?lesson_id=<?= $lessonId ?>" class="btn btn-sm btn-outline-secondary">Avbryt</a>
+        </div>
+        <div class="card-body">
+            <form method="post" id="editQuestionForm">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                <input type="hidden" name="action" value="save">
+                <input type="hidden" name="question_id" value="<?= (int)$editQ['id'] ?>">
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-8">
+                        <label class="form-label">Frågetyp</label>
+                        <select class="form-select" name="question_type" id="type_selector" <?= $editQ['id'] ? '' : '' ?>>
+                            <?php foreach (quizTypeOptions() as $tv => $tl): ?>
+                            <option value="<?= htmlspecialchars($tv) ?>" <?= $editQ['question_type'] === $tv ? 'selected' : '' ?>><?= htmlspecialchars($tl) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <?php if ($editQ['id']): ?>
+                        <div class="form-text">Om du byter typ: spara först, all typ-specifik data anpassas.</div>
+                        <?php endif; ?>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Poäng</label>
+                        <input type="number" class="form-control" name="points" min="1" max="100" value="<?= (int)($editQ['points'] ?? 1) ?>">
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Frågetext</label>
+                    <textarea class="form-control" name="question_text" rows="3"><?= htmlspecialchars($editQ['question_text'] ?? '') ?></textarea>
+                </div>
+
+                <!-- Typ-specifika fält -->
+                <?php $data = $editQ['data'] ?? []; ?>
+                <div class="type-specific" data-type="single_choice" style="display: <?= $editQ['question_type'] === 'single_choice' ? 'block' : 'none' ?>;">
+                    <?= renderChoiceFields($data, false) ?>
+                </div>
+                <div class="type-specific" data-type="multiple_choice" style="display: <?= $editQ['question_type'] === 'multiple_choice' ? 'block' : 'none' ?>;">
+                    <?= renderChoiceFields($data, true) ?>
+                </div>
+                <div class="type-specific" data-type="true_false" style="display: <?= $editQ['question_type'] === 'true_false' ? 'block' : 'none' ?>;">
+                    <div class="mb-3">
+                        <label class="form-label">Korrekt svar</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check"><input class="form-check-input" type="radio" name="tf_correct" value="1" <?= !empty($data['correct']) ? 'checked' : '' ?> id="tf_t"><label class="form-check-label" for="tf_t">Sant</label></div>
+                            <div class="form-check"><input class="form-check-input" type="radio" name="tf_correct" value="0" <?= empty($data['correct']) ? 'checked' : '' ?> id="tf_f"><label class="form-check-label" for="tf_f">Falskt</label></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="type-specific" data-type="fill_blank" style="display: <?= $editQ['question_type'] === 'fill_blank' ? 'block' : 'none' ?>;">
+                    <?= renderFillBlankFields($data) ?>
+                </div>
+                <div class="type-specific" data-type="image_choice" style="display: <?= $editQ['question_type'] === 'image_choice' ? 'block' : 'none' ?>;">
+                    <?= renderImageChoiceFields($data) ?>
+                </div>
+                <div class="type-specific" data-type="order" style="display: <?= $editQ['question_type'] === 'order' ? 'block' : 'none' ?>;">
+                    <?= renderOrderFields($data) ?>
+                </div>
+                <div class="type-specific" data-type="match_pairs" style="display: <?= $editQ['question_type'] === 'match_pairs' ? 'block' : 'none' ?>;">
+                    <?= renderMatchFields($data) ?>
+                </div>
+                <div class="type-specific" data-type="categorize" style="display: <?= $editQ['question_type'] === 'categorize' ? 'block' : 'none' ?>;">
+                    <?= renderCategorizeFields($data) ?>
+                </div>
+                <div class="type-specific" data-type="numeric" style="display: <?= $editQ['question_type'] === 'numeric' ? 'block' : 'none' ?>;">
+                    <?= renderNumericFields($data) ?>
+                </div>
+                <div class="type-specific" data-type="hotspot" style="display: <?= $editQ['question_type'] === 'hotspot' ? 'block' : 'none' ?>;">
+                    <?= renderHotspotFields($data) ?>
+                </div>
+                <div class="type-specific" data-type="short_text" style="display: <?= $editQ['question_type'] === 'short_text' ? 'block' : 'none' ?>;">
+                    <div class="mb-3">
+                        <label class="form-label">Godkända svar (separera med <code>|</code>)</label>
+                        <input type="text" class="form-control" name="short_answers" value="<?= htmlspecialchars(implode('|', $data['answers'] ?? [])) ?>">
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="short_case" id="short_case" <?= !empty($data['case_sensitive']) ? 'checked' : '' ?>>
+                        <label class="form-check-label" for="short_case">Känsligt för stora/små bokstäver</label>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Frågebild (valfri)</label>
+                    <input type="text" class="form-control" name="question_image" value="<?= htmlspecialchars($editQ['question_image'] ?? '') ?>" placeholder="filnamn.jpg i upload/">
+                    <div class="form-text">Ladda upp via <a href="upload_image.php" target="_blank">upload_image</a>. Visas ovanför frågan för alla typer utom hotspot/image_choice.</div>
+                </div>
+
+                <button type="submit" class="btn btn-success"><i class="bi bi-save me-1"></i>Spara fråga</button>
+                <a href="edit_quiz.php?lesson_id=<?= $lessonId ?>" class="btn btn-outline-secondary">Avbryt</a>
+            </form>
+        </div>
+    </div>
+
+    <script>
+    document.getElementById('type_selector').addEventListener('change', function() {
+        document.querySelectorAll('.type-specific').forEach(function(el) { el.style.display = 'none'; });
+        var target = document.querySelector('.type-specific[data-type="' + this.value + '"]');
+        if (target) target.style.display = 'block';
+    });
+    </script>
+    <?php else: ?>
+    <!-- ======== FRÅGELISTA ======== -->
+    <?php if (empty($questions)): ?>
+    <div class="alert alert-info">Inga frågor ännu. Klicka på <strong>Lägg till fråga</strong> ovan för att skapa den första.</div>
+    <?php else: ?>
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <ul class="list-group list-group-flush" id="question-list">
+                <?php foreach ($questions as $idx => $q): ?>
+                <li class="list-group-item d-flex align-items-center gap-3" data-qid="<?= $q['id'] ?>">
+                    <i class="bi bi-grip-vertical text-muted handle" style="cursor: grab;"></i>
+                    <span class="badge bg-secondary"><?= $idx + 1 ?></span>
+                    <div class="flex-grow-1">
+                        <div><strong><?= htmlspecialchars(strip_tags($q['question_text']) ?: '(ingen frågetext)') ?></strong></div>
+                        <small class="text-muted"><?= htmlspecialchars(quizTypeLabel($q['question_type'])) ?> · <?= (int)$q['points'] ?> poäng</small>
+                    </div>
+                    <a href="?lesson_id=<?= $lessonId ?>&amp;edit_id=<?= $q['id'] ?>" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                    <form method="post" class="d-inline" onsubmit="return confirm('Ta bort frågan?');">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                        <input type="hidden" name="action" value="delete">
+                        <input type="hidden" name="question_id" value="<?= $q['id'] ?>">
+                        <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                    </form>
+                </li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+    </div>
+    <?php endif; ?>
+    <?php endif; ?>
+</div>
+
+<?php
+require_once 'include/footer.php';
+
+// =========================================================
+// Fältrenderings-helpers (keep nära botten av fil)
+// =========================================================
+function renderChoiceFields($data, $multiple) {
+    $answers = $data['answers'] ?? [''];
+    if (empty($answers)) $answers = [''];
+    $correctSingle = (int)($data['correct'] ?? 0);
+    $correctMulti = $data['correct'] ?? [];
+    if (!is_array($correctMulti)) $correctMulti = [];
+    ob_start();
+    ?>
+    <label class="form-label">Svarsalternativ</label>
+    <div id="choice-rows">
+        <?php foreach ($answers as $i => $a): ?>
+        <div class="input-group mb-2 choice-row">
+            <?php if ($multiple): ?>
+            <span class="input-group-text"><input type="checkbox" name="correct_multi[]" value="<?= $i ?>" <?= in_array($i, $correctMulti) ? 'checked' : '' ?>></span>
+            <?php else: ?>
+            <span class="input-group-text"><input type="radio" name="correct" value="<?= $i ?>" <?= $i === $correctSingle ? 'checked' : '' ?>></span>
+            <?php endif; ?>
+            <input type="text" class="form-control" name="answers[]" value="<?= htmlspecialchars($a) ?>">
+            <button type="button" class="btn btn-outline-danger" onclick="this.closest('.choice-row').remove()"><i class="bi bi-x"></i></button>
+        </div>
+        <?php endforeach; ?>
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-primary" onclick="addChoiceRow(<?= $multiple ? 'true' : 'false' ?>)"><i class="bi bi-plus"></i> Lägg till alternativ</button>
+    <script>
+    function addChoiceRow(multi) {
+        var container = document.getElementById('choice-rows');
+        var n = container.querySelectorAll('.choice-row').length;
+        var div = document.createElement('div');
+        div.className = 'input-group mb-2 choice-row';
+        var ctrl = multi ? '<input type="checkbox" name="correct_multi[]" value="' + n + '">' : '<input type="radio" name="correct" value="' + n + '">';
+        div.innerHTML = '<span class="input-group-text">' + ctrl + '</span><input type="text" class="form-control" name="answers[]"><button type="button" class="btn btn-outline-danger" onclick="this.closest(\'.choice-row\').remove()"><i class="bi bi-x"></i></button>';
+        container.appendChild(div);
+    }
+    </script>
+    <?php
+    return ob_get_clean();
+}
+
+function renderFillBlankFields($data) {
+    $template = $data['template'] ?? '';
+    $blanks = $data['blanks'] ?? [];
+    $csvs = [];
+    foreach ($blanks as $b) $csvs[] = implode('|', $b['answers'] ?? []);
+    ob_start();
+    ?>
+    <div class="mb-3">
+        <label class="form-label">Text med luckor (använd <code>{{0}}</code>, <code>{{1}}</code>, ... där användaren ska fylla i)</label>
+        <textarea class="form-control" name="template" rows="3"><?= htmlspecialchars($template) ?></textarea>
+        <div class="form-text">Exempel: "Sverige gick med i EU år {{0}} och Frankrike år {{1}}."</div>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Godkända svar per lucka (en rad per lucka, <code>|</code> för alternativ)</label>
+        <?php for ($i = 0; $i < max(5, count($csvs)); $i++): ?>
+        <div class="input-group mb-1">
+            <span class="input-group-text" style="min-width: 90px;">Lucka <?= $i ?></span>
+            <input type="text" class="form-control" name="blank_answers[]" value="<?= htmlspecialchars($csvs[$i] ?? '') ?>">
+        </div>
+        <?php endfor; ?>
+        <div class="form-text">Exempel: <code>1995</code> eller <code>1995|nittiofem</code>. Lämna tomt för luckor som inte finns i mallen.</div>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+
+function renderImageChoiceFields($data) {
+    $multi = !empty($data['multiple']);
+    $options = $data['options'] ?? [];
+    if (empty($options)) $options = [['image' => '', 'label' => '', 'correct' => false]];
+    ob_start();
+    ?>
+    <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" name="img_multiple" id="img_multiple" <?= $multi ? 'checked' : '' ?>>
+        <label class="form-check-label" for="img_multiple">Tillåt flera korrekta svar (flerval)</label>
+    </div>
+    <label class="form-label">Bildalternativ</label>
+    <div id="img-rows">
+        <?php foreach ($options as $i => $o): ?>
+        <div class="input-group mb-2 img-row">
+            <span class="input-group-text" title="Markera som korrekt"><input type="checkbox" name="img_correct[<?= $i ?>]" value="1" <?= !empty($o['correct']) ? 'checked' : '' ?>></span>
+            <input type="text" class="form-control" name="img_files[]" placeholder="filnamn.jpg (i upload/)" value="<?= htmlspecialchars($o['image'] ?? '') ?>">
+            <input type="text" class="form-control" name="img_labels[]" placeholder="Etikett (valfri)" value="<?= htmlspecialchars($o['label'] ?? '') ?>">
+            <button type="button" class="btn btn-outline-danger" onclick="this.closest('.img-row').remove()"><i class="bi bi-x"></i></button>
+        </div>
+        <?php endforeach; ?>
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-primary" onclick="addImgRow()"><i class="bi bi-plus"></i> Lägg till bild</button>
+    <script>
+    function addImgRow() {
+        var c = document.getElementById('img-rows');
+        var n = c.querySelectorAll('.img-row').length;
+        var d = document.createElement('div');
+        d.className = 'input-group mb-2 img-row';
+        d.innerHTML = '<span class="input-group-text"><input type="checkbox" name="img_correct[' + n + ']" value="1"></span><input type="text" class="form-control" name="img_files[]" placeholder="filnamn.jpg"><input type="text" class="form-control" name="img_labels[]" placeholder="Etikett"><button type="button" class="btn btn-outline-danger" onclick="this.closest(\'.img-row\').remove()"><i class="bi bi-x"></i></button>';
+        c.appendChild(d);
+    }
+    </script>
+    <div class="form-text mt-2">Ladda upp bilder via <a href="upload_image.php" target="_blank">upload_image</a>. Kopiera filnamnet som returneras.</div>
+    <?php
+    return ob_get_clean();
+}
+
+function renderOrderFields($data) {
+    $items = $data['items'] ?? [''];
+    if (empty($items)) $items = [''];
+    ob_start();
+    ?>
+    <label class="form-label">Objekt (ange dem i <strong>rätt ordning</strong> — de visas slumpat för deltagaren)</label>
+    <div id="order-rows">
+        <?php foreach ($items as $i => $it): ?>
+        <div class="input-group mb-2 order-row">
+            <span class="input-group-text"><?= $i + 1 ?></span>
+            <input type="text" class="form-control" name="order_items[]" value="<?= htmlspecialchars($it) ?>">
+            <button type="button" class="btn btn-outline-danger" onclick="this.closest('.order-row').remove()"><i class="bi bi-x"></i></button>
+        </div>
+        <?php endforeach; ?>
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-primary" onclick="(function(){var c=document.getElementById('order-rows');var n=c.querySelectorAll('.order-row').length+1;var d=document.createElement('div');d.className='input-group mb-2 order-row';d.innerHTML='<span class=\'input-group-text\'>'+n+'</span><input type=\'text\' class=\'form-control\' name=\'order_items[]\'><button type=\'button\' class=\'btn btn-outline-danger\' onclick=\'this.closest(\\\"\\.order-row\\\").remove()\'><i class=\'bi bi-x\'></i></button>';c.appendChild(d);})()"><i class="bi bi-plus"></i> Lägg till</button>
+    <?php
+    return ob_get_clean();
+}
+
+function renderMatchFields($data) {
+    $pairs = $data['pairs'] ?? [['left' => '', 'right' => '']];
+    if (empty($pairs)) $pairs = [['left' => '', 'right' => '']];
+    ob_start();
+    ?>
+    <label class="form-label">Par (vänster matchar höger)</label>
+    <div id="pair-rows">
+        <?php foreach ($pairs as $i => $p): ?>
+        <div class="row g-2 mb-2 pair-row">
+            <div class="col"><input type="text" class="form-control" name="pair_left[]" placeholder="Vänster" value="<?= htmlspecialchars($p['left'] ?? '') ?>"></div>
+            <div class="col-auto align-self-center"><i class="bi bi-arrow-left-right"></i></div>
+            <div class="col"><input type="text" class="form-control" name="pair_right[]" placeholder="Höger" value="<?= htmlspecialchars($p['right'] ?? '') ?>"></div>
+            <div class="col-auto"><button type="button" class="btn btn-outline-danger" onclick="this.closest('.pair-row').remove()"><i class="bi bi-x"></i></button></div>
+        </div>
+        <?php endforeach; ?>
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-primary" onclick="(function(){var c=document.getElementById('pair-rows');var d=document.createElement('div');d.className='row g-2 mb-2 pair-row';d.innerHTML='<div class=\'col\'><input type=\'text\' class=\'form-control\' name=\'pair_left[]\' placeholder=\'Vänster\'></div><div class=\'col-auto align-self-center\'><i class=\'bi bi-arrow-left-right\'></i></div><div class=\'col\'><input type=\'text\' class=\'form-control\' name=\'pair_right[]\' placeholder=\'Höger\'></div><div class=\'col-auto\'><button type=\'button\' class=\'btn btn-outline-danger\' onclick=\'this.closest(\\\"\\.pair-row\\\").remove()\'><i class=\'bi bi-x\'></i></button></div>';c.appendChild(d);})()"><i class="bi bi-plus"></i> Lägg till par</button>
+    <?php
+    return ob_get_clean();
+}
+
+function renderCategorizeFields($data) {
+    $categories = $data['categories'] ?? ['', ''];
+    if (count($categories) < 2) $categories = ['', ''];
+    $items = $data['items'] ?? [];
+    if (empty($items)) $items = [['text' => '', 'category' => 0]];
+    ob_start();
+    ?>
+    <label class="form-label">Kategorier</label>
+    <div id="cat-cats">
+        <?php foreach ($categories as $i => $c): ?>
+        <div class="input-group mb-2 cat-cat-row">
+            <span class="input-group-text"><?= $i + 1 ?></span>
+            <input type="text" class="form-control" name="categories[]" value="<?= htmlspecialchars($c) ?>">
+        </div>
+        <?php endforeach; ?>
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-primary mb-3" onclick="(function(){var c=document.getElementById('cat-cats');var n=c.querySelectorAll('.cat-cat-row').length+1;var d=document.createElement('div');d.className='input-group mb-2 cat-cat-row';d.innerHTML='<span class=\'input-group-text\'>'+n+'</span><input type=\'text\' class=\'form-control\' name=\'categories[]\'>';c.appendChild(d);})()"><i class="bi bi-plus"></i> Lägg till kategori</button>
+
+    <label class="form-label">Objekt och deras kategori</label>
+    <div id="cat-items">
+        <?php foreach ($items as $i => $it): ?>
+        <div class="row g-2 mb-2 cat-item-row">
+            <div class="col"><input type="text" class="form-control" name="cat_item_text[]" placeholder="Objekt" value="<?= htmlspecialchars($it['text'] ?? '') ?>"></div>
+            <div class="col-auto">
+                <select class="form-select" name="cat_item_cat[]">
+                    <?php for ($ci = 0; $ci < count($categories); $ci++): ?>
+                    <option value="<?= $ci ?>" <?= (int)($it['category'] ?? 0) === $ci ? 'selected' : '' ?>>Kategori <?= $ci + 1 ?></option>
+                    <?php endfor; ?>
+                </select>
+            </div>
+            <div class="col-auto"><button type="button" class="btn btn-outline-danger" onclick="this.closest('.cat-item-row').remove()"><i class="bi bi-x"></i></button></div>
+        </div>
+        <?php endforeach; ?>
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-primary" onclick="window.location.reload()"><i class="bi bi-arrow-clockwise"></i> Ladda om för att uppdatera kategorival</button>
+    <?php
+    return ob_get_clean();
+}
+
+function renderNumericFields($data) {
+    ob_start();
+    ?>
+    <div class="row g-3">
+        <div class="col-md-4"><label class="form-label">Korrekt värde</label><input type="number" step="any" class="form-control" name="num_correct" value="<?= htmlspecialchars((string)($data['correct'] ?? '')) ?>"></div>
+        <div class="col-md-4"><label class="form-label">Tolerans ±</label><input type="number" step="any" class="form-control" name="num_tolerance" value="<?= htmlspecialchars((string)($data['tolerance'] ?? 0)) ?>"></div>
+        <div class="col-md-4"><label class="form-label">Enhet (valfri)</label><input type="text" class="form-control" name="num_unit" value="<?= htmlspecialchars($data['unit'] ?? '') ?>" placeholder="kr, cm, ..."></div>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+
+function renderHotspotFields($data) {
+    $img = $data['image'] ?? '';
+    $t = $data['targets'][0] ?? ['x' => 0.5, 'y' => 0.5, 'radius' => 0.08];
+    ob_start();
+    ?>
+    <div class="mb-3">
+        <label class="form-label">Bildfil (i upload/)</label>
+        <input type="text" class="form-control" name="hotspot_image" value="<?= htmlspecialchars($img) ?>" placeholder="filnamn.jpg" id="hotspot_image_input">
+        <div class="form-text">Ladda upp bilden via <a href="upload_image.php" target="_blank">upload_image</a> först.</div>
+    </div>
+    <div class="row g-3">
+        <div class="col-md-4"><label class="form-label">Mål X (0–1)</label><input type="number" step="0.01" min="0" max="1" class="form-control" name="hotspot_x" value="<?= htmlspecialchars((string)$t['x']) ?>"></div>
+        <div class="col-md-4"><label class="form-label">Mål Y (0–1)</label><input type="number" step="0.01" min="0" max="1" class="form-control" name="hotspot_y" value="<?= htmlspecialchars((string)$t['y']) ?>"></div>
+        <div class="col-md-4"><label class="form-label">Radie (0–1)</label><input type="number" step="0.01" min="0.01" max="0.5" class="form-control" name="hotspot_radius" value="<?= htmlspecialchars((string)($t['radius'] ?? 0.08)) ?>"></div>
+    </div>
+    <div class="form-text mt-2">Klicka på bilden nedan för att sätta X/Y automatiskt.</div>
+    <?php if ($img): ?>
+    <div id="hotspot-preview" class="mt-3 position-relative d-inline-block">
+        <img src="../upload/<?= htmlspecialchars($img) ?>" style="max-width: 100%; cursor: crosshair;" id="hotspot_img">
+        <span id="hotspot_marker" style="position:absolute;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;background:rgba(13,110,253,.7);border:2px solid white;pointer-events:none;left:<?= (float)$t['x']*100 ?>%;top:<?= (float)$t['y']*100 ?>%;"></span>
+    </div>
+    <script>
+    (function(){
+        var img = document.getElementById('hotspot_img');
+        var marker = document.getElementById('hotspot_marker');
+        img.addEventListener('click', function(e) {
+            var rect = img.getBoundingClientRect();
+            var x = (e.clientX - rect.left) / rect.width;
+            var y = (e.clientY - rect.top) / rect.height;
+            document.querySelector('input[name=hotspot_x]').value = x.toFixed(3);
+            document.querySelector('input[name=hotspot_y]').value = y.toFixed(3);
+            marker.style.left = (x*100) + '%';
+            marker.style.top = (y*100) + '%';
+        });
+    })();
+    </script>
+    <?php endif; ?>
+    <?php
+    return ob_get_clean();
+}
+?>

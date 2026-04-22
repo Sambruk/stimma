@@ -160,37 +160,23 @@ if (!$isPreviewMode) {
 }
 
 /**
- * Check if quiz answer is correct based on quiz type
+ * Samlar alla quiz-frågor för lektionen och bedömer dem via include/quiz.php.
+ * Returnerar array med 'all_correct', 'results', 'correct_count', 'total'.
  */
-function checkQuizAnswer($lesson, $post) {
-    $quizType = $lesson['quiz_type'] ?? 'single_choice';
+require_once 'include/quiz.php';
 
-    switch ($quizType) {
-        case 'multiple_choice':
-            // Flerval - jämför valda svar med quiz_correct_answers
-            $userAnswers = $post['answers'] ?? [];
-            if (!is_array($userAnswers)) {
-                $userAnswers = [];
-            }
-            sort($userAnswers);
-            $correctAnswers = array_map('trim', explode(',', $lesson['quiz_correct_answers'] ?? ''));
-            sort($correctAnswers);
-            return $userAnswers == $correctAnswers;
-
-        case 'single_choice':
-        default:
-            // Enkelval - jämför med quiz_correct_answer
-            $userAnswer = (int)($post['answer'] ?? 0);
-            $correctAnswer = (int)$lesson['quiz_correct_answer'];
-            return $userAnswer === $correctAnswer;
-    }
+function gradeLessonQuiz($lessonId, $post) {
+    return gradeAllQuizQuestions((int)$lessonId, $post);
 }
 
 /**
- * Check if a quiz answer was submitted
+ * Snabbkoll: finns det minst ett quiz-svar i POST (qNN_answer, qNN_blank_0, …)?
  */
 function hasQuizAnswer($post) {
-    return isset($post['answer']) || isset($post['text_answer']) || isset($post['answers']);
+    foreach ($post as $key => $_) {
+        if (preg_match('/^q\d+_/', $key)) return true;
+    }
+    return false;
 }
 
 // Handle preview mode quiz submission (no saving)
@@ -204,22 +190,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasQuizAnswer($_POST) && $isPreview
         }
     }
 
-    $isCorrect = checkQuizAnswer($lesson, $_POST);
+    $grade = gradeLessonQuiz($lessonId, $_POST);
+    $isCorrect = $grade['all_correct'];
 
     if (isAjaxRequest()) {
         header('Content-Type: application/json');
-        if ($isCorrect) {
-            echo json_encode([
-                'success' => true,
-                'preview_mode' => true,
-                'message' => 'Rätt svar! (Förhandsgranskningsläge - framsteg sparas inte)'
-            ]);
-        } else {
-            echo json_encode([
-                'success' => false,
-                'message' => 'Fel svar. Försök igen! (Förhandsgranskningsläge)'
-            ]);
-        }
+        echo json_encode([
+            'success' => $isCorrect,
+            'preview_mode' => true,
+            'message' => $isCorrect
+                ? 'Alla rätt! (Förhandsgranskningsläge — framsteg sparas inte)'
+                : ('Rätta: ' . $grade['correct_count'] . ' av ' . $grade['total'] . '. Försök igen.'),
+            'results' => $grade['results'],
+        ]);
         exit;
     }
 }
@@ -239,8 +222,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasQuizAnswer($_POST) && !$isPrevie
         exit;
     }
 
-    // Check if answer is correct based on quiz type
-    $isCorrect = checkQuizAnswer($lesson, $_POST);
+    // Check if ALL quiz answers are correct (använder nya multi-question-modulen)
+    $grade = gradeLessonQuiz($lessonId, $_POST);
+    $isCorrect = $grade['all_correct'];
     
     // Check if all previous lessons in the course are completed
     $previousLessons = query("SELECT id FROM " . DB_DATABASE . ".lessons 
@@ -337,11 +321,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasQuizAnswer($_POST) && !$isPrevie
         $_SESSION['flash_message'] = $message;
         $_SESSION['flash_type'] = 'warning';
     } else if (!$isCorrect) {
-        // Handle incorrect answer
-        $message = 'Fel svar. Försök igen!';
+        // Handle incorrect answer — meddela antal rätt per-fråga för feedback
+        $message = 'Rätta: ' . $grade['correct_count'] . ' av ' . $grade['total'] . '. Gå igenom frågorna och försök igen.';
         if (isAjaxRequest()) {
             header('Content-Type: application/json');
-            echo json_encode(['success' => false, 'message' => $message]);
+            echo json_encode([
+                'success' => false,
+                'message' => $message,
+                'results' => $grade['results'],
+            ]);
             exit;
         }
         $_SESSION['flash_message'] = $message;
@@ -631,88 +619,41 @@ function convertYoutubeUrl($url) {
                 </div>
                 <?php endif; ?>
                 
-                <!-- Quiz-sektion -->
+                <!-- Quiz-sektion (flera frågor per lektion) -->
+                <?php
+                $lessonQuestions = getQuizQuestionsForLesson($lessonId);
+                ?>
                 <div class="card">
                     <div class="card-header">
                         <i class="bi bi-question-circle me-2"></i> Quiz
+                        <?php if (count($lessonQuestions) > 0): ?>
+                        <span class="badge bg-secondary ms-2"><?= count($lessonQuestions) ?> <?= count($lessonQuestions) === 1 ? 'fråga' : 'frågor' ?></span>
+                        <?php endif; ?>
                     </div>
                     <div class="card-body">
-                        <?php if (!empty($lesson['quiz_question'])): ?>
-                            <div class="quiz-section mb-4">
-                                <?php if (isset($_SESSION['flash_message']) && $_SESSION['flash_type'] === 'danger'): ?>
-                                <div class="alert alert-danger mb-3">
-                                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                                    <?= htmlspecialchars($_SESSION['flash_message']) ?>
-                                </div>
-                                <?php 
-                                    unset($_SESSION['flash_message'], $_SESSION['flash_type']);
-                                endif; ?>
-                                <div class="quiz-question mb-3">
-                                    <?= cleanHtml($lesson['quiz_question']) ?>
-                                </div>
-                                <form method="post" class="quiz-form" id="quizForm">
-                                    <input type="hidden" name="csrf_token" value="<?= generateCsrfToken() ?>">
-                                    <input type="hidden" name="quiz_type" value="<?= htmlspecialchars($lesson['quiz_type'] ?? 'single_choice') ?>">
-                                    <div class="quiz-options">
-                                        <?php
-                                        $quizType = $lesson['quiz_type'] ?? 'single_choice';
-
-                                        if ($quizType === 'multiple_choice'):
-                                            // Flerval - visa checkboxar
-                                            $answers = [
-                                                1 => $lesson['quiz_answer1'],
-                                                2 => $lesson['quiz_answer2'],
-                                                3 => $lesson['quiz_answer3'],
-                                                4 => $lesson['quiz_answer4'] ?? null,
-                                                5 => $lesson['quiz_answer5'] ?? null
-                                            ];
-                                            foreach ($answers as $key => $answer):
-                                                if (!empty($answer)):
-                                        ?>
-                                        <div class="form-check mb-2">
-                                            <input class="form-check-input" type="checkbox" name="answers[]" id="answer<?= $key ?>" value="<?= $key ?>">
-                                            <label class="form-check-label" for="answer<?= $key ?>">
-                                                <?= cleanHtml($answer) ?>
-                                            </label>
-                                        </div>
-                                        <?php
-                                                endif;
-                                            endforeach;
-                                        ?>
-                                        <small class="text-muted">Välj ett eller flera alternativ</small>
-                                        <?php
-                                        else:
-                                            // Enkelval (single_choice) - visa radioknappar
-                                            $answers = [
-                                                1 => $lesson['quiz_answer1'],
-                                                2 => $lesson['quiz_answer2'],
-                                                3 => $lesson['quiz_answer3'],
-                                                4 => $lesson['quiz_answer4'] ?? null,
-                                                5 => $lesson['quiz_answer5'] ?? null
-                                            ];
-                                            foreach ($answers as $key => $answer):
-                                                if (!empty($answer)):
-                                        ?>
-                                        <div class="form-check mb-2">
-                                            <input class="form-check-input" type="radio" name="answer" id="answer<?= $key ?>" value="<?= $key ?>" required>
-                                            <label class="form-check-label" for="answer<?= $key ?>">
-                                                <?= cleanHtml($answer) ?>
-                                            </label>
-                                        </div>
-                                        <?php
-                                                endif;
-                                            endforeach;
-                                        endif;
-                                        ?>
-                                    </div>
-                                    <button type="submit" class="btn btn-primary mt-3">Skicka svar</button>
-                                </form>
+                        <?php if (!empty($lessonQuestions)): ?>
+                            <?php if (isset($_SESSION['flash_message']) && $_SESSION['flash_type'] === 'danger'): ?>
+                            <div class="alert alert-danger mb-3">
+                                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                <?= htmlspecialchars($_SESSION['flash_message']) ?>
                             </div>
+                            <?php unset($_SESSION['flash_message'], $_SESSION['flash_type']); endif; ?>
+
+                            <form method="post" class="quiz-form" id="quizForm">
+                                <input type="hidden" name="csrf_token" value="<?= generateCsrfToken() ?>">
+                                <?php foreach ($lessonQuestions as $idx => $q): ?>
+                                    <?= renderQuizQuestion($q, $idx + 1) ?>
+                                <?php endforeach; ?>
+                                <button type="submit" class="btn btn-primary">Skicka svar</button>
+                            </form>
                         <?php else: ?>
                             <p class="text-muted mb-0">Inget quiz tillgängligt för denna lektion.</p>
                         <?php endif; ?>
                     </div>
                 </div>
+
+                <!-- Interaktions-JS för drag-drop, hotspot etc -->
+                <script src="include/js/quiz-client.js" defer></script>
                 
                 <!-- Progress bar for course completion -->
                 <?php
