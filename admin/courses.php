@@ -42,7 +42,7 @@ if ($isAdmin) {
         LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id
         WHERE {$courseDomClause['fragment']}
         GROUP BY c.id
-        ORDER BY c.sort_order ASC
+        ORDER BY c.id ASC
     ", $courseDomClause['params']);
 } else {
     // Redaktörer ser kurser de skapat (author_id) ELLER tilldelats redaktörskap för
@@ -54,7 +54,7 @@ if ($isAdmin) {
         WHERE {$courseDomClause['fragment']}
           AND (c.author_id = ? OR ce.email = ?)
         GROUP BY c.id
-        ORDER BY c.sort_order ASC
+        ORDER BY c.id ASC
     ", array_merge($courseDomClause['params'], [$userId, $userEmail]));
 }
 
