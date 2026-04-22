@@ -31,14 +31,30 @@ if (isset($_GET['id'])) {
     }
 }
 
-// Hämta kurser för dropdown (filtrerat på användarens organisation, alla orgens domäner)
+// Hämta kurser för dropdown — scope:as per behörighet:
+//   - Admin: alla kurser i den egna organisationens samtliga domäner
+//   - Redaktör: bara kurser man själv är författare till ELLER tilldelats som
+//     redaktör för (via course_editors)
 $userDomain = substr(strrchr($_SESSION['user_email'], "@"), 1);
 $lessonOrgScope = getOrgScopeDomains($_SESSION['user_email']);
-$lessonCourseClause = buildDomainInClause($lessonOrgScope, 'organization_domain');
-$courses = queryAll(
-    "SELECT * FROM " . DB_DATABASE . ".courses WHERE {$lessonCourseClause['fragment']} ORDER BY sort_order ASC",
-    $lessonCourseClause['params']
-);
+$lessonCourseClause = buildDomainInClause($lessonOrgScope, 'c.organization_domain');
+if ($isAdmin) {
+    $courses = queryAll(
+        "SELECT c.* FROM " . DB_DATABASE . ".courses c
+         WHERE {$lessonCourseClause['fragment']}
+         ORDER BY c.sort_order ASC",
+        $lessonCourseClause['params']
+    );
+} else {
+    $courses = queryAll(
+        "SELECT DISTINCT c.* FROM " . DB_DATABASE . ".courses c
+         LEFT JOIN " . DB_DATABASE . ".course_editors ce ON ce.course_id = c.id
+         WHERE {$lessonCourseClause['fragment']}
+           AND (c.author_id = ? OR ce.email = ?)
+         ORDER BY c.sort_order ASC",
+        array_merge($lessonCourseClause['params'], [$_SESSION['user_id'], $_SESSION['user_email']])
+    );
+}
 
 // Hantera formulär
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -163,9 +179,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($title)) {
         $error = 'Titel är obligatoriskt.';
-    } else {
+    } elseif ($course_id > 0) {
+        // Säkerhetsnät: validera att användaren har rätt att skriva till kursen.
+        $targetCourse = queryOne(
+            "SELECT organization_domain, author_id FROM " . DB_DATABASE . ".courses WHERE id = ?",
+            [$course_id]
+        );
+        if (!$targetCourse || !in_array($targetCourse['organization_domain'], $lessonOrgScope, true)) {
+            $error = 'Du har inte behörighet att skapa/redigera lektioner i den valda kursen.';
+        } elseif (!$isAdmin) {
+            $isCourseEditor = queryOne(
+                "SELECT 1 FROM " . DB_DATABASE . ".course_editors WHERE course_id = ? AND email = ?",
+                [$course_id, $_SESSION['user_email']]
+            );
+            $isCourseAuthor = ((int)$targetCourse['author_id'] === (int)$_SESSION['user_id']);
+            if (!$isCourseEditor && !$isCourseAuthor) {
+                $error = 'Du är inte redaktör eller författare för den valda kursen.';
+            }
+        }
+    }
 
-
+    if (empty($error) && !empty($title)) {
         if (isset($_GET['id'])) {
             // Uppdatera befintlig lektion
             execute("UPDATE " . DB_DATABASE . ".lessons SET
@@ -307,11 +341,24 @@ if (isset($_GET['id']) && is_numeric($_GET['id'])) {
     exit;
 }
 
-// Hämta kurser för dropdown (filtrerat på användarens organisation, alla orgens domäner)
-$courses = queryAll(
-    "SELECT * FROM " . DB_DATABASE . ".courses WHERE {$lessonCourseClause['fragment']} ORDER BY sort_order ASC",
-    $lessonCourseClause['params']
-);
+// Hämta kurser för dropdown (samma scope-regler som vid första anropet ovan)
+if ($isAdmin) {
+    $courses = queryAll(
+        "SELECT c.* FROM " . DB_DATABASE . ".courses c
+         WHERE {$lessonCourseClause['fragment']}
+         ORDER BY c.sort_order ASC",
+        $lessonCourseClause['params']
+    );
+} else {
+    $courses = queryAll(
+        "SELECT DISTINCT c.* FROM " . DB_DATABASE . ".courses c
+         LEFT JOIN " . DB_DATABASE . ".course_editors ce ON ce.course_id = c.id
+         WHERE {$lessonCourseClause['fragment']}
+           AND (c.author_id = ? OR ce.email = ?)
+         ORDER BY c.sort_order ASC",
+        array_merge($lessonCourseClause['params'], [$_SESSION['user_id'], $_SESSION['user_email']])
+    );
+}
 ?>
 
 <div class="container-fluid">
