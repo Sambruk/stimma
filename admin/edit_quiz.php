@@ -529,9 +529,10 @@ require_once 'include/header.php';
             if (!inp) return;
             triggerUpload(btn, function(url) {
                 inp.value = url;
-                // Om hotspot-förhandsvisningen finns: ladda om sidan så bild visas
-                if (targetId === 'hotspot_image_input') {
-                    setTimeout(function() { location.reload(); }, 300);
+                // Hotspot: trigga preview-uppdatering istället för reload (annars
+                // skulle filnamnet tappas eftersom det bara fanns client-side).
+                if (targetId === 'hotspot_image_input' && typeof window.__hotspotSetImage === 'function') {
+                    window.__hotspotSetImage(url);
                 }
             });
         });
@@ -785,32 +786,124 @@ function renderHotspotFields($data) {
         </div>
     </div>
     <div class="row g-3">
-        <div class="col-md-4"><label class="form-label">Mål X (0–1)</label><input type="number" step="0.01" min="0" max="1" class="form-control" name="hotspot_x" value="<?= htmlspecialchars((string)$t['x']) ?>"></div>
-        <div class="col-md-4"><label class="form-label">Mål Y (0–1)</label><input type="number" step="0.01" min="0" max="1" class="form-control" name="hotspot_y" value="<?= htmlspecialchars((string)$t['y']) ?>"></div>
-        <div class="col-md-4"><label class="form-label">Radie (0–1)</label><input type="number" step="0.01" min="0.01" max="0.5" class="form-control" name="hotspot_radius" value="<?= htmlspecialchars((string)($t['radius'] ?? 0.08)) ?>"></div>
+        <div class="col-md-4"><label class="form-label">Mål X (0–1)</label><input type="number" step="0.01" min="0" max="1" class="form-control" name="hotspot_x" id="hotspot_x_field" value="<?= htmlspecialchars((string)$t['x']) ?>"></div>
+        <div class="col-md-4"><label class="form-label">Mål Y (0–1)</label><input type="number" step="0.01" min="0" max="1" class="form-control" name="hotspot_y" id="hotspot_y_field" value="<?= htmlspecialchars((string)$t['y']) ?>"></div>
+        <div class="col-md-4"><label class="form-label">Radie (0–1)</label><input type="number" step="0.01" min="0.01" max="0.5" class="form-control" name="hotspot_radius" id="hotspot_r_field" value="<?= htmlspecialchars((string)($t['radius'] ?? 0.08)) ?>"></div>
     </div>
-    <div class="form-text mt-2">Klicka på bilden nedan för att sätta X/Y automatiskt.</div>
-    <?php if ($img): ?>
-    <div id="hotspot-preview" class="mt-3 position-relative d-inline-block">
-        <img src="../upload/<?= htmlspecialchars($img) ?>" style="max-width: 100%; cursor: crosshair;" id="hotspot_img">
-        <span id="hotspot_marker" style="position:absolute;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;background:rgba(13,110,253,.7);border:2px solid white;pointer-events:none;left:<?= (float)$t['x']*100 ?>%;top:<?= (float)$t['y']*100 ?>%;"></span>
+    <div class="form-check mt-2 mb-2">
+        <input class="form-check-input" type="checkbox" id="hotspot_grid_toggle" checked>
+        <label class="form-check-label small" for="hotspot_grid_toggle">Visa rutnät (10 × 10)</label>
+    </div>
+    <div class="form-text">Klicka i bilden för att sätta mål-X/Y automatiskt. Den blå cirkeln visar hur stor klickzonen blir.</div>
+    <div id="hotspot-preview" class="mt-3 position-relative d-inline-block" style="max-width: 100%;<?= $img ? '' : 'display:none;' ?>">
+        <img id="hotspot_img" src="<?= $img ? '../upload/' . htmlspecialchars($img) : '' ?>" style="max-width: 100%; cursor: crosshair; display: block;" draggable="false">
+        <!-- Rutnätet ritas via JS som absolut-positionerade divs över bilden -->
+        <div id="hotspot_grid" style="position:absolute;inset:0;pointer-events:none;"></div>
+        <!-- Hitzonscirkel — visar den faktiska klickzonen (radie) -->
+        <span id="hotspot_circle" style="position:absolute;border-radius:50%;border:2px dashed rgba(13,110,253,.9);background:rgba(13,110,253,.12);pointer-events:none;transform:translate(-50%,-50%);"></span>
+        <!-- Mitt-markören -->
+        <span id="hotspot_marker" style="position:absolute;width:12px;height:12px;border-radius:50%;background:rgba(13,110,253,.95);border:2px solid white;box-shadow:0 0 0 1px rgba(0,0,0,.35);pointer-events:none;transform:translate(-50%,-50%);"></span>
+        <!-- Hover-koordinatbubbla -->
+        <span id="hotspot_hover_label" style="position:absolute;display:none;padding:2px 6px;background:rgba(0,0,0,.75);color:white;font-size:11px;border-radius:3px;pointer-events:none;transform:translate(8px,8px);"></span>
     </div>
     <script>
-    (function(){
+    (function() {
+        var preview = document.getElementById('hotspot-preview');
         var img = document.getElementById('hotspot_img');
+        var grid = document.getElementById('hotspot_grid');
         var marker = document.getElementById('hotspot_marker');
+        var circle = document.getElementById('hotspot_circle');
+        var hoverLabel = document.getElementById('hotspot_hover_label');
+        var xField = document.getElementById('hotspot_x_field');
+        var yField = document.getElementById('hotspot_y_field');
+        var rField = document.getElementById('hotspot_r_field');
+        var gridToggle = document.getElementById('hotspot_grid_toggle');
+        var gridCols = 10, gridRows = 10;
+
+        function buildGrid() {
+            grid.innerHTML = '';
+            if (!gridToggle.checked) { grid.style.display = 'none'; return; }
+            grid.style.display = 'block';
+            // Rita vertikala och horisontella linjer (1:10 av bildens storlek)
+            for (var i = 1; i < gridCols; i++) {
+                var v = document.createElement('div');
+                v.style.cssText = 'position:absolute;top:0;bottom:0;left:' + (i*100/gridCols) + '%;width:1px;background:rgba(255,255,255,.5);box-shadow:0 0 0 0.5px rgba(0,0,0,.2);';
+                grid.appendChild(v);
+            }
+            for (var j = 1; j < gridRows; j++) {
+                var h = document.createElement('div');
+                h.style.cssText = 'position:absolute;left:0;right:0;top:' + (j*100/gridRows) + '%;height:1px;background:rgba(255,255,255,.5);box-shadow:0 0 0 0.5px rgba(0,0,0,.2);';
+                grid.appendChild(h);
+            }
+            // Axel-etiketter (0.1, 0.2, …) i övre/vänstra kanten
+            for (var c = 1; c < gridCols; c++) {
+                var lx = document.createElement('div');
+                lx.textContent = (c/gridCols).toFixed(1);
+                lx.style.cssText = 'position:absolute;left:' + (c*100/gridCols) + '%;top:2px;transform:translateX(-50%);font-size:10px;color:white;text-shadow:0 0 3px rgba(0,0,0,.9);';
+                grid.appendChild(lx);
+            }
+            for (var r = 1; r < gridRows; r++) {
+                var ly = document.createElement('div');
+                ly.textContent = (r/gridRows).toFixed(1);
+                ly.style.cssText = 'position:absolute;top:' + (r*100/gridRows) + '%;left:2px;transform:translateY(-50%);font-size:10px;color:white;text-shadow:0 0 3px rgba(0,0,0,.9);';
+                grid.appendChild(ly);
+            }
+        }
+
+        function updateMarker() {
+            var x = parseFloat(xField.value) || 0.5;
+            var y = parseFloat(yField.value) || 0.5;
+            var r = Math.max(0.01, parseFloat(rField.value) || 0.08);
+            marker.style.left = (x * 100) + '%';
+            marker.style.top = (y * 100) + '%';
+            // Radie-cirkel: storlek i pixlar relativt bildens bredd (normaliserad 0-1 → % av bredd)
+            var rect = img.getBoundingClientRect();
+            var diameterPx = r * 2 * rect.width;
+            circle.style.left = (x * 100) + '%';
+            circle.style.top = (y * 100) + '%';
+            circle.style.width = diameterPx + 'px';
+            circle.style.height = diameterPx + 'px';
+        }
+
+        if (img.getAttribute('src')) {
+            img.addEventListener('load', function() { buildGrid(); updateMarker(); });
+            if (img.complete) { buildGrid(); updateMarker(); }
+        }
+
         img.addEventListener('click', function(e) {
+            var rect = img.getBoundingClientRect();
+            var x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+            var y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+            xField.value = x.toFixed(3);
+            yField.value = y.toFixed(3);
+            updateMarker();
+        });
+
+        img.addEventListener('mousemove', function(e) {
             var rect = img.getBoundingClientRect();
             var x = (e.clientX - rect.left) / rect.width;
             var y = (e.clientY - rect.top) / rect.height;
-            document.querySelector('input[name=hotspot_x]').value = x.toFixed(3);
-            document.querySelector('input[name=hotspot_y]').value = y.toFixed(3);
-            marker.style.left = (x*100) + '%';
-            marker.style.top = (y*100) + '%';
+            hoverLabel.textContent = 'x=' + x.toFixed(2) + ', y=' + y.toFixed(2);
+            hoverLabel.style.display = 'block';
+            hoverLabel.style.left = (x * 100) + '%';
+            hoverLabel.style.top = (y * 100) + '%';
         });
+        img.addEventListener('mouseleave', function() { hoverLabel.style.display = 'none'; });
+
+        xField.addEventListener('input', updateMarker);
+        yField.addEventListener('input', updateMarker);
+        rField.addEventListener('input', updateMarker);
+        gridToggle.addEventListener('change', buildGrid);
+
+        // Exponera API så upload-hanteraren i edit_quiz kan trigga refresh
+        window.__hotspotSetImage = function(filename) {
+            var input = document.getElementById('hotspot_image_input');
+            if (input) input.value = filename;
+            img.src = '../upload/' + filename;
+            preview.style.removeProperty('display');
+        };
     })();
     </script>
-    <?php endif; ?>
     <?php
     return ob_get_clean();
 }
