@@ -271,7 +271,10 @@ function renderQuizQuestion(array $q, $idx = 1) {
             echo '<div class="text-danger">Okänd frågetyp: ' . htmlspecialchars($type) . '</div>';
     }
 
-    echo '<div class="quiz-feedback mt-2" data-feedback></div>';
+    echo '<div class="mt-3 d-flex align-items-center gap-2">';
+    echo '  <button type="button" class="btn btn-primary btn-sm quiz-answer-btn" data-question-id="' . $id . '">Svara</button>';
+    echo '  <div class="quiz-feedback" data-feedback></div>';
+    echo '</div>';
     echo '</div>';
     return ob_get_clean();
 }

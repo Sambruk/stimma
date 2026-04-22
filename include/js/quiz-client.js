@@ -163,7 +163,6 @@
       var label = inp.closest('.image-choice-option');
       if (!label) return;
       if (inp.type === 'radio') {
-        // Avmarkera alla med samma namn
         document.querySelectorAll('input[name="' + inp.name + '"]').forEach(function(other) {
           var otherLabel = other.closest('.image-choice-option');
           if (otherLabel) otherLabel.classList.remove('border-primary', 'bg-primary', 'bg-opacity-10');
@@ -173,5 +172,99 @@
       else label.classList.remove('border-primary', 'bg-primary', 'bg-opacity-10');
     });
   });
+
+  // ============ PER-QUESTION ANSWER SUBMISSION ============
+  // Varje fråga har en "Svara"-knapp. Klick → AJAX-POST med frågans
+  // formulärfält → server bedömer just den frågan → visar feedback.
+  // När alla frågor är rätt redirectas användaren (eller markeras klar).
+  document.addEventListener('click', function(ev) {
+    var btn = ev.target.closest('.quiz-answer-btn');
+    if (!btn) return;
+    ev.preventDefault();
+
+    var questionEl = btn.closest('.quiz-question');
+    if (!questionEl) return;
+    var qid = btn.getAttribute('data-question-id');
+    var csrfInput = document.getElementById('quizCsrfToken');
+    var csrfToken = csrfInput ? csrfInput.value : '';
+
+    var fd = new FormData();
+    fd.append('csrf_token', csrfToken);
+    fd.append('answer_question_id', qid);
+
+    // Samla alla form-kontroller inom frågan. Vi stödjer text-inputs,
+    // radio/checkbox (inkl. namn-arrayer som qN_answer[]) och hidden-fält.
+    questionEl.querySelectorAll('input, select, textarea').forEach(function(el) {
+      if (!el.name) return;
+      if ((el.type === 'radio' || el.type === 'checkbox') && !el.checked) return;
+      fd.append(el.name, el.value);
+    });
+
+    var feedbackEl = questionEl.querySelector('[data-feedback]');
+    btn.disabled = true;
+    var originalBtnHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    if (feedbackEl) feedbackEl.innerHTML = '';
+
+    fetch(window.location.pathname + window.location.search, {
+      method: 'POST',
+      body: fd,
+      headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': csrfToken }
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.success) {
+          showFeedback(feedbackEl, false, data.message || 'Något gick fel.');
+          btn.disabled = false;
+          btn.innerHTML = originalBtnHtml;
+          return;
+        }
+
+        if (data.correct) {
+          showFeedback(feedbackEl, true, 'Rätt!');
+          // Lås inputs för denna fråga
+          questionEl.querySelectorAll('input, select, textarea, button').forEach(function(el) {
+            if (!el.classList.contains('quiz-answer-btn')) el.disabled = true;
+          });
+          questionEl.classList.add('border-success');
+          btn.classList.remove('btn-primary');
+          btn.classList.add('btn-success');
+          btn.innerHTML = '<i class="bi bi-check-lg"></i> Rätt';
+
+          // Uppdatera progress-indikator
+          var progressEl = document.getElementById('quizProgress');
+          if (progressEl && typeof data.answered_ok === 'number') {
+            progressEl.textContent = data.answered_ok + ' av ' + data.total + ' frågor klara.';
+          }
+
+          // Alla frågor rätt?
+          if (data.all_done) {
+            if (progressEl) progressEl.innerHTML = '<div class="alert alert-success mt-2"><i class="bi bi-trophy-fill me-1"></i>Alla frågor klarade — lektionen markeras som avklarad!</div>';
+            // Redirect till nästa lektion om det finns
+            setTimeout(function() {
+              if (data.nextLesson && data.nextLesson.available) {
+                window.location.href = 'lesson.php?id=' + data.nextLesson.id;
+              } else {
+                window.location.reload();
+              }
+            }, 1500);
+          }
+        } else {
+          showFeedback(feedbackEl, false, 'Fel svar. Försök igen.');
+          btn.disabled = false;
+          btn.innerHTML = originalBtnHtml;
+        }
+      })
+      .catch(function() {
+        showFeedback(feedbackEl, false, 'Nätverksfel. Försök igen.');
+        btn.disabled = false;
+        btn.innerHTML = originalBtnHtml;
+      });
+  });
+
+  function showFeedback(el, correct, msg) {
+    if (!el) return;
+    el.innerHTML = '<span class="badge bg-' + (correct ? 'success' : 'danger') + '"><i class="bi bi-' + (correct ? 'check-circle' : 'x-circle') + ' me-1"></i>' + msg + '</span>';
+  }
 
 })();

@@ -179,6 +179,113 @@ function hasQuizAnswer($post) {
     return false;
 }
 
+// Handle PER-QUESTION AJAX answer (ny UX: varje fråga bedöms individuellt)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['answer_question_id'])) {
+    header('Content-Type: application/json');
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        echo json_encode(['success' => false, 'message' => 'Ogiltig säkerhetstoken.']);
+        exit;
+    }
+    $qid = (int)$_POST['answer_question_id'];
+    // Hämta frågan + säkerställ att den tillhör DENNA lektion
+    $questionRow = queryOne(
+        "SELECT id, lesson_id, sort_order, question_type, question_text, question_image, quiz_data, points
+         FROM " . DB_DATABASE . ".quiz_questions WHERE id = ? AND lesson_id = ?",
+        [$qid, $lessonId]
+    );
+    if (!$questionRow) {
+        echo json_encode(['success' => false, 'message' => 'Frågan finns inte i denna lektion.']);
+        exit;
+    }
+    $questionRow['data'] = !empty($questionRow['quiz_data']) ? (json_decode($questionRow['quiz_data'], true) ?: []) : [];
+    $g = gradeQuizQuestion($questionRow, $_POST);
+
+    // I förhandsgranskningsläge: bara returnera resultat, spara inget
+    if ($isPreviewMode) {
+        echo json_encode(['success' => true, 'correct' => $g['correct'], 'preview' => true]);
+        exit;
+    }
+
+    // Håll reda på vilka frågor användaren svarat rätt på i denna lektion
+    if (!isset($_SESSION['lesson_quiz_state'][$lessonId])) {
+        $_SESSION['lesson_quiz_state'][$lessonId] = [];
+    }
+    if ($g['correct']) {
+        $_SESSION['lesson_quiz_state'][$lessonId][$qid] = true;
+    }
+
+    // Räkna ut om alla frågor är rätt
+    $allQuestions = query(
+        "SELECT id FROM " . DB_DATABASE . ".quiz_questions WHERE lesson_id = ?",
+        [$lessonId]
+    );
+    $totalQ = count($allQuestions);
+    $answeredOk = count($_SESSION['lesson_quiz_state'][$lessonId] ?? []);
+    $allDone = $totalQ > 0 && $answeredOk >= $totalQ;
+
+    $result = [
+        'success' => true,
+        'correct' => $g['correct'],
+        'answered_ok' => $answeredOk,
+        'total' => $totalQ,
+        'all_done' => $allDone,
+    ];
+
+    // Om alla frågor är klara: markera lektion som avklarad + lås upp nästa sekventiellt
+    if ($allDone) {
+        $allPreviousCompleted = true;
+        $previousLessons = query(
+            "SELECT id FROM " . DB_DATABASE . ".lessons
+             WHERE course_id = ?
+               AND sort_order < (SELECT sort_order FROM " . DB_DATABASE . ".lessons WHERE id = ?)",
+            [$lesson['course_id'], $lessonId]
+        );
+        foreach ($previousLessons as $pl) {
+            $prev = queryOne("SELECT status FROM " . DB_DATABASE . ".progress WHERE user_id = ? AND lesson_id = ?", [$userId, $pl['id']]);
+            if (!$prev || $prev['status'] !== 'completed') { $allPreviousCompleted = false; break; }
+        }
+
+        if ($allPreviousCompleted) {
+            if (!$progress) {
+                execute(
+                    "INSERT INTO " . DB_DATABASE . ".progress (user_id, lesson_id, status, score) VALUES (?, ?, 'completed', 1)",
+                    [$userId, $lessonId]
+                );
+            } else {
+                execute(
+                    "UPDATE " . DB_DATABASE . ".progress SET status = 'completed', score = 1 WHERE user_id = ? AND lesson_id = ?",
+                    [$userId, $lessonId]
+                );
+            }
+            if (!empty($lesson['sequential_mode'])) {
+                unlockNextSequentialLesson($userId, $lesson['course_id'], $lessonId);
+            }
+
+            // Hitta nästa lektion
+            $nextRow = queryOne(
+                "SELECT id, title FROM " . DB_DATABASE . ".lessons
+                 WHERE course_id = ? AND sort_order > ? AND status = 'active'
+                 ORDER BY sort_order ASC LIMIT 1",
+                [$lesson['course_id'], $lesson['sort_order']]
+            );
+            if ($nextRow) {
+                $available = true;
+                if (!empty($lesson['sequential_mode'])) {
+                    $available = isLessonAvailableForUser($userId, $nextRow['id'], $lesson['course_id']);
+                }
+                $result['nextLesson'] = ['id' => (int)$nextRow['id'], 'title' => $nextRow['title'], 'available' => $available];
+            }
+            // Nollställ session-state för lektionen så omgång kan göras om senare om admin återställer
+            unset($_SESSION['lesson_quiz_state'][$lessonId]);
+        } else {
+            $result['message'] = 'Du måste klara tidigare lektioner först.';
+        }
+    }
+
+    echo json_encode($result);
+    exit;
+}
+
 // Handle preview mode quiz submission (no saving)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasQuizAnswer($_POST) && $isPreviewMode) {
     // Validate CSRF token for security
@@ -639,13 +746,13 @@ function convertYoutubeUrl($url) {
                             </div>
                             <?php unset($_SESSION['flash_message'], $_SESSION['flash_type']); endif; ?>
 
-                            <form method="post" class="quiz-form" id="quizForm">
-                                <input type="hidden" name="csrf_token" value="<?= generateCsrfToken() ?>">
+                            <form method="post" class="quiz-form" id="quizForm" onsubmit="return false;">
+                                <input type="hidden" name="csrf_token" id="quizCsrfToken" value="<?= generateCsrfToken() ?>">
                                 <?php foreach ($lessonQuestions as $idx => $q): ?>
                                     <?= renderQuizQuestion($q, $idx + 1) ?>
                                 <?php endforeach; ?>
-                                <button type="submit" class="btn btn-primary">Skicka svar</button>
                             </form>
+                            <div id="quizProgress" class="mt-3 small text-muted"></div>
                         <?php else: ?>
                             <p class="text-muted mb-0">Inget quiz tillgängligt för denna lektion.</p>
                         <?php endif; ?>
