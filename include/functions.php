@@ -171,6 +171,56 @@ function validateCsrfToken($token) {
 }
 
 /**
+ * Hämta organisationsikonen som ska visas i top-nav för en användare.
+ *
+ * Regler:
+ * - Vanlig användare (access_mode='domain'): ikonen för organisationen som
+ *   användarens e-postdomän tillhör.
+ * - Publik deltagare (access_mode='public_only'): ikonen för den
+ *   organisation som publicerat den (första) kurs hen är registrerad på.
+ * - Ingen match: null.
+ *
+ * @param int $userId
+ * @return array{url:string,name:string}|null URL till ikon + orgnamn för alt-text,
+ *   eller null om ingen kan bestämmas.
+ */
+function getHeaderOrganizationIcon($userId) {
+    $user = queryOne(
+        "SELECT email, access_mode FROM " . DB_DATABASE . ".users WHERE id = ?",
+        [(int)$userId]
+    );
+    if (!$user) return null;
+
+    $org = null;
+
+    if (($user['access_mode'] ?? 'domain') === 'public_only') {
+        // Slå upp första publika kurs hen har access till → organization_id
+        $row = queryOne(
+            "SELECT pca.organization_id, o.name, o.icon_url
+             FROM " . DB_DATABASE . ".public_course_access pca
+             LEFT JOIN " . DB_DATABASE . ".organizations o ON o.id = pca.organization_id
+             WHERE pca.user_id = ? AND pca.organization_id IS NOT NULL
+             ORDER BY pca.registered_at DESC LIMIT 1",
+            [(int)$userId]
+        );
+        if ($row && !empty($row['icon_url'])) {
+            return ['url' => $row['icon_url'], 'name' => $row['name'] ?? ''];
+        }
+        return null;
+    }
+
+    // Domain-användare: hitta via organization_domains
+    $domain = getUserDomain($user['email']);
+    if ($domain !== '') {
+        $org = getOrganizationByDomain($domain);
+    }
+    if ($org && !empty($org['icon_url'])) {
+        return ['url' => $org['icon_url'], 'name' => $org['name'] ?? ''];
+    }
+    return null;
+}
+
+/**
  * Bygg en visningsetikett för kursens ursprungsorganisation.
  *
  * Returnerar ett namn + domän om domänen är grupperad i en organisation, annars

@@ -117,6 +117,16 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <div class="sidebar d-flex flex-column h-100">
         <div class="px-3 mb-4 text-center">
             <h3 class="text-white"><img src="../images/stimma-logo.png" alt="Stimma" class="me-2" height="75"></h3>
+            <?php
+            $headerOrgIconAdmin = getHeaderOrganizationIcon($_SESSION['user_id']);
+            if ($headerOrgIconAdmin):
+            ?>
+            <div class="mt-2 bg-white rounded px-2 py-2 d-inline-flex align-items-center" title="<?= htmlspecialchars($headerOrgIconAdmin['name']) ?>">
+                <img src="../upload/org_icons/<?= htmlspecialchars($headerOrgIconAdmin['url']) ?>"
+                     alt="<?= htmlspecialchars($headerOrgIconAdmin['name']) ?>"
+                     style="max-height: 50px; max-width: 140px; object-fit: contain;">
+            </div>
+            <?php endif; ?>
         </div>
         <div class="d-flex flex-column h-100">
             <ul class="nav flex-column">
@@ -168,6 +178,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <li class="nav-item">
                     <a href="users.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'users.php' ? 'active' : '' ?>">
                         <i class="bi bi-people me-2"></i> Användare
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="organization_icon.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'organization_icon.php' ? 'active' : '' ?>">
+                        <i class="bi bi-image me-2"></i> Organisationsikon
                     </a>
                 </li>
                 <li class="nav-item">

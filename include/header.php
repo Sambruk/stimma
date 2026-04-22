@@ -231,12 +231,23 @@
                         </a>
                     <?php endif; ?>
                     <!-- Logout button -->
-                    <a href="logout.php" 
-                       class="btn btn-link p-1 d-inline-flex align-items-center justify-content-center" 
+                    <a href="logout.php"
+                       class="btn btn-link p-1 d-inline-flex align-items-center justify-content-center"
                        title="Logga ut"
                        aria-label="Log out">
                         <i class="bi bi-box-arrow-right text-dark" aria-hidden="true"></i>
                     </a>
+                    <!-- Organisationsikon (längst till höger) -->
+                    <?php
+                    $headerOrgIcon = getHeaderOrganizationIcon($_SESSION['user_id']);
+                    if ($headerOrgIcon):
+                    ?>
+                    <span class="ms-3 d-inline-flex align-items-center" title="<?= htmlspecialchars($headerOrgIcon['name']) ?>">
+                        <img src="upload/org_icons/<?= htmlspecialchars($headerOrgIcon['url']) ?>"
+                             alt="<?= htmlspecialchars($headerOrgIcon['name']) ?>"
+                             style="max-height: 60px; max-width: 120px; object-fit: contain;">
+                    </span>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
