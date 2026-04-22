@@ -345,8 +345,13 @@ require_once 'include/header.php';
 
                 <div class="mb-3">
                     <label class="form-label">Frågebild (valfri)</label>
-                    <input type="text" class="form-control" name="question_image" value="<?= htmlspecialchars($editQ['question_image'] ?? '') ?>" placeholder="filnamn.jpg i upload/">
-                    <div class="form-text">Ladda upp via <a href="upload_image.php" target="_blank">upload_image</a>. Visas ovanför frågan för alla typer utom hotspot/image_choice.</div>
+                    <div class="input-group">
+                        <input type="text" class="form-control generic-image-input" id="question_image_input" name="question_image" value="<?= htmlspecialchars($editQ['question_image'] ?? '') ?>" placeholder="filnamn.jpg">
+                        <button type="button" class="btn btn-outline-secondary btn-upload-generic" data-target="question_image_input" title="Ladda upp bild">
+                            <i class="bi bi-cloud-upload"></i> Ladda upp
+                        </button>
+                    </div>
+                    <div class="form-text">Visas ovanför frågan för alla typer utom hotspot/image_choice.</div>
                 </div>
 
                 <button type="submit" class="btn btn-success"><i class="bi bi-save me-1"></i>Spara fråga</button>
@@ -459,15 +464,11 @@ require_once 'include/header.php';
             c.appendChild(d);
         });
 
-        // Image-choice: ladda upp bild inline via AJAX. Använder den globala
-        // CSRF_TOKEN-konstanten från admin/include/header.php. Skickar tokenet
-        // både som multipart-fält OCH X-CSRF-Token-header för robusthet.
+        // Gemensam AJAX-uppladdare. Skickar CSRF både i body och X-CSRF-Token-
+        // header. onFilled(filename) kallas när uppladningen lyckats.
         var csrfToken = (typeof CSRF_TOKEN !== 'undefined') ? CSRF_TOKEN : <?= json_encode($_SESSION['csrf_token']) ?>;
-        document.addEventListener('click', function(ev) {
-            var btn = ev.target.closest('.btn-upload-to-row');
-            if (!btn) return;
-            var row = btn.closest('.img-row');
-            if (!row) return;
+        function triggerUpload(btn, onFilled) {
+            var originalHtml = btn.innerHTML;
             var fileInput = document.createElement('input');
             fileInput.type = 'file';
             fileInput.accept = 'image/jpeg,image/png,image/gif';
@@ -489,8 +490,7 @@ require_once 'include/header.php';
                     .then(r => r.json())
                     .then(data => {
                         if (data.success && data.url) {
-                            var inp = row.querySelector('.img-filename-input');
-                            if (inp) inp.value = data.url;
+                            onFilled(data.url);
                         } else {
                             var msg = data.error || 'okänt fel';
                             if (data.debug) msg += '\n(debug: ' + JSON.stringify(data.debug) + ')';
@@ -500,11 +500,40 @@ require_once 'include/header.php';
                     .catch(() => alert('Nätverksfel vid uppladdning.'))
                     .finally(() => {
                         btn.disabled = false;
-                        btn.innerHTML = '<i class="bi bi-cloud-upload"></i>';
+                        btn.innerHTML = originalHtml;
                         fileInput.remove();
                     });
             });
             fileInput.click();
+        }
+
+        // Image-choice: en uppladdningsknapp per bildrad — skriv till img-filename-input
+        document.addEventListener('click', function(ev) {
+            var btn = ev.target.closest('.btn-upload-to-row');
+            if (!btn) return;
+            var row = btn.closest('.img-row');
+            if (!row) return;
+            triggerUpload(btn, function(url) {
+                var inp = row.querySelector('.img-filename-input');
+                if (inp) inp.value = url;
+            });
+        });
+
+        // Generic uppladdning: knappar med data-target="<input-id>"
+        document.addEventListener('click', function(ev) {
+            var btn = ev.target.closest('.btn-upload-generic');
+            if (!btn) return;
+            var targetId = btn.dataset.target;
+            if (!targetId) return;
+            var inp = document.getElementById(targetId);
+            if (!inp) return;
+            triggerUpload(btn, function(url) {
+                inp.value = url;
+                // Om hotspot-förhandsvisningen finns: ladda om sidan så bild visas
+                if (targetId === 'hotspot_image_input') {
+                    setTimeout(function() { location.reload(); }, 300);
+                }
+            });
         });
     })();
     </script>
@@ -747,9 +776,13 @@ function renderHotspotFields($data) {
     ob_start();
     ?>
     <div class="mb-3">
-        <label class="form-label">Bildfil (i upload/)</label>
-        <input type="text" class="form-control" name="hotspot_image" value="<?= htmlspecialchars($img) ?>" placeholder="filnamn.jpg" id="hotspot_image_input">
-        <div class="form-text">Ladda upp bilden via <a href="upload_image.php" target="_blank">upload_image</a> först.</div>
+        <label class="form-label">Bildfil</label>
+        <div class="input-group">
+            <input type="text" class="form-control generic-image-input" name="hotspot_image" value="<?= htmlspecialchars($img) ?>" placeholder="filnamn.jpg" id="hotspot_image_input">
+            <button type="button" class="btn btn-outline-secondary btn-upload-generic" data-target="hotspot_image_input" title="Ladda upp bild">
+                <i class="bi bi-cloud-upload"></i> Ladda upp
+            </button>
+        </div>
     </div>
     <div class="row g-3">
         <div class="col-md-4"><label class="form-label">Mål X (0–1)</label><input type="number" step="0.01" min="0" max="1" class="form-control" name="hotspot_x" value="<?= htmlspecialchars((string)$t['x']) ?>"></div>
