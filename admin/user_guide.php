@@ -84,6 +84,12 @@ require_once 'include/header.php';
                         </a>
                     </div>
                     <div class="col-md-3 col-6">
+                        <a href="#publika-kurser" class="quick-nav-card" style="background: linear-gradient(135deg, #38d9a9 0%, #20c997 100%); color: white;">
+                            <div class="icon"><i class="bi bi-globe"></i></div>
+                            <div class="label">Publika kurser</div>
+                        </a>
+                    </div>
+                    <div class="col-md-3 col-6">
                         <a href="#pub-avtal" class="quick-nav-card pub">
                             <div class="icon"><i class="bi bi-file-earmark-lock-fill"></i></div>
                             <div class="label">PUB-avtal</div>
@@ -93,6 +99,12 @@ require_once 'include/header.php';
                         <a href="#behorigheter" class="quick-nav-card permissions">
                             <div class="icon"><i class="bi bi-key-fill"></i></div>
                             <div class="label">Behörigheter</div>
+                        </a>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <a href="#api" class="quick-nav-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                            <div class="icon"><i class="bi bi-cloud-arrow-up"></i></div>
+                            <div class="label">API / Synk</div>
                         </a>
                     </div>
                 </div>
@@ -250,6 +262,80 @@ require_once 'include/header.php';
                                 <div class="alert alert-warning mb-0 mt-2">
                                     <i class="bi bi-shield-exclamation me-2"></i>
                                     <small><strong>Säkerhetstips:</strong> Använd inte "Kom ihåg mig" på delade eller offentliga datorer.</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Inloggningssekvens-illustration -->
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="card border-0 bg-light">
+                            <div class="card-body">
+                                <h5 class="mb-3"><i class="bi bi-diagram-2 me-2 text-primary"></i>Så fungerar inloggningssekvensen</h5>
+                                <p class="text-muted small">En visuell översikt av hur den lösenordsfria inloggningen fungerar tekniskt, från begäran till färdig session:</p>
+                                <div class="text-center py-3" style="overflow-x: auto;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 440" style="max-width: 100%; height: auto; min-width: 720px;" role="img" aria-label="Inloggningsflöde">
+                                        <!-- Swimlanes -->
+                                        <line x1="140" y1="40" x2="140" y2="400" stroke="#dee2e6" stroke-width="2" stroke-dasharray="4,4"/>
+                                        <line x1="380" y1="40" x2="380" y2="400" stroke="#dee2e6" stroke-width="2" stroke-dasharray="4,4"/>
+                                        <line x1="620" y1="40" x2="620" y2="400" stroke="#dee2e6" stroke-width="2" stroke-dasharray="4,4"/>
+                                        <line x1="820" y1="40" x2="820" y2="400" stroke="#dee2e6" stroke-width="2" stroke-dasharray="4,4"/>
+                                        <!-- Lane headers -->
+                                        <rect x="40" y="15" width="200" height="35" rx="6" fill="#0d6efd"/>
+                                        <text x="140" y="37" text-anchor="middle" fill="white" font-size="13" font-weight="bold">Du (webbläsare)</text>
+                                        <rect x="280" y="15" width="200" height="35" rx="6" fill="#198754"/>
+                                        <text x="380" y="37" text-anchor="middle" fill="white" font-size="13" font-weight="bold">Stimma-server</text>
+                                        <rect x="520" y="15" width="200" height="35" rx="6" fill="#6f42c1"/>
+                                        <text x="620" y="37" text-anchor="middle" fill="white" font-size="13" font-weight="bold">E-postserver</text>
+                                        <rect x="720" y="15" width="200" height="35" rx="6" fill="#fd7e14"/>
+                                        <text x="820" y="37" text-anchor="middle" fill="white" font-size="13" font-weight="bold">Din inkorg</text>
+                                        <!-- Step 1: fylla i e-post + POST -->
+                                        <text x="30" y="75" font-size="11" fill="#6c757d">1</text>
+                                        <path d="M 140 80 L 380 80" stroke="#0d6efd" stroke-width="2" marker-end="url(#arr)"/>
+                                        <text x="260" y="72" text-anchor="middle" font-size="12" fill="#0d6efd">Fyller i e-post + klickar "Skicka"</text>
+                                        <text x="260" y="95" text-anchor="middle" font-size="10" fill="#6c757d" font-style="italic">POST /index.php</text>
+                                        <!-- Step 2: generera token + skriv till DB -->
+                                        <text x="30" y="125" font-size="11" fill="#6c757d">2</text>
+                                        <rect x="290" y="110" width="180" height="40" rx="4" fill="#d1e7dd" stroke="#198754"/>
+                                        <text x="380" y="128" text-anchor="middle" font-size="11" fill="#0f5132">Genererar engångs-token</text>
+                                        <text x="380" y="143" text-anchor="middle" font-size="10" fill="#0f5132">Sparar i databasen (15 min)</text>
+                                        <!-- Step 3: server → mail -->
+                                        <text x="30" y="175" font-size="11" fill="#6c757d">3</text>
+                                        <path d="M 380 180 L 620 180" stroke="#198754" stroke-width="2" marker-end="url(#arr)"/>
+                                        <text x="500" y="172" text-anchor="middle" font-size="12" fill="#198754">Skickar mail via SMTP</text>
+                                        <text x="500" y="195" text-anchor="middle" font-size="10" fill="#6c757d" font-style="italic">Länk: /verify.php?token=…</text>
+                                        <!-- Step 4: mail → inkorg -->
+                                        <text x="30" y="225" font-size="11" fill="#6c757d">4</text>
+                                        <path d="M 620 230 L 820 230" stroke="#6f42c1" stroke-width="2" marker-end="url(#arr)"/>
+                                        <text x="720" y="222" text-anchor="middle" font-size="12" fill="#6f42c1">Levererar mail</text>
+                                        <!-- Step 5: klick → server -->
+                                        <text x="30" y="275" font-size="11" fill="#6c757d">5</text>
+                                        <path d="M 820 280 Q 600 260 380 280" stroke="#fd7e14" stroke-width="2" fill="none" marker-end="url(#arr)"/>
+                                        <text x="600" y="255" text-anchor="middle" font-size="12" fill="#fd7e14">Klicka på länken i mailet</text>
+                                        <text x="600" y="295" text-anchor="middle" font-size="10" fill="#6c757d" font-style="italic">GET /verify.php?token=…</text>
+                                        <!-- Step 6: validera + skapa session -->
+                                        <text x="30" y="325" font-size="11" fill="#6c757d">6</text>
+                                        <rect x="290" y="310" width="180" height="40" rx="4" fill="#d1e7dd" stroke="#198754"/>
+                                        <text x="380" y="328" text-anchor="middle" font-size="11" fill="#0f5132">Validerar token (ej utgången)</text>
+                                        <text x="380" y="343" text-anchor="middle" font-size="10" fill="#0f5132">Skapar session</text>
+                                        <!-- Step 7: redirect → dashboard -->
+                                        <text x="30" y="375" font-size="11" fill="#6c757d">7</text>
+                                        <path d="M 380 380 L 140 380" stroke="#0d6efd" stroke-width="2" marker-end="url(#arr)"/>
+                                        <text x="260" y="372" text-anchor="middle" font-size="12" fill="#0d6efd">Redirect + session-cookie</text>
+                                        <text x="260" y="395" text-anchor="middle" font-size="10" fill="#6c757d" font-style="italic">Du är inloggad</text>
+                                        <!-- Arrow head defs -->
+                                        <defs>
+                                            <marker id="arr" viewBox="0 0 10 10" refX="10" refY="5" markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+                                                <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+                                            </marker>
+                                        </defs>
+                                    </svg>
+                                </div>
+                                <div class="small text-muted mt-2">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Samma flöde används för publik kursregistrering — då bär magic-länken även med sig en kurs-koppling så att du automatiskt skrivs in i kursen efter inloggning.
                                 </div>
                             </div>
                         </div>
@@ -678,24 +764,151 @@ require_once 'include/header.php';
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-body p-4">
                 <h5><i class="bi bi-skip-forward me-2 text-primary"></i>Stegvisa kurser</h5>
-                <p class="text-muted">Kurser kan konfigureras med stegvis leverans, där användare får tillgång till en lektion i taget istället för alla på en gång.</p>
+                <p class="text-muted">Stegvisa kurser släpper en lektion i taget med konfigurerbart tidsintervall istället för att göra allt tillgängligt på en gång. Bra för lärande över tid där du vill undvika att deltagare plöjer igenom allt på en kväll.</p>
 
                 <div class="row">
                     <div class="col-lg-6">
-                        <h6 class="mb-3">Inställningar (under Redigera kurs)</h6>
+                        <h6 class="mb-3">Inställningar (under Redigera kurs → Stegvis-kortet)</h6>
                         <ul class="config-list">
-                            <li><i class="bi bi-toggle-on"></i> <strong>Stegvis leverans</strong> – aktivera via checkboxen i kursredigeraren</li>
-                            <li><i class="bi bi-calendar3"></i> <strong>Intervall</strong> – antal dagar mellan varje lektion (t.ex. 3 dagar)</li>
-                            <li><i class="bi bi-bell"></i> <strong>Automatiska påminnelser</strong> – e-post skickas automatiskt när en ny lektion blir tillgänglig</li>
+                            <li><i class="bi bi-toggle-on"></i> <strong>Stegvisa lektioner</strong> – aktivera via switchen</li>
+                            <li><i class="bi bi-calendar3"></i> <strong>Intervall</strong> – antal dagar mellan varje upplåsning (vanligen 2–7)</li>
+                            <li><i class="bi bi-bell"></i> <strong>Påminnelse efter X dagar</strong> – om deltagaren inte klarat lektionen inom så många dagar efter upplåsning skickas en påminnelse</li>
+                            <li><i class="bi bi-envelope-paper"></i> <strong>E-postmallar</strong> – två fritt redigerbara mallar: "Ny lektion tillgänglig" och "Påminnelse". Variabler: <code>{{user_name}}</code>, <code>{{lesson_title}}</code>, <code>{{course_title}}</code>, <code>{{course_url}}</code>, <code>{{abandon_url}}</code></li>
                         </ul>
                     </div>
                     <div class="col-lg-6">
-                        <h6 class="mb-3">Användarens upplevelse</h6>
+                        <h6 class="mb-3">Deltagarens upplevelse</h6>
                         <ul class="config-list">
-                            <li><i class="bi bi-lock"></i> Låsikon visas på lektioner som ännu inte är tillgängliga</li>
-                            <li><i class="bi bi-clock"></i> Klockikon och datum visas för nästa planerade lektion</li>
-                            <li><i class="bi bi-envelope"></i> E-post skickas automatiskt när en ny lektion låses upp</li>
+                            <li><i class="bi bi-lock"></i> Låsta lektioner visas med låsikon och nästa datum</li>
+                            <li><i class="bi bi-clock"></i> Tillgängliga lektioner visas med klockikon</li>
+                            <li><i class="bi bi-check-circle"></i> Avklarade lektioner får grön bock</li>
+                            <li><i class="bi bi-envelope"></i> Mail skickas när nästa lektion låses upp</li>
                         </ul>
+                    </div>
+                </div>
+
+                <h6 class="mb-2 mt-4">Inskrivningstyp — två lägen</h6>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="card border-info h-100">
+                            <div class="card-body">
+                                <h6 class="text-info"><i class="bi bi-people-fill me-2"></i>Gemensam start (bulk_start)</h6>
+                                <p class="small mb-2">Alla deltagare startar kursen <strong>samma datum</strong>. Under kursredigering väljer du ett <code>startdatum</code>, och på det datumet låses första lektionen upp för alla inskrivna samtidigt.</p>
+                                <p class="small text-muted mb-0"><strong>När välja detta?</strong> Traditionella kohort-utbildningar, "alla gör GDPR-kursen i september".</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border-warning h-100">
+                            <div class="card-body">
+                                <h6 class="text-warning"><i class="bi bi-calendar-event me-2"></i>Dynamiskt startdatum (rolling)</h6>
+                                <p class="small mb-2">Varje deltagare har <strong>sitt eget startdatum</strong>. Admin skriver in användare individuellt (eller per org-tagg) och väljer när just de ska börja. Intervallet räknas från deras personliga startdatum.</p>
+                                <p class="small text-muted mb-0"><strong>När välja detta?</strong> Onboarding av nya medarbetare, när löpande registrering är normalfallet.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tip-box info mt-3">
+                    <div class="tip-icon"><i class="bi bi-info-circle-fill"></i></div>
+                    <div class="tip-content">
+                        <strong>Inskrivning för dynamiskt startdatum</strong>
+                        <p class="mb-0 mt-1">Under <strong>Kursstatistik</strong> → välj kursen → knappen <strong>"Skriv in användare"</strong>. Du kan skriva in enskilda användare eller en hel org-tagg samtidigt, och välja startdatum per inskrivning.</p>
+                    </div>
+                </div>
+
+                <div class="tip-box success mt-3">
+                    <div class="tip-icon"><i class="bi bi-check-circle-fill"></i></div>
+                    <div class="tip-content">
+                        <strong>Badges i kurslistan</strong>
+                        <p class="mb-0 mt-1">I Admin → Kurser visas en gul <span class="badge bg-warning text-dark">Stegvis</span>-badge på stegvisa kurser, och en grå <span class="badge bg-secondary">Dynamiskt startdatum</span>-badge när kursen använder rolling enrollment.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Kopiera kurser -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-copy me-2 text-info"></i>Kopiera kurser mellan organisationer</h5>
+                <p class="text-muted">Under <strong>Admin → Kopiera kurs</strong> kan du se kurser skapade av andra organisationer och klona dem till din egen för anpassning. Perfekt för att dela utbildningsmaterial mellan kommuner.</p>
+
+                <div class="row">
+                    <div class="col-lg-6">
+                        <h6 class="mb-3">Så fungerar det</h6>
+                        <ol class="small">
+                            <li>Bläddra bland tillgängliga kurser grupperade per organisation</li>
+                            <li>Filtrera på domän och/eller sök på kurstitel</li>
+                            <li>Klicka <strong>"Kopiera"</strong> bredvid den kurs du vill ha</li>
+                            <li>En kopia skapas i din organisation med <strong>"(kopia)"</strong> i titeln och status <strong>inaktiv</strong></li>
+                            <li>Anpassa innehåll, titel och publicera</li>
+                        </ol>
+                    </div>
+                    <div class="col-lg-6">
+                        <h6 class="mb-3">Vad kopieras?</h6>
+                        <ul class="small config-list">
+                            <li><i class="bi bi-check2"></i> Kurstitel, beskrivning, bild</li>
+                            <li><i class="bi bi-check2"></i> Alla lektioner (innehåll, quiz, AI-prompts, lokala videofiler)</li>
+                            <li><i class="bi bi-check2"></i> Kurstaggar och sekventialla inställningar</li>
+                            <li><i class="bi bi-x"></i> Inga användare, inga framsteg, inga diplom</li>
+                            <li><i class="bi bi-x"></i> Organisationstaggar (de är knutna till källorganisationen)</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="tip-box warning mt-3">
+                    <div class="tip-icon"><i class="bi bi-funnel-fill"></i></div>
+                    <div class="tip-content">
+                        <strong>Vad du ser i listan</strong>
+                        <ul class="mb-0 mt-1 small">
+                            <li><strong>Din egen organisation:</strong> alla kurser (även inaktiva/arbetsutkast)</li>
+                            <li><strong>Andra organisationer:</strong> endast <em>aktiva</em> kurser (inaktiva är inte klara för delning)</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="tip-box info mt-3">
+                    <div class="tip-icon"><i class="bi bi-diagram-3-fill"></i></div>
+                    <div class="tip-content">
+                        <strong>Permanent ursprungsetikett</strong>
+                        <p class="mb-0 mt-1">Varje kopia bär med sig en dold etikett om vilken organisation som <em>ursprungligen</em> skapade kursen. Etiketten syns som en blå <span class="badge bg-info text-dark">Ursprung: Organisation</span>-badge i adminvyerna (både kurslistan och redigeringsvyn). Den kan inte tas bort, och följer med genom alla led av kopiering.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Organisationstaggar -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-tags-fill me-2 text-success"></i>Organisationstaggar (org-taggar)</h5>
+                <p class="text-muted">Org-taggar låter dig gruppera användare efter avdelning, enhet eller roll och styra vilka kurser som syns för vilka grupper. Exempel: "BUN" (Barn &amp; Utbildning), "SOC" (Socialtjänsten), "LED" (Ledningsgruppen).</p>
+
+                <div class="row">
+                    <div class="col-lg-6">
+                        <h6 class="mb-3"><i class="bi bi-plus-circle me-2 text-primary"></i>Så skapas en org-tagg</h6>
+                        <ol class="small">
+                            <li>Gå till <strong>Admin → Användare</strong></li>
+                            <li>Markera en eller flera användare (kryssrutor i listan)</li>
+                            <li>Välj <strong>"Lägg till org-tagg"</strong> och skriv in taggens namn, t.ex. <code>BUN</code></li>
+                            <li>Taggen sparas per användare och registreras automatiskt i organisationens tagguppsättning</li>
+                        </ol>
+                        <p class="small text-muted mt-2">Samma tagg kan importeras via API:et — fältet <code>organization</code> i <code>sync_users</code>-endpointen blir en org-tagg på användaren.</p>
+                    </div>
+                    <div class="col-lg-6">
+                        <h6 class="mb-3"><i class="bi bi-funnel me-2 text-primary"></i>Så används taggarna</h6>
+                        <ul class="small config-list">
+                            <li><i class="bi bi-bullseye"></i> <strong>Koppla kurser till taggar:</strong> i kursredigeraren (Redigera kurs → Organisationstaggar) väljer du vilka taggar som får se kursen</li>
+                            <li><i class="bi bi-eye"></i> <strong>Filtrering:</strong> en användare ser en kurs endast om kursen har matchande tagg, eller inga taggar alls</li>
+                            <li><i class="bi bi-bar-chart"></i> <strong>Statistik:</strong> Kursstatistik drill-ner på tagg — se hur BUN-deltagarna ligger till jämfört med SOC</li>
+                            <li><i class="bi bi-people"></i> <strong>Massinskrivning:</strong> vid dynamiskt startdatum kan du skriva in hela "BUN"-taggen i en kurs på en gång</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="tip-box info mt-3">
+                    <div class="tip-icon"><i class="bi bi-lightbulb-fill"></i></div>
+                    <div class="tip-content">
+                        <strong>Utan taggar är allt öppet</strong>
+                        <p class="mb-0 mt-1">Kurser utan org-taggar visas för alla användare i organisationen. Börja därför enkelt — lägg taggar först när du har behov av att begränsa.</p>
                     </div>
                 </div>
             </div>
@@ -729,12 +942,255 @@ require_once 'include/header.php';
     </div>
 </div>
 
+<!-- Publika kurser Section -->
+<div class="row mb-5" id="publika-kurser">
+    <div class="col-12">
+        <div class="section-header">
+            <span class="section-icon" style="background: linear-gradient(135deg, #38d9a9 0%, #20c997 100%);"><i class="bi bi-globe"></i></span>
+            <h2>Publika kurser</h2>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <p class="lead">En publik kurs kan marknadsföras öppet via en unik registreringslänk. Vem som helst — oavsett e-postdomän — kan anmäla sig och få <strong>tillgång endast till den specifika kursen</strong>.</p>
+                <p class="text-muted">Perfekt för öppna medborgardialoger, utbildningar för externa partners, evenemang eller när ni vill erbjuda kurser utan att först behöva lägga till deltagarnas domän i systemet.</p>
+            </div>
+        </div>
+
+        <!-- Gör en kurs publik -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-1-circle-fill me-2 text-success"></i>Gör en kurs publik</h5>
+                <ol class="mt-3">
+                    <li>Gå till <strong>Admin → Kurser</strong> och redigera önskad kurs</li>
+                    <li>Leta upp kortet <strong>"Publik kurs"</strong> (direkt under Status-kortet)</li>
+                    <li>Slå på switchen <strong>"Låt vem som helst registrera sig via unik länk"</strong></li>
+                    <li>En unik URL genereras automatiskt — kopiera den med klippknappen</li>
+                    <li>Dela länken via e-post, webb, sociala medier eller QR-kod</li>
+                </ol>
+
+                <div class="tip-box info mt-3">
+                    <div class="tip-icon"><i class="bi bi-arrow-clockwise"></i></div>
+                    <div class="tip-content">
+                        <strong>Förnya länken</strong>
+                        <p class="mb-0 mt-1">Behöver du "nolla" en spridd länk? Klicka <strong>Förnya</strong>-knappen. Den gamla URL:en slutar fungera omedelbart. Befintliga deltagare behåller sin åtkomst — bara nya registreringar blockeras.</p>
+                    </div>
+                </div>
+
+                <div class="tip-box success mt-3">
+                    <div class="tip-icon"><i class="bi bi-toggle-off"></i></div>
+                    <div class="tip-content">
+                        <strong>Fungerar både för stegvisa och vanliga kurser</strong>
+                        <p class="mb-0 mt-1">Publik-flaggan är oberoende av kursens övriga inställningar. En stegvis kurs med rolling enrollment kan markeras publik och nya registrerade får sitt eget startdatum automatiskt (första lektionen låses upp direkt vid registrering).</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Distribuera och registrera -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-2-circle-fill me-2 text-success"></i>Så registrerar en deltagare sig</h5>
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <ol class="small">
+                            <li>Deltagaren öppnar den länk du delat</li>
+                            <li>Formulär: <strong>e-postadress</strong> + <strong>namn</strong> (obligatoriska)</li>
+                            <li>En inloggningslänk skickas till e-posten (giltig 15 minuter)</li>
+                            <li>Vid klick på länken skapas deltagarkontot automatiskt och kopplas till just denna kurs</li>
+                            <li>För stegvisa kurser: första lektionen är direkt upplåst</li>
+                        </ol>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="tip-box warning">
+                            <div class="tip-icon"><i class="bi bi-shield-lock-fill"></i></div>
+                            <div class="tip-content">
+                                <strong>Säkerhet och begränsningar</strong>
+                                <ul class="mb-0 mt-2 small">
+                                    <li>Domänkontroll <em>hoppas över</em> för publika kurser — vilken e-postdomän som helst accepteras</li>
+                                    <li>Deltagaren har åtkomst <strong>endast till denna kurs</strong> — inga andra kurser, ingen admin-meny, ingen domänvy</li>
+                                    <li>Samma e-post kan vara registrerad på flera publika kurser hos olika organisationer</li>
+                                    <li>Rate-limiting: max 3 registreringsförsök per e-post + IP per 5 minuter</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Följa upp -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-3-circle-fill me-2 text-success"></i>Följa upp deltagare</h5>
+
+                <p class="text-muted">Deltagare till en publik kurs är synliga på två platser:</p>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h6><i class="bi bi-kanban me-2 text-primary"></i>Dedikerad deltagarvy</h6>
+                                <p class="small"><strong>Admin → Kurser → Redigera kursen → "Hantera publika deltagare"</strong> (eller blå Publik-badge i kurslistan).</p>
+                                <ul class="small">
+                                    <li>Lista över alla registrerade</li>
+                                    <li>Progress-ikoner per lektion (stegvisa kurser) eller progress-stapel</li>
+                                    <li>Checkboxar för massmarkering och bulk-radering</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h6><i class="bi bi-graph-up me-2 text-success"></i>Kursstatistik</h6>
+                                <p class="small"><strong>Admin → Kursstatistik → välj kursen</strong>.</p>
+                                <ul class="small">
+                                    <li>Publika deltagare visas i gruppen <strong>"Publika deltagare"</strong></li>
+                                    <li>Räknas in i "Inskrivna"-räknaren även om de ännu inte öppnat en lektion</li>
+                                    <li>Exportera till Excel tillsammans med interna deltagare</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h6 class="mt-4 mb-2"><i class="bi bi-envelope-arrow-up me-2 text-primary"></i>E-post till deltagare</h6>
+                <ul class="small">
+                    <li><strong>Stegvisa kurser:</strong> automatiska mail går ut via cron när nästa lektion låses upp</li>
+                    <li><strong>Påminnelser:</strong> om deltagaren inte slutför inom inställd tid skickas påminnelse</li>
+                    <li><strong>Manuell påminnelse:</strong> från Kursstatistik → knappen "Skicka påminnelse" kan admin trigga extra utskick</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Ta bort deltagare -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-4-circle-fill me-2 text-success"></i>Ta bort deltagare och data</h5>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="card h-100 border-danger">
+                            <div class="card-body">
+                                <h6 class="text-danger"><i class="bi bi-person-dash-fill me-2"></i>Admin tar bort deltagare</h6>
+                                <p class="small">I deltagarvyn markerar admin en eller flera deltagare med kryssrutorna och klickar <strong>"Ta bort valda"</strong>.</p>
+                                <p class="small"><strong>Bekräftelsesteg (två spärrar):</strong></p>
+                                <ol class="small mb-2">
+                                    <li>Kryssruta "Jag förstår att detta inte kan ångras"</li>
+                                    <li>Skriva <code>RADERA</code> i bekräftelsefältet</li>
+                                </ol>
+                                <p class="small text-muted mb-0">Röd "Ta bort"-knapp aktiveras först när båda är uppfyllda. Deltagaren får ett bekräftelsemail om att de tagits bort.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card h-100 border-warning">
+                            <div class="card-body">
+                                <h6 class="text-warning"><i class="bi bi-person-x-fill me-2"></i>Deltagaren raderar sig själv</h6>
+                                <p class="small">Deltagaren kan själv gå till <strong><code>/leave_public_course.php?course_id=...</code></strong> (länk visas i kursvyn) för att radera sin koppling och <strong>all sin data</strong>.</p>
+                                <p class="small"><strong>Två godkännanden krävs</strong> (samma UX som admin-radering):</p>
+                                <ol class="small mb-2">
+                                    <li>Kryssruta "Jag förstår"</li>
+                                    <li>Skriva <code>RADERA</code></li>
+                                </ol>
+                                <p class="small text-muted mb-0">Ett bekräftelsemail skickas till deltagaren. Om det var deras enda publika kursregistrering raderas hela kontot samtidigt.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tip-box warning mt-3">
+                    <div class="tip-icon"><i class="bi bi-trash-fill"></i></div>
+                    <div class="tip-content">
+                        <strong>Vad rensas vid borttagning?</strong>
+                        <ul class="mb-0 mt-1 small">
+                            <li>Progress för alla kursens lektioner</li>
+                            <li>Kursanmälan (<code>course_enrollments</code>)</li>
+                            <li>Stegvis lektionsschema och påminnelselogg</li>
+                            <li>Registreringskopplingen (<code>public_course_access</code>)</li>
+                            <li>Om deltagaren var "public_only" och inte har andra publika kurser: hela användarkontot</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="tip-box danger mt-3">
+                    <div class="tip-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                    <div class="tip-content">
+                        <strong>Om hela kursen raderas</strong>
+                        <p class="mb-0 mt-1">När admin raderar en publik kurs (Admin → Kurser → Radera) tas <strong>alla deltagare och all deras data</strong> bort automatiskt via kaskad-radering. Deltagare som enbart hade denna publika kurs får också sitt konto raderat (så kallad orphan-sweep). Detta är oåterkalleligt.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Avaktivera publik -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-5-circle-fill me-2 text-success"></i>Avaktivera publik status</h5>
+                <p>Om du slår av <strong>"Publik kurs"</strong>-switchen:</p>
+                <ul>
+                    <li>Registreringslänken <strong>slutar fungera</strong> — nya anmälningar blockeras med 404</li>
+                    <li><strong>Befintliga deltagare behåller sin åtkomst</strong> och kan fortsätta kursen</li>
+                    <li>För att rensa deltagare, använd "Hantera publika deltagare" separat</li>
+                </ul>
+                <p class="small text-muted mb-0">Matchar GDPR-/samtyckesmodellen: deltagaren gav samtycke till sin registrering och den ska inte automatiskt återkallas bara för att publik-flaggan ändras.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Superadmin Guide -->
 <div class="row mb-5" id="superadmin">
     <div class="col-12">
         <div class="section-header">
             <span class="section-icon" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);"><i class="bi bi-stars"></i></span>
             <h2>Guide för superadministratörer</h2>
+        </div>
+
+        <!-- Organisationer med flera domäner -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-diagram-3-fill me-2 text-danger"></i>Organisationer med flera domäner</h5>
+                <p class="text-muted">Ibland använder en organisation flera e-postdomäner (t.ex. kommunen har <code>sater.se</code> för förvaltningen och <code>edu.sater.se</code> för skolan). Funktionen <strong>Organisationer</strong> låter dig gruppera flera domäner till en logisk organisation så att användare från alla domänerna ses som samma enhet.</p>
+
+                <div class="row mt-3">
+                    <div class="col-lg-6">
+                        <h6 class="mb-3"><i class="bi bi-plus-circle me-2 text-primary"></i>Skapa en organisation</h6>
+                        <ol class="small">
+                            <li>Gå till <strong>Admin → Organisationer</strong> (endast superadmin)</li>
+                            <li>Klicka <strong>"Ny organisation"</strong>, ange namn (t.ex. "Säters kommun") och ev. org-nummer</li>
+                            <li>Lägg till domäner en i taget via <strong>"Tilldela domän"</strong></li>
+                            <li>Markera en domän som <strong>primär</strong> (används för visning)</li>
+                        </ol>
+                    </div>
+                    <div class="col-lg-6">
+                        <h6 class="mb-3"><i class="bi bi-eye me-2 text-primary"></i>Effekter av gruppering</h6>
+                        <ul class="small config-list">
+                            <li><i class="bi bi-people"></i> <strong>Delad kursvy:</strong> användare från alla orgens domäner ser samma kurser</li>
+                            <li><i class="bi bi-pencil"></i> <strong>Delad administration:</strong> admin i en domän kan redigera kurser och användare i alla orgens domäner</li>
+                            <li><i class="bi bi-file-earmark-lock"></i> <strong>Delat PUB-avtal:</strong> ett PUB-avtal räcker för hela organisationen, oavsett på vilken domän det tecknades</li>
+                            <li><i class="bi bi-tag"></i> <strong>Delade org-taggar:</strong> taggar kan användas över alla orgens domäner</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="tip-box info mt-3">
+                    <div class="tip-icon"><i class="bi bi-info-circle-fill"></i></div>
+                    <div class="tip-content">
+                        <strong>Befintlig data påverkas inte</strong>
+                        <p class="mb-0 mt-1">När du grupperar in en domän i en organisation omklassificeras kurser, användare och taggar automatiskt — ingen data flyttas eller ändras. Man kan när som helst ta bort en domän från en organisation.</p>
+                    </div>
+                </div>
+
+                <div class="tip-box warning mt-3">
+                    <div class="tip-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                    <div class="tip-content">
+                        <strong>Domäner utan organisation</strong>
+                        <p class="mb-0 mt-1">Domäner som inte tilldelats en organisation fungerar som "implicit single-domain org" — de fortsätter bara se sina egna kurser och användare, precis som före organisationsfunktionen.</p>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="card border-0 shadow-sm mb-4">
@@ -965,11 +1421,33 @@ require_once 'include/header.php';
 
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-body p-4">
+                <h5><i class="bi bi-lightning-charge-fill me-2 text-warning"></i>Så kommer du igång med användarimport</h5>
+                <ol class="mt-3">
+                    <li>Gå till <strong>Admin → API-nycklar</strong>, klicka <strong>"Skapa ny nyckel"</strong> och välj den domän (eller organisation) du vill tillåta synk för</li>
+                    <li><strong>Kopiera nyckeln direkt</strong> — den visas bara en gång (börjar med <code>stm_</code>)</li>
+                    <li>Aktivera switchen <strong>"Synkronisering tillåten"</strong> för domänen i samma vy</li>
+                    <li>Bygg en integration från ert HR-/identitetssystem som skickar hela användarlistan dagligen (t.ex. via en cron-cron) till endpointen nedan</li>
+                    <li>Följ resultatet i <strong>Admin → Synkloggar</strong> — varje anrop loggas med antal skapade/uppdaterade/inaktiverade</li>
+                </ol>
+
+                <div class="tip-box info mt-3">
+                    <div class="tip-icon"><i class="bi bi-gear-fill"></i></div>
+                    <div class="tip-content">
+                        <strong>Synkverktyg för manuell kör</strong>
+                        <p class="mb-0 mt-1">För punktvis import eller felsökning finns <strong>Admin → Synkverktyg</strong> — ett gränssnitt där du kan klistra in JSON eller ladda upp en fil och köra synken interaktivt utan att behöva bygga en integration.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
                 <h5><i class="bi bi-key me-2 text-warning"></i>API-nycklar</h5>
                 <p class="text-muted">API-nycklar genereras under <strong>Admin → API-nycklar</strong>. Varje nyckel är knuten till en domän och börjar med <code>stm_</code>.</p>
                 <ul class="config-list">
                     <li><i class="bi bi-plus-circle"></i> <strong>Skapa nyckel</strong> – välj domän, nyckeln visas en gång vid skapande</li>
                     <li><i class="bi bi-toggle-on"></i> <strong>Aktivera synk</strong> – slå på "Synkronisering" för domänen för att tillåta API-anrop</li>
+                    <li><i class="bi bi-arrow-clockwise"></i> <strong>Regenerera nyckel</strong> – gammal nyckel slutar fungera direkt</li>
                     <li><i class="bi bi-journal-text"></i> <strong>Synkloggar</strong> – se alla API-anrop under Admin → Synkloggar</li>
                 </ul>
             </div>
