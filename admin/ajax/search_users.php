@@ -35,13 +35,23 @@ if (strlen($search) < 2) {
 // This prevents attackers from using % or _ to enumerate all users
 $search = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $search);
 
-// Sök efter användare som matchar söksträngen
-$users = queryAll("SELECT email, name FROM " . DB_DATABASE . ".users
-                  WHERE (email LIKE ? OR name LIKE ?)
-                  AND email != ?
-                  ORDER BY name ASC
-                  LIMIT 10",
-                  ["%$search%", "%$search%", $_SESSION['user_email']]);
+// Hämta inloggad användares domän för organisationsfiltrering
+$userDomain = substr(strrchr($_SESSION['user_email'], "@"), 1);
+
+// Org-scope: alla domäner i adminens organisation
+$orgScopeDomains = getOrgScopeDomains($_SESSION['user_email']);
+$emailDomClause = buildEmailDomainInClause($orgScopeDomains, 'email');
+
+// Sök efter användare inom hela organisationen (alla orgens domäner)
+$users = queryAll(
+    "SELECT email, name FROM " . DB_DATABASE . ".users
+     WHERE (email LIKE ? OR name LIKE ?)
+       AND email != ?
+       AND {$emailDomClause['fragment']}
+     ORDER BY name ASC
+     LIMIT 10",
+    array_merge(["%$search%", "%$search%", $_SESSION['user_email']], $emailDomClause['params'])
+);
 
 // Om inga användare hittades, kontrollera om söksträngen är en e-postadress
 if (empty($users) && filter_var($search, FILTER_VALIDATE_EMAIL)) {

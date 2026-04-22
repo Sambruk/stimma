@@ -206,69 +206,101 @@ if (!$isLoggedIn):
 <?php
     // Include footer
     require_once 'include/footer.php';
-else: 
+else:
     // Get user ID from session
     $userId = $_SESSION['user_id'];
 
-    // Get user's email and domain first (needed for filtering)
-    $user = queryOne("SELECT email FROM " . DB_DATABASE . ".users WHERE id = ?", [$userId]);
+    // Get user's email, access_mode och domain
+    $user = queryOne("SELECT email, access_mode FROM " . DB_DATABASE . ".users WHERE id = ?", [$userId]);
     $userDomain = substr(strrchr($user['email'], "@"), 1);
+    $isPublicOnly = ($user['access_mode'] ?? 'domain') === 'public_only';
 
-    // Hämta användarens organisationstaggar
-    $userOrgTags = getUserOrgTags($userId);
-    $userOrgTagValues = array_column($userOrgTags, 'tag');
+    // Publika kurs-IDs som användaren har access till (både för public_only och
+    // vanliga domain-användare som registrerat sig för externa publika kurser)
+    $publicCourseIds = getPublicCourseIdsForUser($userId);
 
-    // Bygg org-tagg-filter för SQL
-    $orgTagFilter = "";
-    $orgTagParams = [$userDomain];
-    if (!empty($userOrgTagValues)) {
-        $placeholders = implode(',', array_fill(0, count($userOrgTagValues), '?'));
-        $orgTagFilter = "AND (
-            NOT EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_org_tags cot WHERE cot.course_id = c.id)
-            OR EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_org_tags cot WHERE cot.course_id = c.id AND cot.tag IN ($placeholders))
-        )";
-        $orgTagParams = array_merge($orgTagParams, $userOrgTagValues);
+    if ($isPublicOnly) {
+        // public_only-användare ser ENDAST kurser från public_course_access.
+        // Ingen domänscope, inga org-taggar, ingen kurskatalog.
+        $courseScopeFragment = empty($publicCourseIds)
+            ? "c.id IN (NULL)"
+            : "c.id IN (" . implode(',', array_fill(0, count($publicCourseIds), '?')) . ")";
+        $courseScopeParams = $publicCourseIds;
+        $orgTagFilter = "";
+        $orgTagExtraParams = [];
+        $orgScopeDomains = [];
+        $tagDomainClause = ['fragment' => "t.organization_domain IN (NULL)", 'params' => []];
     } else {
-        // Användare utan org-taggar ser bara kurser utan org-tagg-begränsning
-        $orgTagFilter = "AND NOT EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_org_tags cot WHERE cot.course_id = c.id)";
+        // Domain-användare: domänscope UNION ev. publika kurser.
+        $orgScopeDomains = getOrgScopeDomains($user['email']);
+        $courseDomainClause = buildDomainInClause($orgScopeDomains, 'c.organization_domain');
+        $tagDomainClause = buildDomainInClause($orgScopeDomains, 't.organization_domain');
+
+        // Hämta användarens organisationstaggar
+        $userOrgTags = getUserOrgTags($userId);
+        $userOrgTagValues = array_column($userOrgTags, 'tag');
+
+        if (!empty($userOrgTagValues)) {
+            $placeholders = implode(',', array_fill(0, count($userOrgTagValues), '?'));
+            $orgTagFilter = "AND (
+                NOT EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_org_tags cot WHERE cot.course_id = c.id)
+                OR EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_org_tags cot WHERE cot.course_id = c.id AND cot.tag IN ($placeholders))
+            )";
+            $orgTagExtraParams = $userOrgTagValues;
+        } else {
+            $orgTagFilter = "AND NOT EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_org_tags cot WHERE cot.course_id = c.id)";
+            $orgTagExtraParams = [];
+        }
+
+        // Bygg scope som "(domänmatch OCH org-tag-filter) ELLER publik-access"
+        if (!empty($publicCourseIds)) {
+            $publicPlaceholders = implode(',', array_fill(0, count($publicCourseIds), '?'));
+            $courseScopeFragment = "(({$courseDomainClause['fragment']} $orgTagFilter) OR c.id IN ($publicPlaceholders))";
+            $courseScopeParams = array_merge($courseDomainClause['params'], $orgTagExtraParams, $publicCourseIds);
+        } else {
+            $courseScopeFragment = "({$courseDomainClause['fragment']} $orgTagFilter)";
+            $courseScopeParams = array_merge($courseDomainClause['params'], $orgTagExtraParams);
+        }
     }
 
-    // Fetch active lessons and courses - ONLY from user's organization, filtered by org-tags
+    // Fetch active lessons and courses
     $lessons = query("
         SELECT l.*, c.title as course_title, c.status as course_status, c.image_url as course_image_url, c.id as course_id, c.sequential_mode
         FROM " . DB_DATABASE . ".lessons l
         JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
         WHERE c.status = 'active'
-        AND c.organization_domain = ?
-        $orgTagFilter
+        AND $courseScopeFragment
         ORDER BY c.sort_order, l.sort_order
-    ", $orgTagParams);
+    ", $courseScopeParams);
 
     // Get user's progress
     $progress = query("SELECT * FROM " . DB_DATABASE . ".progress WHERE user_id = ?", [$userId]);
 
-    // Fetch organization courses (for the organization section with tags), filtered by org-tags
+    // Fetch active courses (for the organization section with tags)
     $orgCourses = query("
         SELECT DISTINCT c.*, c.sequential_mode, u.email as author_email
         FROM " . DB_DATABASE . ".courses c
         LEFT JOIN " . DB_DATABASE . ".users u ON c.author_id = u.id
         WHERE c.status = 'active'
-        AND c.organization_domain = ?
-        $orgTagFilter
+        AND $courseScopeFragment
         ORDER BY c.sort_order
-    ", $orgTagParams);
+    ", $courseScopeParams);
 
-    // Fetch tags for the user's organization (for filtering)
-    $orgTags = query("
-        SELECT t.*, COUNT(DISTINCT ct.course_id) as course_count
-        FROM " . DB_DATABASE . ".tags t
-        LEFT JOIN " . DB_DATABASE . ".course_tags ct ON t.id = ct.tag_id
-        LEFT JOIN " . DB_DATABASE . ".courses c ON ct.course_id = c.id AND c.status = 'active'
-        WHERE t.organization_domain = ?
-        GROUP BY t.id
-        HAVING course_count > 0
-        ORDER BY t.name ASC
-    ", [$userDomain]);
+    // Fetch tags for the user's organization (for filtering) — skippas för public_only
+    if ($isPublicOnly) {
+        $orgTags = [];
+    } else {
+        $orgTags = query("
+            SELECT t.*, COUNT(DISTINCT ct.course_id) as course_count
+            FROM " . DB_DATABASE . ".tags t
+            LEFT JOIN " . DB_DATABASE . ".course_tags ct ON t.id = ct.tag_id
+            LEFT JOIN " . DB_DATABASE . ".courses c ON ct.course_id = c.id AND c.status = 'active'
+            WHERE {$tagDomainClause['fragment']}
+            GROUP BY t.id
+            HAVING course_count > 0
+            ORDER BY t.name ASC
+        ", $tagDomainClause['params']);
+    }
 
     // Fetch course tags mapping for organization courses (only same domain tags)
     $courseTagsMap = [];
@@ -279,8 +311,8 @@ else:
             SELECT ct.course_id, t.id as tag_id, t.name as tag_name
             FROM " . DB_DATABASE . ".course_tags ct
             JOIN " . DB_DATABASE . ".tags t ON ct.tag_id = t.id
-            WHERE ct.course_id IN ($placeholders) AND t.organization_domain = ?
-        ", array_merge($courseIds, [$userDomain]));
+            WHERE ct.course_id IN ($placeholders) AND {$tagDomainClause['fragment']}
+        ", array_merge($courseIds, $tagDomainClause['params']));
 
         foreach ($courseTags as $ct) {
             if (!isset($courseTagsMap[$ct['course_id']])) {

@@ -24,6 +24,15 @@ $userDomain = substr(strrchr($userEmail, "@"), 1);
 $isAdmin = $currentUser && $currentUser['is_admin'] == 1;
 $isEditor = $currentUser && $currentUser['is_editor'] == 1;
 
+// Org-scope: alla domäner i adminens organisation (eller bara $userDomain om
+// domänen inte är grupperad). Varje statistikfråga expanderas till detta scope
+// så användare på alla orgens domäner kommer med.
+$orgScopeDomains = getOrgScopeDomains($userEmail);
+$userEmailClauseU = buildEmailDomainInClause($orgScopeDomains, 'u.email');
+$orgScopeLabel = count($orgScopeDomains) === 1
+    ? $orgScopeDomains[0]
+    : implode(', ', $orgScopeDomains);
+
 // Kontrollera behörighet - måste vara admin eller redaktör
 if (!$isAdmin && !$isEditor) {
     $_SESSION['message'] = 'Du har inte behörighet att se statistik.';
@@ -76,9 +85,8 @@ if ($selectedCourseId && !$isAdmin) {
 // Bygg IN-klausul för kurs-IDs
 $courseIdsPlaceholder = !empty($courseIds) ? implode(',', array_fill(0, count($courseIds), '?')) : '0';
 
-// Hämta användare - för admin: alla i domänen, för redaktör: alla som använt deras kurser
+// Hämta användare - för admin: alla i orgens domäner, för redaktör: alla som använt deras kurser
 if ($isAdmin) {
-    $domainPattern = '%@' . $userDomain;
     $usersInDomain = query("SELECT
         u.id,
         u.email,
@@ -90,12 +98,12 @@ if ($isAdmin) {
     FROM " . DB_DATABASE . ".users u
     LEFT JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id AND p.status = 'completed'
     LEFT JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
-    WHERE u.email LIKE ?
+    WHERE {$userEmailClauseU['fragment']}
     GROUP BY u.id, u.email, u.name, u.created_at, u.last_login_at
-    ORDER BY u.email ASC", [$domainPattern]);
+    ORDER BY u.email ASC", $userEmailClauseU['params']);
 
-    $statsTitle = "Statistik för domän: " . $userDomain;
-    $userListTitle = "Alla användare i " . $userDomain;
+    $statsTitle = "Statistik för organisation: " . $orgScopeLabel;
+    $userListTitle = "Alla användare i " . $orgScopeLabel;
 } else {
     // För redaktörer: visa användare som har interagerat med deras kurser
     if (!empty($courseIds)) {
@@ -124,7 +132,6 @@ if ($isAdmin) {
 // Hämta kursstatistik
 if (!empty($courseIds)) {
     if ($isAdmin) {
-        $domainPattern = '%@' . $userDomain;
         $courseStatsQuery = "SELECT
             c.id as course_id,
             c.title as course_title,
@@ -134,11 +141,11 @@ if (!empty($courseIds)) {
         FROM " . DB_DATABASE . ".courses c
         LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id AND l.status = 'active'
         LEFT JOIN " . DB_DATABASE . ".progress p ON l.id = p.lesson_id
-        LEFT JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id AND u.email LIKE ?
+        LEFT JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id AND {$userEmailClauseU['fragment']}
         WHERE c.status = 'active'
         GROUP BY c.id, c.title
         ORDER BY c.title ASC";
-        $courseStats = query($courseStatsQuery, [$domainPattern]);
+        $courseStats = query($courseStatsQuery, $userEmailClauseU['params']);
     } else {
         // För redaktörer: statistik för alla användare på deras kurser
         $courseStats = query("SELECT
@@ -173,8 +180,7 @@ if ($selectedCourseId) {
 
         // Hämta progress för användare
         if ($isAdmin) {
-            // Admin ser endast användare från sin domän
-            $domainPattern = '%@' . $userDomain;
+            // Admin ser användare från hela organisationens samtliga domäner
             $userProgressInCourse = query("SELECT
                 u.id as user_id,
                 u.email,
@@ -187,10 +193,11 @@ if ($selectedCourseId) {
             FROM " . DB_DATABASE . ".users u
             CROSS JOIN " . DB_DATABASE . ".lessons l
             LEFT JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id AND l.id = p.lesson_id
-            WHERE u.email LIKE ?
+            WHERE {$userEmailClauseU['fragment']}
             AND l.course_id = ?
             AND l.status = 'active'
-            ORDER BY u.email ASC, l.sort_order ASC", [$domainPattern, $selectedCourseId]);
+            ORDER BY u.email ASC, l.sort_order ASC",
+            array_merge($userEmailClauseU['params'], [$selectedCourseId]));
         } else {
             // Redaktör ser alla användare som har interagerat med kursen
             $userProgressInCourse = query("SELECT
@@ -262,8 +269,7 @@ $avgCoursesPerUser = 0;
 
 if (!empty($courseIds)) {
     if ($isAdmin) {
-        $domainPattern = '%@' . $userDomain;
-        // Hämta antal användare som slutfört alla lektioner i varje kurs
+        // Hämta antal användare i orgen som slutfört alla lektioner i varje kurs
         $fullyCompletedResult = queryOne("
             SELECT COUNT(*) as total_completions
             FROM (
@@ -273,15 +279,15 @@ if (!empty($courseIds)) {
                 FROM " . DB_DATABASE . ".progress p
                 JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
                 JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id
-                WHERE u.email LIKE ?
+                WHERE {$userEmailClauseU['fragment']}
                 AND l.course_id IN ($courseIdsPlaceholder)
                 GROUP BY p.user_id, l.course_id
                 HAVING completed_lessons = total_lessons AND total_lessons > 0
             ) as completed_courses
-        ", array_merge([$domainPattern], $courseIds));
+        ", array_merge($userEmailClauseU['params'], $courseIds));
         $fullyCompletedCourses = $fullyCompletedResult['total_completions'] ?? 0;
 
-        // Beräkna genomsnittligt antal slutförda kurser per användare
+        // Beräkna genomsnittligt antal slutförda kurser per användare (i orgen)
         $avgCoursesResult = queryOne("
             SELECT AVG(courses_completed) as avg_courses
             FROM (
@@ -297,11 +303,11 @@ if (!empty($courseIds)) {
                            (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l.course_id AND status = 'active')
                            AND (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l.course_id AND status = 'active') > 0
                 ) as completed_courses ON u.id = completed_courses.user_id
-                WHERE u.email LIKE ?
+                WHERE {$userEmailClauseU['fragment']}
                 GROUP BY u.id
                 HAVING courses_completed > 0
             ) as user_courses
-        ", array_merge($courseIds, [$domainPattern]));
+        ", array_merge($courseIds, $userEmailClauseU['params']));
         $avgCoursesPerUser = round($avgCoursesResult['avg_courses'] ?? 0, 1);
     } else {
         // För redaktörer
@@ -556,7 +562,7 @@ require_once 'include/header.php';
         <h2 class="accordion-header">
             <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#userList">
                 <i class="bi bi-people me-2"></i>
-                Alla användare i <?= htmlspecialchars($userDomain) ?>
+                Alla användare i <?= htmlspecialchars($orgScopeLabel) ?>
                 <span class="badge bg-secondary ms-2"><?= count($usersInDomain) ?></span>
             </button>
         </h2>

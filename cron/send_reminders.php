@@ -120,7 +120,14 @@ foreach ($activeSettings as $settings) {
         JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id
         JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
         JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
-        WHERE u.email LIKE ?
+        WHERE (
+            u.email LIKE ?
+            OR u.id IN (
+                SELECT pca.user_id FROM " . DB_DATABASE . ".public_course_access pca
+                WHERE pca.course_id = c.id
+            )
+        )
+        AND c.organization_domain = ?
         AND c.status = 'active'
         AND c.sequential_mode = 0
         GROUP BY u.id, c.id
@@ -134,7 +141,7 @@ foreach ($activeSettings as $settings) {
                 OR
                 (reminder_count > 0 AND DATEDIFF(NOW(), last_reminder_at) >= ?)
             )
-    ", ['%@' . $domain, $maxReminders, $daysAfterStart, $daysBetweenReminders]);
+    ", ['%@' . $domain, $domain, $maxReminders, $daysAfterStart, $daysBetweenReminders]);
 
     logMessage("Hittade " . count($usersToRemind) . " användare att påminna i domän $domain");
 

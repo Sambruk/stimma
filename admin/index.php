@@ -28,6 +28,12 @@ $currentUser = queryOne("SELECT email, role, is_admin FROM " . DB_DATABASE . ".u
 $currentUserDomain = substr(strrchr($currentUser['email'], "@"), 1);
 $isSuperAdmin = $currentUser['role'] === 'super_admin';
 
+// Org-scope: alla domäner i adminens organisation (eller bara $currentUserDomain
+// om domänen inte tillhör någon org)
+$orgScopeDomains = getOrgScopeDomains($currentUser['email']);
+$courseDomClause = buildDomainInClause($orgScopeDomains, 'c.organization_domain');
+$emailDomClause = buildEmailDomainInClause($orgScopeDomains, 'u.email');
+
 // Hämta statistik för dashboard - filtrera på organisation om inte superadmin
 if ($isSuperAdmin) {
     $totalUsers = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".users")['count'] ?? 0;
@@ -35,15 +41,28 @@ if ($isSuperAdmin) {
     $totalLessons = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".lessons")['count'] ?? 0;
     $totalCompletions = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".progress WHERE status = 'completed'")['count'] ?? 0;
 } else {
-    // Filtrera på användarens domän
-    $totalUsers = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".users WHERE email LIKE ?", ['%@' . $currentUserDomain])['count'] ?? 0;
-    $totalCourses = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".courses WHERE organization_domain = ?", [$currentUserDomain])['count'] ?? 0;
-    $totalLessons = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".lessons l
-        JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
-        WHERE c.organization_domain = ?", [$currentUserDomain])['count'] ?? 0;
-    $totalCompletions = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".progress p
-        JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id
-        WHERE p.status = 'completed' AND u.email LIKE ?", ['%@' . $currentUserDomain])['count'] ?? 0;
+    // Filtrera på adminens organisation (alla orgens domäner)
+    $userEmailClause = buildEmailDomainInClause($orgScopeDomains, 'email');
+    $totalUsers = queryOne(
+        "SELECT COUNT(*) as count FROM " . DB_DATABASE . ".users WHERE {$userEmailClause['fragment']}",
+        $userEmailClause['params']
+    )['count'] ?? 0;
+    $totalCourses = queryOne(
+        "SELECT COUNT(*) as count FROM " . DB_DATABASE . ".courses c WHERE {$courseDomClause['fragment']}",
+        $courseDomClause['params']
+    )['count'] ?? 0;
+    $totalLessons = queryOne(
+        "SELECT COUNT(*) as count FROM " . DB_DATABASE . ".lessons l
+         JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
+         WHERE {$courseDomClause['fragment']}",
+        $courseDomClause['params']
+    )['count'] ?? 0;
+    $totalCompletions = queryOne(
+        "SELECT COUNT(*) as count FROM " . DB_DATABASE . ".progress p
+         JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id
+         WHERE p.status = 'completed' AND {$emailDomClause['fragment']}",
+        $emailDomClause['params']
+    )['count'] ?? 0;
 }
 
 // Hämta statistik per kurs - filtrera på domän om inte superadmin
@@ -72,9 +91,9 @@ if ($isSuperAdmin) {
     LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id
     LEFT JOIN " . DB_DATABASE . ".progress p ON l.id = p.lesson_id AND p.status = 'completed'
     LEFT JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id
-    WHERE c.organization_domain = ?
+    WHERE {$courseDomClause['fragment']}
     GROUP BY c.id, c.title, c.status
-    ORDER BY total_completions DESC", [$currentUserDomain]);
+    ORDER BY total_completions DESC", $courseDomClause['params']);
 }
 
 // Hämta de senaste aktiviteterna - filtrera på domän om inte superadmin
@@ -91,8 +110,9 @@ if ($isSuperAdmin) {
                             JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id
                             JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
                             JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
-                            WHERE c.organization_domain = ? AND u.email LIKE ?
-                            ORDER BY p.updated_at DESC LIMIT 5", [$currentUserDomain, '%@' . $currentUserDomain]);
+                            WHERE {$courseDomClause['fragment']} AND {$emailDomClause['fragment']}
+                            ORDER BY p.updated_at DESC LIMIT 5",
+                            array_merge($courseDomClause['params'], $emailDomClause['params']));
 }
 
 // Beräkna aktivitet per dag (senaste 7 dagarna) - filtrera på domän om inte superadmin
@@ -114,8 +134,9 @@ if ($isSuperAdmin) {
                           JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
                           JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
                           WHERE p.updated_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-                          AND c.organization_domain = ? AND u.email LIKE ?
-                          GROUP BY DATE(p.updated_at)", [$currentUserDomain, '%@' . $currentUserDomain]);
+                          AND {$courseDomClause['fragment']} AND {$emailDomClause['fragment']}
+                          GROUP BY DATE(p.updated_at)",
+                          array_merge($courseDomClause['params'], $emailDomClause['params']));
 }
 
 foreach ($weekActivity as $day) {
@@ -144,9 +165,9 @@ if ($isSuperAdmin) {
     LEFT JOIN " . DB_DATABASE . ".progress p ON l.id = p.lesson_id
         AND p.updated_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
     LEFT JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id
-    WHERE c.organization_domain = ?
+    WHERE {$courseDomClause['fragment']}
     GROUP BY c.id, c.title
-    ORDER BY activity_count DESC", [$currentUserDomain]);
+    ORDER BY activity_count DESC", $courseDomClause['params']);
 }
 
 
@@ -214,8 +235,8 @@ if ($isSuperAdmin) {
         ? round(($completionRateResult['total_completed'] / $completionRateResult['total_possible']) * 100)
         : 0;
 } else {
-    // Filtrerat på domän
-    $domainPattern = '%@' . $currentUserDomain;
+    // Filtrerat på orgens samtliga domäner
+    $userEmailClauseU = buildEmailDomainInClause($orgScopeDomains, 'u.email');
 
     $fullyCompletedResult = queryOne("
         SELECT COUNT(*) as total_completions
@@ -227,11 +248,11 @@ if ($isSuperAdmin) {
             JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
             JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id
             JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
-            WHERE u.email LIKE ? AND c.organization_domain = ?
+            WHERE {$userEmailClauseU['fragment']} AND {$courseDomClause['fragment']}
             GROUP BY p.user_id, l.course_id
             HAVING completed_lessons = total_lessons AND total_lessons > 0
         ) as completed_courses
-    ", [$domainPattern, $currentUserDomain]);
+    ", array_merge($userEmailClauseU['params'], $courseDomClause['params']));
     $fullyCompletedCourses = $fullyCompletedResult['total_completions'] ?? 0;
 
     // Genomsnitt kurser per användare
@@ -245,17 +266,17 @@ if ($isSuperAdmin) {
                 FROM " . DB_DATABASE . ".progress p
                 JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
                 JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
-                WHERE c.organization_domain = ?
+                WHERE {$courseDomClause['fragment']}
                 GROUP BY p.user_id, l.course_id
                 HAVING COUNT(DISTINCT CASE WHEN p.status = 'completed' THEN l.id END) =
                        (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l.course_id AND status = 'active')
                        AND (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l.course_id AND status = 'active') > 0
             ) as completed_courses ON u.id = completed_courses.user_id
-            WHERE u.email LIKE ?
+            WHERE {$userEmailClauseU['fragment']}
             GROUP BY u.id
             HAVING courses_completed > 0
         ) as user_courses
-    ", [$currentUserDomain, $domainPattern]);
+    ", array_merge($courseDomClause['params'], $userEmailClauseU['params']));
     $avgCoursesPerUser = round($avgCoursesResult['avg_courses'] ?? 0, 1);
 
     // Genomsnittlig slutförandegrad
@@ -272,10 +293,10 @@ if ($isSuperAdmin) {
             LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id AND l.status = 'active'
             LEFT JOIN " . DB_DATABASE . ".progress p ON l.id = p.lesson_id
             LEFT JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id
-            WHERE c.status = 'active' AND c.organization_domain = ? AND (u.email LIKE ? OR u.email IS NULL)
+            WHERE c.status = 'active' AND {$courseDomClause['fragment']} AND ({$userEmailClauseU['fragment']} OR u.email IS NULL)
             GROUP BY c.id
         ) as course_stats
-    ", [$currentUserDomain, $domainPattern]);
+    ", array_merge($courseDomClause['params'], $userEmailClauseU['params']));
     $avgCompletionRate = ($completionRateResult['total_possible'] ?? 0) > 0
         ? round(($completionRateResult['total_completed'] / $completionRateResult['total_possible']) * 100)
         : 0;

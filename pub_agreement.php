@@ -31,8 +31,19 @@ $userEmail = $_SESSION['user_email'];
 $userDomain = getUserDomain($userEmail);
 $currentUser = queryOne("SELECT * FROM " . DB_DATABASE . ".users WHERE id = ?", [$userId]);
 
-// Kontrollera om domänen redan har PUB-avtal
-if (hasPubAgreement($userDomain)) {
+// Slå upp användarens organisation (om domänen är grupperad)
+$userOrganization = getOrganizationByDomain($userDomain);
+
+// Endast administratörer kan teckna PUB-avtal
+if (!$currentUser || $currentUser['is_admin'] != 1) {
+    $_SESSION['message'] = 'Endast administratörer kan teckna PUB-avtal. Kontakta er organisations administratör.';
+    $_SESSION['message_type'] = 'warning';
+    redirect('index.php');
+    exit;
+}
+
+// Kontrollera om organisationen (eller domänen, om ingen org finns) redan har PUB-avtal
+if (userHasPubAgreement($userEmail)) {
     $_SESSION['message'] = 'Er organisation har redan ett tecknat PUB-avtal.';
     $_SESSION['message_type'] = 'info';
     redirect('index.php');
@@ -140,7 +151,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sign_agreement'])) {
         // Intygandetext
         $certificationText = "Jag intygar att jag har behörighet att teckna detta PUB-avtal (personuppgiftsbiträdesavtal) för {$orgName} (org.nr {$orgNumber}) med Sambruk.";
 
-        // Spara artefakt
+        // Spara artefakt (savePubAgreementArtifact slår upp organization_id automatiskt
+        // via $artifactData['domain'] om domänen är grupperad i en org)
         $artifactData = [
             'agreement_id' => $agreementId,
             'version' => $docVersion,
@@ -153,6 +165,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sign_agreement'])) {
             'user_title' => $signerTitle ?: null,
             'user_phone' => $signerPhone ?: null,
             'domain' => $userDomain,
+            'organization_id' => $userOrganization ? (int)$userOrganization['id'] : null,
             'org_name' => $orgName,
             'org_number' => $orgNumber,
             'agreement_email' => $agreementEmail,
@@ -162,10 +175,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sign_agreement'])) {
         $result = savePubAgreementArtifact($artifactData);
 
         if ($result !== null) {
-            // Uppdatera domänens PUB-status
             $today = date('Y-m-d');
             $notes = "Digitalt tecknat av {$signerName} ({$signerEmail}), {$orgName}, avtal-ID: {$agreementId}, SMS-verifierad";
-            updatePubAgreement($userDomain, true, $today, $notes);
+
+            // Uppdatera PUB-status. Om domänen är grupperad i en organisation lyfts
+            // PUB:en till org-nivå (täcker alla orgens domäner). Annars gör vi en
+            // legacy-uppdatering på domän-nivå (domain_settings).
+            if ($userOrganization) {
+                updateOrgPubAgreement((int)$userOrganization['id'], true, $today, $notes);
+            } else {
+                updatePubAgreement($userDomain, true, $today, $notes);
+            }
 
             // Logga aktiviteten
             logActivity($userEmail, "PUB-avtal tecknat för domän: {$userDomain}", [

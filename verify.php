@@ -37,11 +37,21 @@ $systemName = trim(getenv('SYSTEM_NAME'), '"\'') ?: 'Stimma';
 $error = '';
 $success = '';
 
-// If already logged in, redirect to home page
+// If already logged in, redirect to saved URL or home page
 if (isLoggedIn()) {
     $_SESSION['flash_message'] = 'Du är redan inloggad.';
     $_SESSION['flash_type'] = 'info';
-    redirect('index.php');
+    $redirectUrl = 'index.php';
+    if (!empty($_SESSION['redirect_after_login'])) {
+        $candidate = $_SESSION['redirect_after_login'];
+        unset($_SESSION['redirect_after_login']);
+        $parsed = parse_url($candidate);
+        $currentHost = $_SERVER['HTTP_HOST'] ?? '';
+        if (empty($parsed['host']) || $parsed['host'] === $currentHost) {
+            $redirectUrl = $candidate;
+        }
+    }
+    redirect($redirectUrl);
     exit;
 }
 
@@ -72,8 +82,47 @@ if (!isset($_GET['token']) || !isset($_GET['email'])) {
         // Rensa pending_remember_me från sessionen
         unset($_SESSION['pending_remember_me']);
 
-        // Redirect to home page
-        redirect('index.php');
+        // Publik kursregistrering: slå upp intent per verifieringstoken (inte
+        // per session — funkar cross-device). Om träff, grant access och
+        // omdirigera till första lektionen (stegvis) eller /index.php.
+        $pendingIntent = queryOne(
+            "SELECT * FROM " . DB_DATABASE . ".public_registration_intents
+             WHERE verification_token = ? AND expires_at > NOW() LIMIT 1",
+            [$token]
+        );
+        $publicRedirectLesson = null;
+        if ($pendingIntent) {
+            grantPublicCourseAccess($user['id'], $pendingIntent['course_id']);
+            // Hitta första lektionen för direkt-redirect om stegvis
+            $course = queryOne("SELECT sequential_mode FROM " . DB_DATABASE . ".courses WHERE id = ?", [$pendingIntent['course_id']]);
+            if ($course && !empty($course['sequential_mode'])) {
+                $firstLesson = queryOne(
+                    "SELECT id FROM " . DB_DATABASE . ".lessons WHERE course_id = ? ORDER BY sort_order ASC LIMIT 1",
+                    [$pendingIntent['course_id']]
+                );
+                if ($firstLesson) {
+                    $publicRedirectLesson = (int)$firstLesson['id'];
+                }
+            }
+            // Konsumera intent-raden så länken inte kan återanvändas
+            execute("DELETE FROM " . DB_DATABASE . ".public_registration_intents WHERE verification_token = ?", [$token]);
+        }
+
+        // Omdirigera till sparad URL eller publik kurs-destination eller startsidan
+        $redirectUrl = 'index.php';
+        if ($publicRedirectLesson) {
+            $redirectUrl = 'lesson.php?id=' . $publicRedirectLesson;
+        } elseif (!empty($_SESSION['redirect_after_login'])) {
+            // Same-origin-check: endast relativa URL:er eller samma host
+            $candidate = $_SESSION['redirect_after_login'];
+            unset($_SESSION['redirect_after_login']);
+            $parsed = parse_url($candidate);
+            $currentHost = $_SERVER['HTTP_HOST'] ?? '';
+            if (empty($parsed['host']) || $parsed['host'] === $currentHost) {
+                $redirectUrl = $candidate;
+            }
+        }
+        redirect($redirectUrl);
         exit;
     }
 }

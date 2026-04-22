@@ -52,6 +52,7 @@ $courses = query("
       AND c.start_date = CURDATE()
       AND (c.sequential_status IS NULL OR c.sequential_status = 'pending')
       AND c.status = 'active'
+      AND (c.enrollment_type IS NULL OR c.enrollment_type = 'bulk_start')
 ");
 
 logMessage("Hittade " . count($courses) . " kurser att starta.");

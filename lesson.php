@@ -30,8 +30,9 @@ require_once 'include/auth.php';
 // Get system name from environment variable with fallback
 $systemName = trim(getenv('SYSTEM_NAME'), '"\'') ?: 'AI-kurser';
 
-// Check if user is logged in, redirect if not
+// Check if user is logged in, redirect if not (save intended URL for post-login redirect)
 if (!isLoggedIn()) {
+    $_SESSION['redirect_after_login'] = $_SERVER['REQUEST_URI'];
     redirect('index.php');
     exit;
 }
@@ -78,6 +79,49 @@ if (!$lesson) {
     $_SESSION['flash_type'] = 'danger';
     redirect('index.php');
     exit;
+}
+
+// Åtkomstkontroll mot direkt URL-åtkomst (/lesson.php?id=X):
+// - public_only-användare: måste ha public_course_access för kursen
+// - domain-användare: måste ha kursen i sin orgscope ELLER public_course_access
+// - Icke-admin/-editor får inte öppna lektioner i inaktiva kurser
+if (!$isPreviewMode) {
+    $currentUserInfo = queryOne(
+        "SELECT access_mode, is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE id = ?",
+        [$userId]
+    );
+    $accessMode = $currentUserInfo['access_mode'] ?? 'domain';
+    $isAdminOrEditor = !empty($currentUserInfo['is_admin']) || !empty($currentUserInfo['is_editor']);
+    $hasPublic = hasPublicCourseAccess($userId, $lesson['course_id']);
+
+    if ($accessMode === 'public_only') {
+        $allowed = $hasPublic;
+    } else {
+        $courseRow = queryOne(
+            "SELECT organization_domain FROM " . DB_DATABASE . ".courses WHERE id = ?",
+            [$lesson['course_id']]
+        );
+        $courseOrg = $courseRow['organization_domain'] ?? '';
+        $orgScope = getOrgScopeDomains($_SESSION['user_email'] ?? '');
+        $inOwnOrg = $courseOrg !== '' && in_array($courseOrg, $orgScope, true);
+        $allowed = $inOwnOrg || $hasPublic;
+    }
+
+    if (!$allowed) {
+        $_SESSION['flash_message'] = 'Du har inte tillgång till den här lektionen.';
+        $_SESSION['flash_type'] = 'warning';
+        redirect('index.php');
+        exit;
+    }
+
+    // Blockera inaktiva kurser för vanliga användare (admins/editors i orgen
+    // får öppna för att testa)
+    if ($lesson['course_status'] !== 'active' && !$isAdminOrEditor) {
+        $_SESSION['flash_message'] = 'Den här kursen är inte aktiv just nu.';
+        $_SESSION['flash_type'] = 'warning';
+        redirect('index.php');
+        exit;
+    }
 }
 
 // Handle sequential course enrollment and access control (skip in preview mode)
@@ -393,6 +437,31 @@ function convertYoutubeUrl($url) {
     margin-top: 0;
     color: #7b1fa2;
 }
+
+/* Tabeller i lektionsinnehåll */
+.content table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 16px 0;
+}
+.content table td,
+.content table th {
+    border: 1px solid #dee2e6;
+    padding: 8px 12px;
+}
+.content table th {
+    background: #f8f9fa;
+    font-weight: 600;
+}
+
+/* Länkar i lektionsinnehåll */
+.content a {
+    color: #0F3B5F;
+    text-decoration: underline;
+}
+.content a:hover {
+    color: #1a5a8a;
+}
 </style>
 
 <!-- Preview mode banner -->
@@ -417,7 +486,7 @@ function convertYoutubeUrl($url) {
         <div class="col-12 col-lg-8">
             <main>
                 <!-- Lesson content card -->
-                <div class="card mb-4">
+                <div class="card mb-4"<?php if (!empty($lesson['background_color'])): ?> style="background-color: <?= htmlspecialchars($lesson['background_color']) ?>"<?php endif; ?>>
                     <div class="card-body">
                         <!-- Flash message display -->
                         <?php if (isset($_SESSION['flash_message']) && $_SESSION['flash_type'] !== 'danger'): ?>

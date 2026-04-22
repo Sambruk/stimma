@@ -1,6 +1,95 @@
 # Stimma - Utvecklingsuppgifter
 
 ## Pågående
+- [x] Publika kurser (2026-04-22) — stor feature, se /root/.claude/plans/det-finns-ett-nskem-l-quiet-kazoo.md
+  - [x] Migration 025: access_mode, is_public, public_registration_token, public_course_access, public_registration_intents
+  - [x] include/functions.php: helpers (generate/validateToken, grantAccess, hasAccess, purgeData, maybeDeleteOrphan)
+  - [x] include/auth.php: auto-promotion public_only→domain vid domänmatch i verifyLoginToken
+  - [x] public_register.php: anonym registreringsform (e-post + namn), sessions-baserad rate-limit, intents-rad
+  - [x] verify.php: slå upp intents per verifieringstoken (cross-device), grant access, same-origin-check på redirect
+  - [x] index.php: villkorad query för public_only vs domain-användare (union av domänscope + public_course_access)
+  - [x] lesson.php: hasPublicCourseAccess-check för public_only
+  - [x] include/header.php: dölj PUB-banner + admin-länk + domän-label för public_only
+  - [x] admin/edit_course.php: nytt "Publik kurs"-kort med toggle, URL, kopiera, förnya
+  - [x] admin/ajax/toggle_public_course.php + regenerate_public_token.php
+  - [x] admin/courses.php: "Publik"-badge med länk till deltagarlistan
+  - [x] admin/public_participants.php: deltagarlista med multi-select + progress-ikoner för stegvisa + progress-bar för bulk
+  - [x] admin/ajax/delete_public_participants.php: bulk-delete med CSRF + bekräftelsemail
+  - [x] admin/include/confirm_destructive.js: återanvändbar kryssruta + RADERA-gate
+  - [x] leave_public_course.php: deltagarens självradering + bekräftelsemail (två-spärr-UI)
+  - [x] abandon_course.php: omdirigera publika till leave_public_course.php
+  - [x] admin/users.php: fix komplett delete-cascade (buggfix)
+  - [x] cron/send_reminders.php: inkludera publika användare (buggfix)
+  - [x] admin/delete_course.php: sweep orphan public-only users efter kursradering
+  - [x] E2E-verifierad: registrering, verify, access-filter, leave, orphan-delete, auto-promotion
+- [x] Permanent ursprungsetikett på kopierade kurser (2026-04-22)
+  - [x] Migration 024: courses.original_organization_domain + backfill + index
+  - [x] include/functions.php: getOriginalOrganizationLabel()-helper
+  - [x] admin/copy_course.php: sätter original till källans original (eller källans domän)
+  - [x] admin/import.php: respekterar original_organization_domain från exportfil, annars importörens domän
+  - [x] admin/export.php: inkluderar original_organization_domain + organization_domain i export-JSON
+  - [x] admin/edit_course.php: INSERT för nyskapad kurs sätter original = skaparens domän; UPDATE rör inte fältet
+  - [x] admin/cron/process_ai_jobs.php: AI-genererade kurser får skaparens domän som original
+  - [x] admin/courses.php: info-badge "Ursprung: Org (domän)" i kurslistan när original != nuvarande org
+  - [x] admin/edit_course.php: samma badge i formulärhuvudet
+  - [x] Badgen visas endast i admin-vyer, aldrig i student-vyer (index.php/lesson.php)
+- [x] Superadmin "Visa som"-funktion (2026-04-22)
+  - [x] include/functions.php: isImpersonating()-helper
+  - [x] admin/impersonate.php: POST-endpoint för att starta (CSRF, superadmin-only, blockar självval + super_admin-mål, nestat impersonation avbryts först)
+  - [x] admin/stop_impersonate.php: POST-endpoint för att avsluta (återställer impersonator_*-session)
+  - [x] include/header.php: röd banner med återställningsknapp för student-/lektionsvyerna
+  - [x] admin/include/header.php: samma banner i admin-layouten om målet råkar vara admin
+  - [x] admin/users.php: "Visa som"-knapp per användarrad (superadmin-only, ej mot super_admin eller sig själv)
+  - [x] Audit: error_log-notering vid start och stopp
+- [x] Domängruppering till organisationer (2026-04-10)
+  - [x] Migration 023: organizations + organization_domains tabeller, organization_id på pub_agreement_artifacts
+  - [x] include/functions.php: getOrganizationByDomain, getOrgScopeDomains, buildDomainInClause, buildEmailDomainInClause, userHasPubAgreement, createOrganization m.fl.
+  - [x] include/functions.php: savePubAgreementArtifact slår upp organization_id automatiskt
+  - [x] index.php: student-vy expanderar org-scope
+  - [x] admin/index.php, users.php, courses.php, edit_course.php, edit_lesson.php, copy_course.php, certificates.php, course_stats.php, tags.php, reminders.php: org-scope-filtrering
+  - [x] admin/ajax/search_users.php: org-scope-filtrering
+  - [x] pub_agreement.php: lyfter PUB-avtal till org-nivå (updateOrgPubAgreement) när domänen är grupperad
+  - [x] include/header.php: PUB-banner använder userHasPubAgreement, profilpanel visar org-namn
+  - [x] admin/organizations.php: nytt superadmin-CRUD (skapa, redigera, ta bort, tilldela domän, primär domän)
+  - [x] admin/include/header.php: nytt menyval "Organisationer"
+  - [x] admin/domains.php: ny kolumn "Organisation" med klickbar länk
+- [x] Dynamiska startdatum för stegvisa kurser — löpande registrering (2026-03-31)
+  - [x] Migration 022: enrollment_type ENUM('bulk_start','rolling') på courses
+  - [x] functions.php: enrollUserInSequentialCourse() utökad med $startDate + getProjectedEndDate() + getLatestAvailableLessonDate()
+  - [x] admin/ajax/enroll_user_sequential.php: AJAX-endpoint för individuell/grupp-inskrivning
+  - [x] admin/edit_course.php: registreringsläge-val (bulk/rolling) + inskrivnings-UI med användarsökning och datumväljare
+  - [x] admin/course_stats.php: nya kolumner (Startdatum, Senaste lektion, Beräknat slutdatum) + inskrivningsmodal
+  - [x] cron/process_sequential_starts.php: exkluderar rolling-kurser från bulk-start
+  - [x] admin/export_statistics.php: nya kolumner i Excel-export för rolling-kurser
+- [x] Feedback från admin sater.se (2026-03-31)
+  - [x] Redaktörssökning filtrerar nu på organisationens domän (admin/ajax/search_users.php)
+  - [x] "Aktiv"-reglaget flyttat till toppen av kursformuläret med tydlig visuell indikator (admin/edit_course.php)
+  - [x] Excel-exportknapp tillagd i Kursstatistik-detaljvyn (admin/course_stats.php)
+  - [x] Diplomhantering filtrerar nu kurser och statistik på organisationens domän (admin/certificates.php)
+  - [x] E-postnotifiering skickas nu när någon läggs till som redaktör (admin/ajax/add_course_editor.php)
+- [x] Uppgradera lektionsredigeraren till TinyMCE WYSIWYG (2026-03-25)
+  - [x] Ladda ner och installera TinyMCE 6 (self-hosted) + svenskt språkpaket
+  - [x] Skriv om admin/include/editor.php: contenteditable → TinyMCE textarea
+  - [x] Fullständig toolbar för innehållseditorn (formatering, tabeller, bilder, länkar, innehållsblock)
+  - [x] Enklare toolbar för AI-instruktion, AI-prompt och quiz-fråga
+  - [x] Bilduppladdning via befintligt upload_image.php med storleks/placeringsklasser
+  - [x] Innehållsblock-dropdown: Introduktion, Tips, Information, Exempel, Varning, Sammanfattning
+  - [x] WYSIWYG-preview med editor-content.css (visar block-stilar i editorn)
+  - [x] Uppdaterat cleanHtml() med stöd för a-taggar (http/https), tabeller (td/th med colspan/rowspan)
+  - [x] cleanHtml() utökad: inline style-attribut med whitelisting av CSS-egenskaper (färger, typsnitt, storlekar, bakgrunder)
+  - [x] Nya tillåtna taggar: span, h2, h5, s, sub, sup, blockquote, hr
+  - [x] XSS-skydd: blockerar url(), expression(), parenteser i CSS-värden
+  - [x] Utökad toolbar: typsnitt, fontstorlek, textfärg, bakgrundsfärg, radavstånd, justering, genomstruken
+  - [x] Bilder: fri placering, storleksändring via drag, width/height-attribut, avancerad bildflik
+  - [x] Tabell- och länkstilar i lesson.php frontend
+  - [x] TinyMCE script-tag i admin/include/header.php
+- [x] Integrera stimma-sync-tool i Stimma admin (2026-03-25)
+  - [x] Extrahera performUserSync() till include/functions.php (delad logik)
+  - [x] Refaktorera api/sync_users.php att använda performUserSync()
+  - [x] Skapa admin/ajax/sync_users_direct.php (AJAX-endpoint med sessionsauth)
+  - [x] Skapa admin/sync_tool.php (komplett sync-UI portad från stimma-sync-tool)
+  - [x] Lägg till "Synkverktyg" i admin-menyn (header.php)
+  - [x] API-endpoint och API-nyckelhantering oförändrade (för externa system)
 - [x] API Kursstatus + Synligt kurs-ID (2026-03-04)
   - [x] admin/courses.php: ID-kolumn i kurstabellen
   - [x] admin/edit_course.php: kurs-ID badge i formulärhuvudet

@@ -24,12 +24,30 @@ if (!$isAdmin) {
 // Sätt sidtitel
 $page_title = 'Diplomhantering';
 
-// Hämta alla kurser med diplominfo
-$courses = query("SELECT c.*,
-                         (SELECT COUNT(*) FROM " . DB_DATABASE . ".certificates WHERE course_id = c.id) as cert_count
-                  FROM " . DB_DATABASE . ".courses c
-                  WHERE c.status = 'active'
-                  ORDER BY c.title");
+// Hämta användarens domän för organisationsfiltrering
+$currentUser = queryOne("SELECT * FROM " . DB_DATABASE . ".users WHERE email = ?", [$_SESSION['user_email']]);
+$userDomain = $currentUser ? substr(strrchr($currentUser['email'], "@"), 1) : '';
+$isSuperAdmin = $currentUser && ($currentUser['role'] ?? '') === 'super_admin';
+
+// Org-scope: alla domäner i adminens organisation
+$orgScopeDomains = getOrgScopeDomains($_SESSION['user_email']);
+$courseDomClause = buildDomainInClause($orgScopeDomains, 'c.organization_domain');
+$coDomClause = buildDomainInClause($orgScopeDomains, 'co.organization_domain');
+
+// Hämta kurser med diplominfo - filtrerade på organisation
+if ($isSuperAdmin) {
+    $courses = query("SELECT c.*,
+                             (SELECT COUNT(*) FROM " . DB_DATABASE . ".certificates WHERE course_id = c.id) as cert_count
+                      FROM " . DB_DATABASE . ".courses c
+                      WHERE c.status = 'active'
+                      ORDER BY c.title");
+} else {
+    $courses = query("SELECT c.*,
+                             (SELECT COUNT(*) FROM " . DB_DATABASE . ".certificates WHERE course_id = c.id) as cert_count
+                      FROM " . DB_DATABASE . ".courses c
+                      WHERE c.status = 'active' AND {$courseDomClause['fragment']}
+                      ORDER BY c.title", $courseDomClause['params']);
+}
 
 // Hantera bilduppladdning
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
@@ -295,13 +313,32 @@ require_once 'include/header.php';
                         </div>
                         <div class="card-body">
                             <?php
-                            $totalCerts = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".certificates");
-                            $recentCerts = query("SELECT c.*, co.title as course_title, u.email
-                                                  FROM " . DB_DATABASE . ".certificates c
-                                                  JOIN " . DB_DATABASE . ".courses co ON c.course_id = co.id
-                                                  JOIN " . DB_DATABASE . ".users u ON c.user_id = u.id
-                                                  ORDER BY c.issued_at DESC
-                                                  LIMIT 5");
+                            if ($isSuperAdmin) {
+                                $totalCerts = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".certificates");
+                                $recentCerts = query("SELECT c.*, co.title as course_title, u.email
+                                                      FROM " . DB_DATABASE . ".certificates c
+                                                      JOIN " . DB_DATABASE . ".courses co ON c.course_id = co.id
+                                                      JOIN " . DB_DATABASE . ".users u ON c.user_id = u.id
+                                                      ORDER BY c.issued_at DESC
+                                                      LIMIT 5");
+                            } else {
+                                $totalCerts = queryOne(
+                                    "SELECT COUNT(*) as count FROM " . DB_DATABASE . ".certificates c
+                                     JOIN " . DB_DATABASE . ".courses co ON c.course_id = co.id
+                                     WHERE {$coDomClause['fragment']}",
+                                    $coDomClause['params']
+                                );
+                                $recentCerts = query(
+                                    "SELECT c.*, co.title as course_title, u.email
+                                     FROM " . DB_DATABASE . ".certificates c
+                                     JOIN " . DB_DATABASE . ".courses co ON c.course_id = co.id
+                                     JOIN " . DB_DATABASE . ".users u ON c.user_id = u.id
+                                     WHERE {$coDomClause['fragment']}
+                                     ORDER BY c.issued_at DESC
+                                     LIMIT 5",
+                                    $coDomClause['params']
+                                );
+                            }
                             ?>
                             <div class="row mb-3">
                                 <div class="col-md-4">

@@ -87,165 +87,30 @@ if (!$validation['valid']) {
     ]);
 }
 
-// 6. Utför synk i transaktion
-$db = getDb();
-$created = 0;
-$updated = 0;
-$deactivated = 0;
-$reactivated = 0;
-$syncLogId = null;
+// 6. Utför synk via delad funktion
+$result = performUserSync($users, $domain, $deactivateMissing, $apiKeyId, $ipAddress);
 
-try {
-    $db->beginTransaction();
-
-    $processedEmails = [];
-
-    foreach ($users as $userData) {
-        $email = strtolower(trim($userData['email']));
-        $name = trim($userData['name'] ?? '');
-        $role = $userData['role'] ?? 'student';
-        $organization = trim($userData['organization'] ?? '');
-
-        $processedEmails[] = $email;
-
-        // Kolla om användaren redan finns
-        $existingUser = queryOne(
-            "SELECT id, is_synced, sync_status, role FROM " . DB_DATABASE . ".users WHERE email = ?",
-            [$email]
-        );
-
-        // Bestäm is_admin och is_editor baserat på roll
-        $isAdmin = ($role === 'admin') ? 1 : 0;
-        $isEditor = ($role === 'admin' || $role === 'teacher') ? 1 : 0;
-
-        if (!$existingUser) {
-            // Skapa ny användare med is_admin/is_editor baserat på roll
-            $stmt = $db->prepare(
-                "INSERT INTO " . DB_DATABASE . ".users (email, name, role, is_admin, is_editor, is_synced, sync_status, synced_at, verified_at, created_at)
-                 VALUES (?, ?, ?, ?, ?, 1, 'active', NOW(), NOW(), NOW())"
-            );
-            $stmt->execute([$email, $name, $role, $isAdmin, $isEditor]);
-            $userId = $db->lastInsertId();
-            $created++;
-        } else {
-            $userId = $existingUser['id'];
-
-            // Kontrollera om användaren reaktiveras
-            if ($existingUser['is_synced'] == 1 && $existingUser['sync_status'] === 'inactive') {
-                $reactivated++;
-            }
-
-            // Uppdatera existerande - bevara super_admin-roll
-            $newRole = $role;
-            $newIsAdmin = $isAdmin;
-            $newIsEditor = $isEditor;
-            if ($existingUser['role'] === 'super_admin') {
-                $newRole = 'super_admin'; // Bevara super_admin
-                $newIsAdmin = 1;
-                $newIsEditor = 1;
-            }
-
-            $stmt = $db->prepare(
-                "UPDATE " . DB_DATABASE . ".users
-                 SET name = ?, role = ?, is_admin = ?, is_editor = ?, is_synced = 1, sync_status = 'active', synced_at = NOW()
-                 WHERE id = ?"
-            );
-            $stmt->execute([$name, $newRole, $newIsAdmin, $newIsEditor, $userId]);
-            $updated++;
-        }
-
-        // Hantera organisationstaggar
-        // Rensa gamla taggar
-        $stmt = $db->prepare("DELETE FROM " . DB_DATABASE . ".user_org_tags WHERE user_id = ?");
-        $stmt->execute([$userId]);
-
-        // Sätt nya taggar från organization-fältet
-        if (!empty($organization)) {
-            $segments = array_map('trim', explode('/', $organization));
-            $segments = array_filter($segments, function($s) { return $s !== ''; });
-
-            foreach ($segments as $tag) {
-                $stmt = $db->prepare(
-                    "INSERT IGNORE INTO " . DB_DATABASE . ".user_org_tags (user_id, tag) VALUES (?, ?)"
-                );
-                $stmt->execute([$userId, $tag]);
-            }
-        }
-    }
-
-    // 7. Markera saknade användare som inaktiva (kan stängas av med deactivate_missing=false)
-    if ($deactivateMissing && !empty($processedEmails)) {
-        $placeholders = implode(',', array_fill(0, count($processedEmails), '?'));
-        $params = array_merge($processedEmails, [$domain]);
-
-        $stmt = $db->prepare(
-            "UPDATE " . DB_DATABASE . ".users
-             SET sync_status = 'inactive'
-             WHERE is_synced = 1
-               AND sync_status = 'active'
-               AND role != 'super_admin'
-               AND email NOT IN ($placeholders)
-               AND SUBSTRING_INDEX(email, '@', -1) = ?"
-        );
-        $stmt->execute($params);
-        $deactivated = $stmt->rowCount();
-    }
-
-    // 8. Logga synk
-    $durationMs = (int)((microtime(true) - $startTime) * 1000);
-
-    $stmt = $db->prepare(
-        "INSERT INTO " . DB_DATABASE . ".sync_log
-         (domain, api_key_id, users_in_payload, users_created, users_updated, users_deactivated, users_reactivated, status, ip_address, duration_ms)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'success', ?, ?)"
-    );
-    $stmt->execute([$domain, $apiKeyId, $userCount, $created, $updated, $deactivated, $reactivated, $ipAddress, $durationMs]);
-    $syncLogId = $db->lastInsertId();
-
-    $db->commit();
-
+if ($result['success']) {
     // Logga i activity_log
     logActivity('api@' . $domain, 'API-synk genomförd', [
         'action' => 'api_sync',
         'domain' => $domain,
-        'sync_id' => $syncLogId,
-        'users_in_payload' => $userCount,
-        'created' => $created,
-        'updated' => $updated,
-        'deactivated' => $deactivated,
-        'reactivated' => $reactivated
+        'sync_id' => $result['sync_id'],
+        'users_in_payload' => $result['summary']['total_in_payload'],
+        'created' => $result['summary']['created'],
+        'updated' => $result['summary']['updated'],
+        'deactivated' => $result['summary']['deactivated'],
+        'reactivated' => $result['summary']['reactivated']
     ]);
 
     apiResponse(200, [
         'success' => true,
-        'summary' => [
-            'total_in_payload' => $userCount,
-            'created' => $created,
-            'updated' => $updated,
-            'deactivated' => $deactivated,
-            'reactivated' => $reactivated
-        ],
-        'sync_id' => (int)$syncLogId
+        'summary' => $result['summary'],
+        'sync_id' => $result['sync_id']
     ]);
-
-} catch (Exception $e) {
-    $db->rollBack();
-
-    // Logga fel
-    $durationMs = (int)((microtime(true) - $startTime) * 1000);
-    $errorMsg = $e->getMessage();
-
-    execute(
-        "INSERT INTO " . DB_DATABASE . ".sync_log
-         (domain, api_key_id, users_in_payload, users_created, users_updated, users_deactivated, users_reactivated, status, error_message, ip_address, duration_ms)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'failed', ?, ?, ?)",
-        [$domain, $apiKeyId, $userCount, $created, $updated, $deactivated, $reactivated, $errorMsg, $ipAddress, $durationMs]
-    );
-
-    error_log("Stimma API sync error: " . $errorMsg);
-
+} else {
     apiResponse(500, [
         'success' => false,
-        'error' => 'Ett internt fel uppstod vid synkronisering.'
+        'error' => $result['error']
     ]);
 }

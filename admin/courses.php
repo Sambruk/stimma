@@ -29,17 +29,21 @@ $user = queryOne("SELECT id, is_admin, is_editor FROM " . DB_DATABASE . ".users 
 $isAdmin = $user && $user['is_admin'] == 1;
 $userId = $user['id'] ?? 0;
 
+// Org-scope: alla domäner i användarens organisation
+$orgScopeDomains = getOrgScopeDomains($userEmail);
+$courseDomClause = buildDomainInClause($orgScopeDomains, 'c.organization_domain');
+
 // Hämta kurser baserat på användarens behörighet
 if ($isAdmin) {
-    // Administratörer ser endast kurser från sin egen organisation
+    // Administratörer ser kurser från hela sin organisation (alla orgens domäner)
     $courses = queryAll("
         SELECT c.*, COUNT(l.id) as lesson_count
         FROM " . DB_DATABASE . ".courses c
         LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id
-        WHERE c.organization_domain = ?
+        WHERE {$courseDomClause['fragment']}
         GROUP BY c.id
         ORDER BY c.sort_order ASC
-    ", [$userDomain]);
+    ", $courseDomClause['params']);
 } else {
     // Redaktörer ser kurser de skapat (author_id) ELLER tilldelats redaktörskap för
     $courses = queryAll("
@@ -47,11 +51,11 @@ if ($isAdmin) {
         FROM " . DB_DATABASE . ".courses c
         LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id
         LEFT JOIN " . DB_DATABASE . ".course_editors ce ON c.id = ce.course_id
-        WHERE c.organization_domain = ?
+        WHERE {$courseDomClause['fragment']}
           AND (c.author_id = ? OR ce.email = ?)
         GROUP BY c.id
         ORDER BY c.sort_order ASC
-    ", [$userDomain, $userId, $userEmail]);
+    ", array_merge($courseDomClause['params'], [$userId, $userEmail]));
 }
 
 // Hämta organisationstaggar per kurs
@@ -134,6 +138,22 @@ require_once 'include/header.php';
                                     <?php foreach ($courseOrgTagsMap[$course['id']] as $orgTag): ?>
                                     <span class="badge bg-success" style="font-size: 0.7rem;"><?= htmlspecialchars($orgTag) ?></span>
                                     <?php endforeach; ?>
+                                <?php endif; ?>
+                                <?php
+                                $origDomain = $course['original_organization_domain'] ?? null;
+                                if ($origDomain && $origDomain !== $course['organization_domain']):
+                                    $origLabel = getOriginalOrganizationLabel($origDomain);
+                                ?>
+                                <span class="badge bg-info text-dark" style="font-size: 0.7rem;"
+                                      title="Permanent etikett — kursen kopierades ursprungligen från denna organisation">
+                                    <i class="bi bi-diagram-3 me-1"></i>Ursprung: <?= htmlspecialchars($origLabel) ?>
+                                </span>
+                                <?php endif; ?>
+                                <?php if (!empty($course['is_public'])): ?>
+                                <a href="public_participants.php?course_id=<?= (int)$course['id'] ?>" class="badge bg-primary text-decoration-none"
+                                   style="font-size: 0.7rem;" title="Hantera publika deltagare">
+                                    <i class="bi bi-globe me-1"></i>Publik
+                                </a>
                                 <?php endif; ?>
                             </div>
                         </td>

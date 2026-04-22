@@ -118,10 +118,23 @@ try {
     // Delete reminder_log entries (no FK but contains course data)
     execute("DELETE FROM " . DB_DATABASE . ".reminder_log WHERE course_id = ?", [$courseId]);
 
-    // Finally delete the course
+    // Samla public_course_access-användare INNAN kursen raderas (FK cascade
+    // tömmer tabellen) så vi kan göra orphan-sweep efteråt.
+    $publicUserIds = array_column(
+        query("SELECT user_id FROM " . DB_DATABASE . ".public_course_access WHERE course_id = ?", [$courseId]),
+        'user_id'
+    );
+
+    // Finally delete the course — FK cascadar public_course_access +
+    // public_registration_intents.
     execute("DELETE FROM " . DB_DATABASE . ".courses WHERE id = ?", [$courseId]);
 
     execute("COMMIT");
+
+    // Orphan-sweep: radera public_only-användare som inte har några kurser kvar.
+    foreach ($publicUserIds as $uid) {
+        try { maybeDeleteOrphanPublicUser((int)$uid); } catch (Exception $e) {}
+    }
 
     logActivity($_SESSION['user_email'], "Raderade kursen '" . $course['title'] . "' (ID: " . $courseId . ") med " . $lessonCount . " lektioner");
 

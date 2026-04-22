@@ -33,24 +33,28 @@ if (!$isAdmin && !$isEditor) {
 
 $selectedCourseId = isset($_GET['course_id']) ? (int)$_GET['course_id'] : null;
 
+// Org-scope: alla domäner i adminens organisation
+$orgScopeDomains = getOrgScopeDomains($userEmail);
+$courseDomClause = buildDomainInClause($orgScopeDomains, 'c.organization_domain');
+
 // Hämta kurser baserat på behörighet
 if ($isAdmin) {
     $courses = query(
         "SELECT c.*, (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = c.id) AS lesson_count
          FROM " . DB_DATABASE . ".courses c
-         WHERE c.organization_domain = ?
-         ORDER BY c.sort_order ASC",
-        [$userDomain]
+         WHERE {$courseDomClause['fragment']}
+         ORDER BY c.id ASC",
+        $courseDomClause['params']
     );
 } else {
     $courses = query(
         "SELECT DISTINCT c.*, (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = c.id) AS lesson_count
          FROM " . DB_DATABASE . ".courses c
          LEFT JOIN " . DB_DATABASE . ".course_editors ce ON c.id = ce.course_id
-         WHERE c.organization_domain = ?
+         WHERE {$courseDomClause['fragment']}
            AND (c.author_id = ? OR ce.email = ?)
-         ORDER BY c.sort_order ASC",
-        [$userDomain, $currentUser['id'], $userEmail]
+         ORDER BY c.id ASC",
+        array_merge($courseDomClause['params'], [$currentUser['id'], $userEmail])
     );
 }
 
@@ -90,6 +94,7 @@ require_once 'include/header.php';
                 <table class="table table-hover align-middle">
                     <thead>
                         <tr>
+                            <th style="width: 60px;">ID</th>
                             <th>Titel</th>
                             <th>Typ</th>
                             <th>Status</th>
@@ -101,13 +106,18 @@ require_once 'include/header.php';
                     </thead>
                     <tbody>
                         <?php foreach ($courses as $course):
-                            // Räkna inskrivna (har minst en progress-rad)
+                            // Räkna inskrivna: unika användare som har progress ELLER
+                            // publik registrering för kursen. UNION fångar publika
+                            // deltagare som ännu inte öppnat någon lektion.
                             $enrolled = queryOne(
-                                "SELECT COUNT(DISTINCT p.user_id) AS cnt
-                                 FROM " . DB_DATABASE . ".progress p
-                                 JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
-                                 WHERE l.course_id = ?",
-                                [$course['id']]
+                                "SELECT COUNT(*) AS cnt FROM (
+                                    SELECT p.user_id FROM " . DB_DATABASE . ".progress p
+                                    JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
+                                    WHERE l.course_id = ?
+                                    UNION
+                                    SELECT user_id FROM " . DB_DATABASE . ".public_course_access WHERE course_id = ?
+                                ) AS u",
+                                [$course['id'], $course['id']]
                             );
                             $enrolledCount = $enrolled ? (int)$enrolled['cnt'] : 0;
 
@@ -130,6 +140,7 @@ require_once 'include/header.php';
                             }
                         ?>
                         <tr>
+                            <td><span class="text-muted"><?= (int)$course['id'] ?></span></td>
                             <td>
                                 <a href="?course_id=<?= $course['id'] ?>" class="text-decoration-none fw-bold">
                                     <?= htmlspecialchars($course['title']) ?>
@@ -192,28 +203,63 @@ require_once 'include/header.php';
     // Bygg användargrupper baserat på org-taggar
     $userGroups = [];
 
+    // Org-scope e-postfilter (alla orgens domäner)
+    $statsUserEmailClause = buildEmailDomainInClause($orgScopeDomains, 'u.email');
+    $statsUserEmailClauseUnprefixed = buildEmailDomainInClause($orgScopeDomains, 'email');
+
     if ($hasCourseOrgTags) {
-        // Gruppera per org-tagg
+        // Gruppera per org-tagg — utvidgat till alla orgens domäner
         foreach ($courseOrgTagValues as $tag) {
             $usersInTag = query(
                 "SELECT u.id, u.name, u.email
                  FROM " . DB_DATABASE . ".users u
                  JOIN " . DB_DATABASE . ".user_org_tags uot ON u.id = uot.user_id
-                 WHERE uot.tag = ? AND u.email LIKE ?
+                 WHERE uot.tag = ? AND {$statsUserEmailClause['fragment']}
                  ORDER BY u.name ASC, u.email ASC",
-                [$tag, '%@' . $userDomain]
+                array_merge([$tag], $statsUserEmailClause['params'])
             );
             $userGroups[$tag] = $usersInTag;
         }
     } else {
-        // Alla domänanvändare i en grupp
+        // Alla användare inom orgens samtliga domäner
         $allDomainUsers = query(
             "SELECT id, name, email FROM " . DB_DATABASE . ".users
-             WHERE email LIKE ?
+             WHERE {$statsUserEmailClauseUnprefixed['fragment']}
              ORDER BY name ASC, email ASC",
-            ['%@' . $userDomain]
+            $statsUserEmailClauseUnprefixed['params']
         );
         $userGroups['Alla användare'] = $allDomainUsers;
+    }
+
+    // Publika deltagare: registrerade via publik länk, har oftast extern e-postdomän
+    // och syns därför inte i domän-scope-filtret ovan. Lägg dem i en egen grupp
+    // så admin alltid ser vilka som är externa deltagare. Körs även när is_public=0
+    // eftersom en kurs kan ha avaktiverats med kvarvarande deltagare.
+    {
+        $publicParticipants = query(
+            "SELECT u.id, u.name, u.email
+             FROM " . DB_DATABASE . ".public_course_access pca
+             JOIN " . DB_DATABASE . ".users u ON u.id = pca.user_id
+             WHERE pca.course_id = ?
+             ORDER BY u.name ASC, u.email ASC",
+            [$selectedCourseId]
+        );
+        if (!empty($publicParticipants)) {
+            // Filtrera bort ev. dubbletter som redan finns i org-grupper (interna
+            // användare som också registrerat sig via publik länk).
+            $existingIds = [];
+            foreach ($userGroups as $groupUsers) {
+                foreach ($groupUsers as $gu) {
+                    $existingIds[(int)$gu['id']] = true;
+                }
+            }
+            $filtered = array_filter($publicParticipants, function($u) use ($existingIds) {
+                return !isset($existingIds[(int)$u['id']]);
+            });
+            if (!empty($filtered)) {
+                $userGroups['Publika deltagare'] = array_values($filtered);
+            }
+        }
     }
 
     // Hämta all progress för denna kurs
@@ -241,8 +287,23 @@ require_once 'include/header.php';
         }
     }
 
-    // Räkna sammanfattning
-    $totalEnrolled = 0;
+    // Hämta enrollment-data för rolling-kurser
+    $isRollingCourse = $course['sequential_mode'] && ($course['enrollment_type'] ?? 'bulk_start') === 'rolling';
+    $allEnrollments = [];
+    if ($isRollingCourse) {
+        $enrollmentRows = query(
+            "SELECT * FROM " . DB_DATABASE . ".course_enrollments WHERE course_id = ?",
+            [$selectedCourseId]
+        );
+        foreach ($enrollmentRows as $e) {
+            $allEnrollments[$e['user_id']] = $e;
+        }
+    }
+
+    // Räkna sammanfattning. "Inskrivna" = alla unika användare (med eller utan
+    // progress) — inkluderar publika deltagare som ännu inte öppnat någon lektion.
+    // "Ej påbörjat" = inskrivna utan någon progress-rad. "Klara" = har completed
+    // för alla lektioner.
     $totalNotStarted = 0;
     $totalCompleted = 0;
     $totalLessonsInCourse = count($courseLessons);
@@ -264,18 +325,17 @@ require_once 'include/header.php';
                 }
             }
 
-            if ($hasAnyProgress) {
-                $totalEnrolled++;
-                if ($totalLessonsInCourse > 0 && $userLessonsCompleted >= $totalLessonsInCourse) {
-                    $totalCompleted++;
-                }
-            } else {
+            if (!$hasAnyProgress) {
                 $totalNotStarted++;
+            } elseif ($totalLessonsInCourse > 0 && $userLessonsCompleted >= $totalLessonsInCourse) {
+                $totalCompleted++;
             }
         }
     }
 
-    $totalUniqueUsers = count($seenUserIds);
+    $totalEnrolled = count($seenUserIds);
+    $totalUniqueUsers = $totalEnrolled;
+
     $avgProgress = 0;
     if ($totalEnrolled > 0 && $totalLessonsInCourse > 0) {
         $totalCompletedLessons = 0;
@@ -290,9 +350,12 @@ require_once 'include/header.php';
     }
     ?>
 
-    <div class="mb-3">
+    <div class="mb-3 d-flex gap-2">
         <a href="course_stats.php" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-arrow-left me-1"></i>Tillbaka till översikt
+        </a>
+        <a href="export_statistics.php?course_id=<?= $selectedCourseId ?>&return=course_stats" class="btn btn-outline-success btn-sm">
+            <i class="bi bi-file-earmark-excel me-1"></i>Exportera Excel
         </a>
     </div>
 
@@ -304,11 +367,18 @@ require_once 'include/header.php';
                     <span class="badge bg-info ms-2">Stegvis</span>
                 <?php endif; ?>
             </h6>
-            <?php if ($course['sequential_mode']): ?>
-            <button type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#manualReminderModal">
-                <i class="bi bi-bell me-1"></i>Skicka påminnelse
-            </button>
-            <?php endif; ?>
+            <div class="d-flex gap-2">
+                <?php if ($isRollingCourse): ?>
+                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#enrollUserModal">
+                    <i class="bi bi-person-plus me-1"></i>Skriv in användare
+                </button>
+                <?php endif; ?>
+                <?php if ($course['sequential_mode']): ?>
+                <button type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#manualReminderModal">
+                    <i class="bi bi-bell me-1"></i>Skicka påminnelse
+                </button>
+                <?php endif; ?>
+            </div>
         </div>
         <div class="card-body">
             <!-- Sammanfattningskort -->
@@ -378,6 +448,11 @@ require_once 'include/header.php';
                                 <th>Namn</th>
                                 <th>E-post</th>
                                 <th>Status</th>
+                                <?php if ($isRollingCourse): ?>
+                                <th>Startdatum</th>
+                                <th>Senaste lektion</th>
+                                <th>Beräknat slut</th>
+                                <?php endif; ?>
                                 <?php foreach ($courseLessons as $cl): ?>
                                 <th class="text-center" style="min-width: 40px;" title="<?= htmlspecialchars($cl['title']) ?>">
                                     L<?= $cl['sort_order'] ?>
@@ -410,6 +485,32 @@ require_once 'include/header.php';
                                 <td><?= htmlspecialchars($u['name'] ?: '-') ?></td>
                                 <td class="small"><?= htmlspecialchars($u['email']) ?></td>
                                 <td><?= $statusBadge ?></td>
+                                <?php if ($isRollingCourse):
+                                    $enrollment = $allEnrollments[$u['id']] ?? null;
+                                    $startedAt = $enrollment ? $enrollment['started_at'] : null;
+
+                                    // Senaste tillgängliga lektion
+                                    $latestAvailable = null;
+                                    if (isset($allSchedules[$u['id']])) {
+                                        foreach ($allSchedules[$u['id']] as $sched) {
+                                            if ($sched['available_at'] && strtotime($sched['available_at']) <= time()) {
+                                                if (!$latestAvailable || strtotime($sched['available_at']) > strtotime($latestAvailable)) {
+                                                    $latestAvailable = $sched['available_at'];
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    $projectedEnd = getProjectedEndDate(
+                                        $startedAt,
+                                        $totalLessonsInCourse,
+                                        (int)$course['sequential_interval_days']
+                                    );
+                                ?>
+                                <td class="small"><?= $startedAt ? date('Y-m-d', strtotime($startedAt)) : '-' ?></td>
+                                <td class="small"><?= $latestAvailable ? date('Y-m-d', strtotime($latestAvailable)) : '-' ?></td>
+                                <td class="small"><?= $projectedEnd ?: '-' ?></td>
+                                <?php endif; ?>
                                 <?php foreach ($courseLessons as $cl):
                                     $lessonStatus = $progressMap[$u['id']][$cl['id']] ?? null;
                                     $schedule = $allSchedules[$u['id']][$cl['id']] ?? null;
@@ -464,12 +565,12 @@ require_once 'include/header.php';
     );
     // Logg grupperad per datum + typ
     $emailLog = query(
-        "SELECT DATE(sent_at) AS log_date, type,
+        "SELECT DATE_FORMAT(sent_at, '%Y-%m-%d %H:%i') AS log_date, type,
                 SUM(email_status = 'sent') AS sent_count,
                 SUM(email_status = 'failed') AS failed_count
          FROM " . DB_DATABASE . ".sequential_reminder_log
          WHERE course_id = ?
-         GROUP BY DATE(sent_at), type
+         GROUP BY DATE_FORMAT(sent_at, '%Y-%m-%d %H:%i'), type
          ORDER BY log_date DESC
          LIMIT 100",
         [$selectedCourseId]
@@ -591,6 +692,159 @@ require_once 'include/header.php';
             btn.innerHTML = '<i class="bi bi-send me-1"></i>Skicka påminnelse';
         });
     });
+    </script>
+    <?php endif; ?>
+
+    <?php if ($isRollingCourse): ?>
+    <!-- Modal för inskrivning -->
+    <div class="modal fade" id="enrollUserModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-person-plus me-2"></i>Skriv in användare</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Sök användare</label>
+                        <input type="text" class="form-control" id="statsEnrollSearch" placeholder="Sök namn eller e-post..." autocomplete="off">
+                        <div id="statsEnrollResults" class="list-group position-absolute mt-1" style="z-index: 1060; display: none;"></div>
+                        <input type="hidden" id="statsEnrollEmail" value="">
+                    </div>
+                    <?php
+                    // Org-taggar från alla orgens domäner
+                    $statsOrgTags = [];
+                    $seenStatsOrgTags = [];
+                    foreach ($orgScopeDomains as $scopeDomain) {
+                        foreach (getOrgTagsForDomain($scopeDomain) as $tagRow) {
+                            $tagName = $tagRow['tag'] ?? null;
+                            if ($tagName !== null && !isset($seenStatsOrgTags[$tagName])) {
+                                $statsOrgTags[] = $tagRow;
+                                $seenStatsOrgTags[$tagName] = true;
+                            }
+                        }
+                    }
+                    if (!empty($statsOrgTags)): ?>
+                    <div class="mb-3">
+                        <label class="form-label">Eller hela org-taggen</label>
+                        <select class="form-select" id="statsEnrollOrgTag">
+                            <option value="">— Välj —</option>
+                            <?php foreach ($statsOrgTags as $ot): ?>
+                            <option value="<?= htmlspecialchars($ot['tag']) ?>"><?= htmlspecialchars($ot['tag']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <?php endif; ?>
+                    <div class="mb-3">
+                        <label class="form-label">Startdatum</label>
+                        <input type="date" class="form-control" id="statsEnrollDate" value="<?= date('Y-m-d') ?>">
+                    </div>
+                    <div id="statsEnrollResult" style="display: none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
+                    <button type="button" class="btn btn-primary" id="statsEnrollBtn" disabled>
+                        <i class="bi bi-person-plus me-1"></i>Skriv in
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        var search = document.getElementById('statsEnrollSearch');
+        var results = document.getElementById('statsEnrollResults');
+        var emailInput = document.getElementById('statsEnrollEmail');
+        var orgTag = document.getElementById('statsEnrollOrgTag');
+        var enrollBtn = document.getElementById('statsEnrollBtn');
+        var searchTimeout = null;
+
+        function updateBtn() {
+            enrollBtn.disabled = !(emailInput.value || (orgTag && orgTag.value));
+        }
+
+        search.addEventListener('input', function() {
+            var q = this.value.trim();
+            emailInput.value = '';
+            updateBtn();
+            if (q.length < 2) { results.style.display = 'none'; return; }
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(function() {
+                fetch('ajax/search_users.php?search=' + encodeURIComponent(q))
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        results.innerHTML = '';
+                        if (data.success && data.users && data.users.length > 0) {
+                            data.users.forEach(function(u) {
+                                var item = document.createElement('a');
+                                item.href = '#';
+                                item.className = 'list-group-item list-group-item-action py-1 small';
+                                item.textContent = (u.name || '') + ' (' + u.email + ')';
+                                item.addEventListener('click', function(e) {
+                                    e.preventDefault();
+                                    search.value = (u.name || '') + ' (' + u.email + ')';
+                                    emailInput.value = u.email;
+                                    results.style.display = 'none';
+                                    if (orgTag) orgTag.value = '';
+                                    updateBtn();
+                                });
+                                results.appendChild(item);
+                            });
+                            results.style.display = 'block';
+                        } else {
+                            results.style.display = 'none';
+                        }
+                    });
+            }, 300);
+        });
+
+        if (orgTag) {
+            orgTag.addEventListener('change', function() {
+                if (this.value) { search.value = ''; emailInput.value = ''; }
+                updateBtn();
+            });
+        }
+
+        document.addEventListener('click', function(e) {
+            if (!results.contains(e.target) && e.target !== search) results.style.display = 'none';
+        });
+
+        enrollBtn.addEventListener('click', function() {
+            var btn = this;
+            var resultDiv = document.getElementById('statsEnrollResult');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Skriver in...';
+            resultDiv.style.display = 'none';
+
+            var formData = new FormData();
+            formData.append('course_id', '<?= $selectedCourseId ?>');
+            formData.append('csrf_token', CSRF_TOKEN);
+            formData.append('start_date', document.getElementById('statsEnrollDate').value);
+            if (emailInput.value) formData.append('email', emailInput.value);
+            if (orgTag && orgTag.value) formData.append('org_tag', orgTag.value);
+
+            fetch('ajax/enroll_user_sequential.php', { method: 'POST', body: formData })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    resultDiv.style.display = 'block';
+                    resultDiv.className = 'alert ' + (data.success ? 'alert-success' : 'alert-danger');
+                    resultDiv.textContent = data.message || 'Ett fel uppstod.';
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-person-plus me-1"></i>Skriv in';
+                    if (data.success && data.enrolled > 0) {
+                        setTimeout(function() { location.reload(); }, 2000);
+                    }
+                })
+                .catch(function() {
+                    resultDiv.style.display = 'block';
+                    resultDiv.className = 'alert alert-danger';
+                    resultDiv.textContent = 'Nätverksfel.';
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-person-plus me-1"></i>Skriv in';
+                });
+        });
+    })();
     </script>
     <?php endif; ?>
 

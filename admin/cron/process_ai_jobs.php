@@ -996,12 +996,13 @@ function importCourse($courseData, $userId, $organizationDomain) {
         // Get max sort_order
         $maxOrder = queryOne("SELECT MAX(sort_order) as max_order FROM " . DB_DATABASE . ".courses")['max_order'] ?? 0;
 
-        // Create course
+        // Create course. original_organization_domain = skaparens org — AI-genererade
+        // kurser har per definition skapats av användarens organisation.
         execute(
             "INSERT INTO " . DB_DATABASE . ".courses
              (title, description, difficulty_level, duration_minutes, prerequisites, tags,
-              image_url, status, sort_order, featured, author_id, organization_domain, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 'inactive', ?, ?, ?, ?, NOW(), NOW())",
+              image_url, status, sort_order, featured, author_id, organization_domain, original_organization_domain, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'inactive', ?, ?, ?, ?, ?, NOW(), NOW())",
             [
                 $courseData['course']['title'],
                 $courseData['course']['description'] ?? '',
@@ -1013,6 +1014,7 @@ function importCourse($courseData, $userId, $organizationDomain) {
                 $maxOrder + 1,
                 $courseData['course']['featured'] ?? 0,
                 $userId,
+                $organizationDomain,
                 $organizationDomain
             ]
         );

@@ -104,6 +104,8 @@ $exportData = [
         'status' => 'inactive', // Sätt alltid till inaktiv vid export
         'sort_order' => $course['sort_order'],
         'featured' => $course['featured'],
+        'organization_domain' => $course['organization_domain'] ?? null,
+        'original_organization_domain' => $course['original_organization_domain'] ?? $course['organization_domain'] ?? null,
         'created_at' => $course['created_at'],
         'updated_at' => $course['updated_at']
     ],

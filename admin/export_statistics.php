@@ -142,8 +142,19 @@ foreach ($userProgressInCourse as $row) {
 if (empty($userProgressGrouped)) {
     $_SESSION['message'] = 'Inga användare har påbörjat denna kurs ännu.';
     $_SESSION['message_type'] = 'info';
-    header('Location: statistics.php?course_id=' . $selectedCourseId);
+    $returnPage = ($_GET['return'] ?? '') === 'course_stats' ? 'course_stats.php' : 'statistics.php';
+    header('Location: ' . $returnPage . '?course_id=' . $selectedCourseId);
     exit;
+}
+
+// Kontrollera om kursen är rolling enrollment
+$isRollingExport = $courseDetails['sequential_mode'] && ($courseDetails['enrollment_type'] ?? 'bulk_start') === 'rolling';
+$enrollmentMap = [];
+if ($isRollingExport) {
+    $enrollRows = query("SELECT * FROM " . DB_DATABASE . ".course_enrollments WHERE course_id = ?", [$selectedCourseId]);
+    foreach ($enrollRows as $er) {
+        $enrollmentMap[$er['user_id']] = $er;
+    }
 }
 
 // Skapa Excel-fil (använder XML Spreadsheet format som öppnas i Excel)
@@ -164,15 +175,21 @@ echo '<head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><
 echo '<body>';
 
 // Titel
+$extraCols = $isRollingExport ? 3 : 0;
 echo '<table border="1">';
-echo '<tr><td colspan="' . (count($lessonsInCourse) + 4) . '" style="font-size:16pt;font-weight:bold;">Användarframsteg: ' . htmlspecialchars($courseDetails['title']) . '</td></tr>';
-echo '<tr><td colspan="' . (count($lessonsInCourse) + 4) . '">Exporterad: ' . date('Y-m-d H:i:s') . '</td></tr>';
-echo '<tr><td colspan="' . (count($lessonsInCourse) + 4) . '"></td></tr>';
+echo '<tr><td colspan="' . (count($lessonsInCourse) + 4 + $extraCols) . '" style="font-size:16pt;font-weight:bold;">Användarframsteg: ' . htmlspecialchars($courseDetails['title']) . '</td></tr>';
+echo '<tr><td colspan="' . (count($lessonsInCourse) + 4 + $extraCols) . '">Exporterad: ' . date('Y-m-d H:i:s') . '</td></tr>';
+echo '<tr><td colspan="' . (count($lessonsInCourse) + 4 + $extraCols) . '"></td></tr>';
 
 // Rubrikrad
 echo '<tr style="background-color:#0F3B5F;color:#FFFFFF;font-weight:bold;">';
 echo '<td>E-post</td>';
 echo '<td>Namn</td>';
+if ($isRollingExport) {
+    echo '<td>Startdatum</td>';
+    echo '<td>Senaste lektion</td>';
+    echo '<td>Beräknat slutdatum</td>';
+}
 echo '<td>Slutförda</td>';
 echo '<td>Procent</td>';
 foreach ($lessonsInCourse as $lesson) {
@@ -187,6 +204,24 @@ foreach ($userProgressGrouped as $userId => $userData) {
     echo '<tr>';
     echo '<td>' . htmlspecialchars($userData['email']) . '</td>';
     echo '<td>' . htmlspecialchars($userData['name'] ?? '') . '</td>';
+    if ($isRollingExport) {
+        $enroll = $enrollmentMap[$userId] ?? null;
+        $startedAt = $enroll ? $enroll['started_at'] : null;
+        // Senaste tillgängliga lektion
+        $latestAvail = null;
+        if ($startedAt) {
+            $latestRow = queryOne(
+                "SELECT MAX(available_at) AS latest FROM " . DB_DATABASE . ".sequential_lesson_schedule
+                 WHERE user_id = ? AND course_id = ? AND available_at <= NOW()",
+                [$userId, $selectedCourseId]
+            );
+            $latestAvail = $latestRow ? $latestRow['latest'] : null;
+        }
+        $projEnd = getProjectedEndDate($startedAt, count($lessonsInCourse), (int)$courseDetails['sequential_interval_days']);
+        echo '<td>' . ($startedAt ? date('Y-m-d', strtotime($startedAt)) : '-') . '</td>';
+        echo '<td>' . ($latestAvail ? date('Y-m-d', strtotime($latestAvail)) : '-') . '</td>';
+        echo '<td>' . ($projEnd ?: '-') . '</td>';
+    }
     echo '<td>' . $userData['completed'] . '/' . $userData['total'] . '</td>';
     echo '<td>' . $percentage . '%</td>';
 
@@ -201,10 +236,10 @@ foreach ($userProgressGrouped as $userId => $userData) {
 }
 
 // Summering
-echo '<tr><td colspan="' . (count($lessonsInCourse) + 4) . '"></td></tr>';
+echo '<tr><td colspan="' . (count($lessonsInCourse) + 4 + $extraCols) . '"></td></tr>';
 echo '<tr style="font-weight:bold;">';
 echo '<td colspan="2">Totalt antal användare:</td>';
-echo '<td colspan="' . (count($lessonsInCourse) + 2) . '">' . count($userProgressGrouped) . '</td>';
+echo '<td colspan="' . (count($lessonsInCourse) + 2 + $extraCols) . '">' . count($userProgressGrouped) . '</td>';
 echo '</tr>';
 
 echo '</table>';

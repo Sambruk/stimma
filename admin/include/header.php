@@ -21,9 +21,9 @@ $isAdmin = $user && $user['is_admin'] == 1;
 $isEditor = $user && $user['is_editor'] == 1;
 $isSuperAdmin = $user && $user['role'] === 'super_admin';
 
-// Hämta användarens domän och PUB-avtalsstatus
+// Hämta användarens domän och PUB-avtalsstatus (org-scope om grupperad)
 $userDomain = getUserDomain($_SESSION['user_email']);
-$userHasPubAgreement = hasPubAgreement($userDomain);
+$userHasPubAgreement = userHasPubAgreement($_SESSION['user_email']);
 
 // Enkel session timeout (30 minuter)
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
@@ -66,6 +66,9 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <!-- Chart.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.min.js"></script>
     
+    <!-- TinyMCE Editor -->
+    <script src="include/js/tinymce/tinymce.min.js"></script>
+
     <!-- Custom CSS -->
     <link rel="stylesheet" href="include/css/style.css">
     
@@ -75,6 +78,42 @@ $current_page = basename($_SERVER['PHP_SELF']);
     </script>
 </head>
 <body>
+    <?php if (isImpersonating()): ?>
+    <div class="alert alert-danger mb-0 rounded-0 py-2" role="alert" style="position: sticky; top: 0; z-index: 1042;">
+        <div class="container-fluid d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-eye-fill me-2 fs-5"></i>
+                <div>
+                    <strong>Du visar som <?= htmlspecialchars($_SESSION['user_email']) ?></strong>
+                    <span class="d-none d-md-inline">
+                        — inloggad som superadmin <?= htmlspecialchars($_SESSION['impersonator_user_email'] ?? '') ?>.
+                    </span>
+                </div>
+            </div>
+            <form method="post" action="stop_impersonate.php" class="d-inline">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                <button type="submit" class="btn btn-light btn-sm text-nowrap">
+                    <i class="bi bi-box-arrow-left me-1"></i>Sluta visa som
+                </button>
+            </form>
+        </div>
+    </div>
+    <?php endif; ?>
+    <?php if ($isSuperAdmin && isMaintenanceModeActive()): ?>
+    <!-- Underhållsläge-banner (visas endast för superadmin när läget är aktivt) -->
+    <div class="alert alert-warning border-0 rounded-0 mb-0 py-2" role="alert" style="position: sticky; top: 0; z-index: 1040;">
+        <div class="container-fluid d-flex justify-content-between align-items-center">
+            <div>
+                <i class="bi bi-tools me-2"></i>
+                <strong>Underhållsläge är aktivt.</strong>
+                Endast superadministratörer kan använda systemet just nu.
+            </div>
+            <a href="<?= $current_page === 'maintenance.php' ? '#' : 'maintenance.php' ?>" class="btn btn-sm btn-outline-dark">
+                <i class="bi bi-gear me-1"></i>Hantera
+            </a>
+        </div>
+    </div>
+    <?php endif; ?>
     <div class="sidebar d-flex flex-column h-100">
         <div class="px-3 mb-4 text-center">
             <h3 class="text-white"><img src="../images/stimma-logo.png" alt="Stimma" class="me-2" height="75"></h3>
@@ -137,6 +176,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a href="sync_tool.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'sync_tool.php' ? 'active' : '' ?>">
+                        <i class="bi bi-arrow-left-right me-2"></i> Synkverktyg
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a href="sync_logs.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'sync_logs.php' ? 'active' : '' ?>">
                         <i class="bi bi-arrow-repeat me-2"></i> Synkloggar
                     </a>
@@ -161,8 +205,21 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a href="organizations.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'organizations.php' ? 'active' : '' ?>">
+                        <i class="bi bi-diagram-3 me-2"></i> Organisationer
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a href="ai_settings.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'ai_settings.php' ? 'active' : '' ?>">
                         <i class="bi bi-robot me-2"></i> AI-inställningar
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="maintenance.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'maintenance.php' ? 'active' : '' ?>">
+                        <i class="bi bi-tools me-2"></i> Underhållsläge
+                        <?php if (isMaintenanceModeActive()): ?>
+                        <span class="badge bg-danger ms-auto">PÅ</span>
+                        <?php endif; ?>
                     </a>
                 </li>
                 <?php endif; ?>

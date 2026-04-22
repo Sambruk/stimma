@@ -24,6 +24,11 @@ $userEmail = $_SESSION['user_email'];
 $currentUser = queryOne("SELECT * FROM " . DB_DATABASE . ".users WHERE email = ?", [$userEmail]);
 $userDomain = $currentUser ? substr(strrchr($currentUser['email'], "@"), 1) : '';
 
+// Org-scope: alla domäner i adminens organisation. Tag-listor och tag-validering
+// hämtas från hela orgen så adminer på olika domäner ser samma uppsättning taggar.
+$orgScopeDomains = getOrgScopeDomains($userEmail);
+$tagDomClause = buildDomainInClause($orgScopeDomains, 'organization_domain');
+
 // Hämta kursdata om vi redigerar en befintlig kurs
 $course = null;
 $courseTags = [];
@@ -66,14 +71,24 @@ if (isset($_GET['id'])) {
     $courseTags = array_column($courseTags, 'id');
 }
 
-// Hämta alla tillgängliga taggar för organisationen
+// Hämta alla tillgängliga taggar för organisationen (alla orgens domäner)
 $availableTags = query(
-    "SELECT * FROM " . DB_DATABASE . ".tags WHERE organization_domain = ? ORDER BY name ASC",
-    [$userDomain]
+    "SELECT * FROM " . DB_DATABASE . ".tags WHERE {$tagDomClause['fragment']} ORDER BY name ASC",
+    $tagDomClause['params']
 );
 
-// Hämta organisationstaggar för domänen
-$availableOrgTags = getOrgTagsForDomain($userDomain);
+// Hämta organisationstaggar — slå ihop tags från alla orgens domäner
+$availableOrgTags = [];
+$seenOrgTags = [];
+foreach ($orgScopeDomains as $scopeDomain) {
+    foreach (getOrgTagsForDomain($scopeDomain) as $tagRow) {
+        $tagName = $tagRow['tag'] ?? null;
+        if ($tagName !== null && !isset($seenOrgTags[$tagName])) {
+            $availableOrgTags[] = $tagRow;
+            $seenOrgTags[$tagName] = true;
+        }
+    }
+}
 
 // Hämta kursens nuvarande organisationstaggar
 $courseOrgTags = [];
@@ -107,9 +122,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $seqNewLessonBody = trim($_POST['seq_new_lesson_body'] ?? '') ?: null;
     $seqReminderSubject = trim($_POST['seq_reminder_subject'] ?? '') ?: null;
     $seqReminderBody = trim($_POST['seq_reminder_body'] ?? '') ?: null;
-    // Sätt sequential_status till 'pending' om stegvis läge + startdatum
+    $enrollmentType = ($_POST['enrollment_type'] ?? 'bulk_start') === 'rolling' ? 'rolling' : 'bulk_start';
+    // Sätt sequential_status till 'pending' om stegvis läge + startdatum (bulk_start)
+    // För rolling: sätt direkt till 'active'
     $sequentialStatus = null;
-    if ($sequentialMode && $startDate) {
+    if ($sequentialMode && $enrollmentType === 'rolling') {
+        $sequentialStatus = 'active';
+    } elseif ($sequentialMode && $startDate) {
         $existingStatus = $course['sequential_status'] ?? null;
         $sequentialStatus = ($existingStatus && $existingStatus !== 'pending') ? $existingStatus : 'pending';
     }
@@ -182,10 +201,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         seq_reminder_subject = ?,
                         seq_reminder_body = ?,
                         sequential_status = ?,
+                        enrollment_type = ?,
                         image_url = ?,
                         updated_at = NOW()
                         WHERE id = ?",
-                        [$title, $description, $status, $deadline, $startDate, $sequentialMode, $sequentialIntervalDays, $sequentialReminderDelayDays, $seqNewLessonSubject, $seqNewLessonBody, $seqReminderSubject, $seqReminderBody, $sequentialStatus, $imageUrl, $_GET['id']]);
+                        [$title, $description, $status, $deadline, $startDate, $sequentialMode, $sequentialIntervalDays, $sequentialReminderDelayDays, $seqNewLessonSubject, $seqNewLessonBody, $seqReminderSubject, $seqReminderBody, $sequentialStatus, $enrollmentType, $imageUrl, $_GET['id']]);
 
                 // Uppdatera kursens taggar
                 // Ta bort befintliga taggar
@@ -194,10 +214,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Lägg till nya taggar (endast taggar från användarens organisation)
                 foreach ($selectedTags as $tagId) {
                     $tagId = (int)$tagId;
-                    // Verifiera att taggen tillhör användarens organisation
+                    // Verifiera att taggen tillhör någon av adminens orgs domäner
                     $validTag = queryOne(
-                        "SELECT id FROM " . DB_DATABASE . ".tags WHERE id = ? AND organization_domain = ?",
-                        [$tagId, $userDomain]
+                        "SELECT id FROM " . DB_DATABASE . ".tags WHERE id = ? AND {$tagDomClause['fragment']}",
+                        array_merge([$tagId], $tagDomClause['params'])
                     );
                     if ($validTag) {
                         execute(
@@ -210,7 +230,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Uppdatera organisationstaggar
                 execute("DELETE FROM " . DB_DATABASE . ".course_org_tags WHERE course_id = ?", [$_GET['id']]);
                 $selectedOrgTags = $_POST['org_tags'] ?? [];
-                $domainOrgTags = array_column(getOrgTagsForDomain($userDomain), 'tag');
+                $domainOrgTags = array_column($availableOrgTags, 'tag');
                 foreach ($selectedOrgTags as $orgTag) {
                     if (in_array($orgTag, $domainOrgTags)) {
                         execute(
@@ -230,11 +250,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $authorId = $author ? $author['id'] : null;
                 $organizationDomain = $author ? substr(strrchr($author['email'], "@"), 1) : null;
 
-                // Skapa ny kurs med nästa sort_order och organization_domain
+                // Skapa ny kurs med nästa sort_order och organization_domain.
+                // original_organization_domain sätts permanent till skaparens org
+                // och får aldrig skrivas över senare.
                 execute("INSERT INTO " . DB_DATABASE . ".courses
-                        (title, description, status, deadline, start_date, sequential_mode, sequential_interval_days, sequential_reminder_delay_days, seq_new_lesson_subject, seq_new_lesson_body, seq_reminder_subject, seq_reminder_body, sequential_status, sort_order, image_url, author_id, organization_domain, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
-                        [$title, $description, $status, $deadline, $startDate, $sequentialMode, $sequentialIntervalDays, $sequentialReminderDelayDays, $seqNewLessonSubject, $seqNewLessonBody, $seqReminderSubject, $seqReminderBody, $sequentialStatus, $maxOrder + 1, $imageUrl, $authorId, $organizationDomain]);
+                        (title, description, status, deadline, start_date, sequential_mode, sequential_interval_days, sequential_reminder_delay_days, seq_new_lesson_subject, seq_new_lesson_body, seq_reminder_subject, seq_reminder_body, sequential_status, enrollment_type, sort_order, image_url, author_id, organization_domain, original_organization_domain, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                        [$title, $description, $status, $deadline, $startDate, $sequentialMode, $sequentialIntervalDays, $sequentialReminderDelayDays, $seqNewLessonSubject, $seqNewLessonBody, $seqReminderSubject, $seqReminderBody, $sequentialStatus, $enrollmentType, $maxOrder + 1, $imageUrl, $authorId, $organizationDomain, $organizationDomain]);
 
                 // Hämta det nya kurs-ID:t
                 $newCourseId = getDb()->lastInsertId();
@@ -248,10 +270,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Lägg till taggar för ny kurs
                 foreach ($selectedTags as $tagId) {
                     $tagId = (int)$tagId;
-                    // Verifiera att taggen tillhör användarens organisation
+                    // Verifiera att taggen tillhör någon av adminens orgs domäner
                     $validTag = queryOne(
-                        "SELECT id FROM " . DB_DATABASE . ".tags WHERE id = ? AND organization_domain = ?",
-                        [$tagId, $userDomain]
+                        "SELECT id FROM " . DB_DATABASE . ".tags WHERE id = ? AND {$tagDomClause['fragment']}",
+                        array_merge([$tagId], $tagDomClause['params'])
                     );
                     if ($validTag) {
                         execute(
@@ -263,7 +285,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 // Lägg till organisationstaggar för ny kurs
                 $selectedOrgTags = $_POST['org_tags'] ?? [];
-                $domainOrgTags = array_column(getOrgTagsForDomain($userDomain), 'tag');
+                $domainOrgTags = array_column($availableOrgTags, 'tag');
                 foreach ($selectedOrgTags as $orgTag) {
                     if (in_array($orgTag, $domainOrgTags)) {
                         execute(
@@ -294,10 +316,22 @@ require_once 'include/header.php';
     <div class="row">
         <div class="col-12">
             <div class="card shadow mb-4">
-                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h6 class="m-0 font-weight-bold text-muted"><?= $page_title ?></h6>
                     <?php if ($course): ?>
-                        <span class="badge bg-secondary">ID: <?= $course['id'] ?></span>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <?php
+                            $origDomain = $course['original_organization_domain'] ?? null;
+                            if ($origDomain && $origDomain !== ($course['organization_domain'] ?? null)):
+                                $origLabel = getOriginalOrganizationLabel($origDomain);
+                            ?>
+                            <span class="badge bg-info text-dark"
+                                  title="Permanent etikett — kursen kopierades ursprungligen från denna organisation och kan inte ändras">
+                                <i class="bi bi-diagram-3 me-1"></i>Ursprung: <?= htmlspecialchars($origLabel) ?>
+                            </span>
+                            <?php endif; ?>
+                            <span class="badge bg-secondary">ID: <?= $course['id'] ?></span>
+                        </div>
                     <?php endif; ?>
                 </div>
                 <div class="card-body">
@@ -312,8 +346,131 @@ require_once 'include/header.php';
                         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                         <input type="hidden" name="id" value="<?= $course['id'] ?? '' ?>">
                         
+                        <div class="card mb-3 <?= ($course['status'] ?? '') === 'active' ? 'border-success' : 'border-warning' ?>" id="statusCard">
+                            <div class="card-body py-2 d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center">
+                                    <i class="bi <?= ($course['status'] ?? '') === 'active' ? 'bi-check-circle-fill text-success' : 'bi-pause-circle-fill text-warning' ?> me-2 fs-5" id="statusIcon"></i>
+                                    <span class="fw-bold" id="statusText"><?= ($course['status'] ?? '') === 'active' ? 'Kursen är aktiv och synlig' : 'Kursen är inaktiv och dold' ?></span>
+                                </div>
+                                <div class="form-check form-switch mb-0">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="status" name="status"
+                                           value="active" <?= ($course['status'] ?? '') === 'active' ? 'checked' : '' ?>
+                                           style="width: 3em; height: 1.5em;">
+                                    <label class="form-check-label fw-bold" for="status">Aktiv</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <?php if (!empty($course['id'])): // Publik kurs-panelen kräver sparad kurs ?>
+                        <?php
+                        $isPublicNow = !empty($course['is_public']);
+                        $publicToken = $course['public_registration_token'] ?? null;
+                        $publicUrl = $isPublicNow && $publicToken
+                            ? (rtrim(getenv('SYSTEM_URL') ?: ('https://' . ($_SERVER['HTTP_HOST'] ?? 'stimma.sambruk.se')), '/')
+                               . '/public_register.php?course_id=' . (int)$course['id'] . '&token=' . $publicToken)
+                            : '';
+                        $participantCount = (int)(queryOne(
+                            "SELECT COUNT(*) AS c FROM " . DB_DATABASE . ".public_course_access WHERE course_id = ?",
+                            [(int)$course['id']]
+                        )['c'] ?? 0);
+                        ?>
+                        <div class="card mb-3 border-info" id="publicCourseCard">
+                            <div class="card-header bg-info bg-opacity-10 py-2">
+                                <h6 class="mb-0 fw-bold"><i class="bi bi-globe me-2"></i>Publik kurs</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-flex align-items-center justify-content-between mb-3">
+                                    <label class="mb-0">
+                                        <strong>Låt vem som helst registrera sig via unik länk</strong><br>
+                                        <small class="text-muted">Externa deltagare kan anmäla sig med valfri e-postadress. De får endast tillgång till den här kursen.</small>
+                                    </label>
+                                    <div class="form-check form-switch mb-0">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="publicCourseToggle"
+                                               <?= $isPublicNow ? 'checked' : '' ?>
+                                               data-course-id="<?= (int)$course['id'] ?>"
+                                               data-csrf="<?= htmlspecialchars($_SESSION['csrf_token']) ?>"
+                                               style="width: 3em; height: 1.5em;">
+                                    </div>
+                                </div>
+
+                                <div id="publicLinkArea" class="<?= $isPublicNow ? '' : 'd-none' ?>">
+                                    <label class="form-label small text-muted">Registreringslänk:</label>
+                                    <div class="input-group mb-2">
+                                        <input type="text" class="form-control font-monospace" id="publicRegUrl" value="<?= htmlspecialchars($publicUrl) ?>" readonly>
+                                        <button type="button" class="btn btn-outline-secondary" id="copyPublicUrlBtn" title="Kopiera länken">
+                                            <i class="bi bi-clipboard"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-outline-warning" id="regenPublicTokenBtn" title="Skapa ny länk"
+                                                data-course-id="<?= (int)$course['id'] ?>"
+                                                data-csrf="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                                            <i class="bi bi-arrow-clockwise"></i> Förnya
+                                        </button>
+                                    </div>
+                                    <div class="small text-muted">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        Att stänga av publik registrering blockerar nya anmälningar men behåller befintliga deltagare. Rensa via <a href="public_participants.php?course_id=<?= (int)$course['id'] ?>">Hantera publika deltagare</a>.
+                                    </div>
+                                    <div class="mt-2">
+                                        <a href="public_participants.php?course_id=<?= (int)$course['id'] ?>" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-people me-1"></i>Hantera publika deltagare (<?= $participantCount ?>)
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <script>
+                        (function() {
+                            const toggle = document.getElementById('publicCourseToggle');
+                            const linkArea = document.getElementById('publicLinkArea');
+                            const urlInput = document.getElementById('publicRegUrl');
+                            const copyBtn = document.getElementById('copyPublicUrlBtn');
+                            const regenBtn = document.getElementById('regenPublicTokenBtn');
+                            if (!toggle) return;
+
+                            toggle.addEventListener('change', async function() {
+                                const formData = new FormData();
+                                formData.append('csrf_token', toggle.dataset.csrf);
+                                formData.append('course_id', toggle.dataset.courseId);
+                                formData.append('is_public', toggle.checked ? '1' : '0');
+                                try {
+                                    const r = await fetch('ajax/toggle_public_course.php', { method: 'POST', body: formData });
+                                    const data = await r.json();
+                                    if (!data.success) { alert(data.message || 'Kunde inte spara'); toggle.checked = !toggle.checked; return; }
+                                    if (data.public_url) {
+                                        urlInput.value = data.public_url;
+                                        linkArea.classList.remove('d-none');
+                                    } else {
+                                        linkArea.classList.add('d-none');
+                                    }
+                                } catch (e) { alert('Nätverksfel'); toggle.checked = !toggle.checked; }
+                            });
+
+                            if (copyBtn) copyBtn.addEventListener('click', function() {
+                                urlInput.select();
+                                navigator.clipboard.writeText(urlInput.value).then(() => {
+                                    copyBtn.innerHTML = '<i class="bi bi-check"></i>';
+                                    setTimeout(() => copyBtn.innerHTML = '<i class="bi bi-clipboard"></i>', 1500);
+                                });
+                            });
+
+                            if (regenBtn) regenBtn.addEventListener('click', async function() {
+                                if (!confirm('Skapa en ny registreringslänk?\nDen gamla länken slutar fungera omedelbart. Befintliga deltagare påverkas ej.')) return;
+                                const formData = new FormData();
+                                formData.append('csrf_token', regenBtn.dataset.csrf);
+                                formData.append('course_id', regenBtn.dataset.courseId);
+                                try {
+                                    const r = await fetch('ajax/regenerate_public_token.php', { method: 'POST', body: formData });
+                                    const data = await r.json();
+                                    if (data.success) { urlInput.value = data.public_url; }
+                                    else { alert(data.message || 'Kunde inte förnya länken'); }
+                                } catch (e) { alert('Nätverksfel'); }
+                            });
+                        })();
+                        </script>
+                        <?php endif; ?>
+
                         <div class="form-floating mb-3">
-                            <input type="text" class="form-control" id="title" name="title" 
+                            <input type="text" class="form-control" id="title" name="title"
                                    value="<?= htmlspecialchars($course['title'] ?? '') ?>" required>
                             <label for="title">Titel</label>
                         </div>
@@ -354,12 +511,6 @@ require_once 'include/header.php';
                             </div>
                         </div>
 
-                        <div class="form-check form-switch mb-3">
-                            <input class="form-check-input" type="checkbox" id="status" name="status"
-                                   value="active" <?= ($course['status'] ?? '') === 'active' ? 'checked' : '' ?>>
-                            <label class="form-check-label" for="status">Aktiv</label>
-                        </div>
-
                         <div class="mb-3">
                             <label for="deadline" class="form-label">Slutdatum</label>
                             <input type="date" class="form-control" id="deadline" name="deadline"
@@ -395,6 +546,24 @@ require_once 'include/header.php';
                                     </div>
                                     <?php endif; ?>
 
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Registreringsläge</label>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="enrollment_type" id="enrollment_bulk" value="bulk_start"
+                                                   <?= ($course['enrollment_type'] ?? 'bulk_start') === 'bulk_start' ? 'checked' : '' ?>>
+                                            <label class="form-check-label" for="enrollment_bulk">
+                                                <i class="bi bi-people me-1"></i>Gemensamt startdatum — alla startar samtidigt
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="enrollment_type" id="enrollment_rolling" value="rolling"
+                                                   <?= ($course['enrollment_type'] ?? '') === 'rolling' ? 'checked' : '' ?>>
+                                            <label class="form-check-label" for="enrollment_rolling">
+                                                <i class="bi bi-person-plus me-1"></i>Löpande registrering — skriv in användare individuellt med valfritt startdatum
+                                            </label>
+                                        </div>
+                                    </div>
+
                                     <div class="row g-3 mb-3">
                                         <div class="col-md-4">
                                             <label for="sequential_interval_days" class="form-label">Dagar mellan lektioner</label>
@@ -408,7 +577,7 @@ require_once 'include/header.php';
                                                    value="<?= htmlspecialchars($course['sequential_reminder_delay_days'] ?? 3) ?>" min="1" max="90">
                                             <div class="form-text">Dagar innan påminnelse skickas.</div>
                                         </div>
-                                        <div class="col-md-4">
+                                        <div class="col-md-4" id="bulkStartDateField" style="display: <?= ($course['enrollment_type'] ?? 'bulk_start') === 'rolling' ? 'none' : 'block' ?>;">
                                             <label for="start_date" class="form-label">Startdatum</label>
                                             <input type="date" class="form-control" id="start_date" name="start_date"
                                                    value="<?= htmlspecialchars($course['start_date'] ?? '') ?>">
@@ -484,7 +653,8 @@ require_once 'include/header.php';
                                         </div>
                                     </div>
 
-                                    <!-- Starta utskick nu -->
+                                    <!-- Starta utskick nu (bulk_start) -->
+                                    <div id="bulkStartSection" style="display: <?= ($course['enrollment_type'] ?? 'bulk_start') === 'rolling' ? 'none' : 'block' ?>;">
                                     <?php if (empty($course['sequential_status']) || $course['sequential_status'] === 'pending'): ?>
                                     <div class="card mb-3 border-primary">
                                         <div class="card-body text-center">
@@ -496,6 +666,103 @@ require_once 'include/header.php';
                                         </div>
                                     </div>
                                     <?php endif; ?>
+                                    </div>
+
+                                    <!-- Löpande registrering (rolling) -->
+                                    <div id="rollingEnrollSection" style="display: <?= ($course['enrollment_type'] ?? 'bulk_start') === 'rolling' ? 'block' : 'none' ?>;">
+                                    <?php if (isset($_GET['id'])): ?>
+                                    <div class="card mb-3 border-primary">
+                                        <div class="card-header bg-primary bg-opacity-10">
+                                            <h6 class="m-0"><i class="bi bi-person-plus me-2"></i>Skriv in användare</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <p class="text-muted small">Sök och välj användare att skriva in i kursen. Varje användare startar det valda datumet och får lektioner med det inställda intervallet.</p>
+                                            <div class="row g-2 mb-3">
+                                                <div class="col-md-5">
+                                                    <label class="form-label small">Användare</label>
+                                                    <input type="text" class="form-control" id="rollingUserSearch"
+                                                           placeholder="Sök namn eller e-post..." autocomplete="off">
+                                                    <div id="rollingUserResults" class="list-group position-absolute mt-1" style="z-index: 1050; display: none;"></div>
+                                                    <input type="hidden" id="rollingUserEmail" value="">
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label small">Startdatum</label>
+                                                    <input type="date" class="form-control" id="rollingStartDate"
+                                                           value="<?= date('Y-m-d') ?>">
+                                                </div>
+                                                <?php if (!empty($availableOrgTags)): ?>
+                                                <div class="col-md-2">
+                                                    <label class="form-label small">Eller org-tagg</label>
+                                                    <select class="form-select" id="rollingOrgTag">
+                                                        <option value="">— Välj —</option>
+                                                        <?php foreach ($availableOrgTags as $ot): ?>
+                                                        <option value="<?= htmlspecialchars($ot['tag']) ?>"><?= htmlspecialchars($ot['tag']) ?></option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                </div>
+                                                <?php endif; ?>
+                                                <div class="col-md-2 d-flex align-items-end">
+                                                    <button type="button" class="btn btn-primary w-100" id="rollingEnrollBtn" disabled>
+                                                        <i class="bi bi-person-plus me-1"></i>Skriv in
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div id="rollingEnrollResult" style="display: none;"></div>
+
+                                            <?php
+                                            // Visa redan inskrivna användare
+                                            $enrolledUsers = query(
+                                                "SELECT ce.user_id, ce.started_at, ce.status, u.name, u.email
+                                                 FROM " . DB_DATABASE . ".course_enrollments ce
+                                                 JOIN " . DB_DATABASE . ".users u ON ce.user_id = u.id
+                                                 WHERE ce.course_id = ?
+                                                 ORDER BY ce.started_at DESC",
+                                                [$courseId]
+                                            );
+                                            if (!empty($enrolledUsers)):
+                                            ?>
+                                            <hr>
+                                            <h6 class="mb-2"><i class="bi bi-people me-1"></i>Inskrivna användare (<?= count($enrolledUsers) ?>)</h6>
+                                            <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                                                <table class="table table-sm table-hover mb-0">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th>Namn</th>
+                                                            <th>E-post</th>
+                                                            <th>Startdatum</th>
+                                                            <th>Status</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                    <?php foreach ($enrolledUsers as $eu): ?>
+                                                        <tr>
+                                                            <td><?= htmlspecialchars($eu['name'] ?: '-') ?></td>
+                                                            <td class="small"><?= htmlspecialchars($eu['email']) ?></td>
+                                                            <td><?= $eu['started_at'] ? date('Y-m-d', strtotime($eu['started_at'])) : '-' ?></td>
+                                                            <td>
+                                                                <?php if ($eu['status'] === 'completed'): ?>
+                                                                    <span class="badge bg-success">Klar</span>
+                                                                <?php elseif ($eu['status'] === 'active'): ?>
+                                                                    <span class="badge bg-primary">Aktiv</span>
+                                                                <?php else: ?>
+                                                                    <span class="badge bg-secondary"><?= htmlspecialchars($eu['status']) ?></span>
+                                                                <?php endif; ?>
+                                                            </td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                    <?php else: ?>
+                                    <div class="alert alert-info">
+                                        <i class="bi bi-info-circle me-1"></i>Spara kursen först, sedan kan du skriva in användare individuellt.
+                                    </div>
+                                    <?php endif; ?>
+                                    </div>
+
                                     <?php endif; ?>
                                 </div>
                             </div>
@@ -504,6 +771,138 @@ require_once 'include/header.php';
                         document.getElementById('sequential_mode').addEventListener('change', function() {
                             document.getElementById('sequentialSettings').style.display = this.checked ? 'block' : 'none';
                         });
+
+                        // Registreringsläge toggle
+                        document.querySelectorAll('input[name="enrollment_type"]').forEach(function(radio) {
+                            radio.addEventListener('change', function() {
+                                var isRolling = this.value === 'rolling';
+                                var bulkDateField = document.getElementById('bulkStartDateField');
+                                var bulkStartSection = document.getElementById('bulkStartSection');
+                                var rollingSection = document.getElementById('rollingEnrollSection');
+                                if (bulkDateField) bulkDateField.style.display = isRolling ? 'none' : 'block';
+                                if (bulkStartSection) bulkStartSection.style.display = isRolling ? 'none' : 'block';
+                                if (rollingSection) rollingSection.style.display = isRolling ? 'block' : 'none';
+                            });
+                        });
+
+                        // Rolling enrollment: användarsökning
+                        var rollingSearch = document.getElementById('rollingUserSearch');
+                        var rollingResults = document.getElementById('rollingUserResults');
+                        var rollingEmailInput = document.getElementById('rollingUserEmail');
+                        var rollingEnrollBtn = document.getElementById('rollingEnrollBtn');
+                        var rollingOrgTag = document.getElementById('rollingOrgTag');
+
+                        if (rollingSearch) {
+                            var searchTimeout = null;
+                            rollingSearch.addEventListener('input', function() {
+                                var q = this.value.trim();
+                                if (rollingEmailInput) rollingEmailInput.value = '';
+                                updateRollingEnrollBtn();
+                                if (q.length < 2) { rollingResults.style.display = 'none'; return; }
+                                clearTimeout(searchTimeout);
+                                searchTimeout = setTimeout(function() {
+                                    fetch('ajax/search_users.php?search=' + encodeURIComponent(q))
+                                        .then(function(r) { return r.json(); })
+                                        .then(function(data) {
+                                            rollingResults.innerHTML = '';
+                                            if (data.success && data.users && data.users.length > 0) {
+                                                data.users.forEach(function(u) {
+                                                    var item = document.createElement('a');
+                                                    item.href = '#';
+                                                    item.className = 'list-group-item list-group-item-action py-1 small';
+                                                    item.textContent = (u.name || '') + ' (' + u.email + ')';
+                                                    item.addEventListener('click', function(e) {
+                                                        e.preventDefault();
+                                                        rollingSearch.value = (u.name || '') + ' (' + u.email + ')';
+                                                        rollingEmailInput.value = u.email;
+                                                        rollingResults.style.display = 'none';
+                                                        if (rollingOrgTag) rollingOrgTag.value = '';
+                                                        updateRollingEnrollBtn();
+                                                    });
+                                                    rollingResults.appendChild(item);
+                                                });
+                                                rollingResults.style.display = 'block';
+                                            } else {
+                                                rollingResults.style.display = 'none';
+                                            }
+                                        });
+                                }, 300);
+                            });
+
+                            document.addEventListener('click', function(e) {
+                                if (!rollingResults.contains(e.target) && e.target !== rollingSearch) {
+                                    rollingResults.style.display = 'none';
+                                }
+                            });
+                        }
+
+                        if (rollingOrgTag) {
+                            rollingOrgTag.addEventListener('change', function() {
+                                if (this.value) {
+                                    rollingSearch.value = '';
+                                    rollingEmailInput.value = '';
+                                }
+                                updateRollingEnrollBtn();
+                            });
+                        }
+
+                        function updateRollingEnrollBtn() {
+                            if (!rollingEnrollBtn) return;
+                            var hasUser = rollingEmailInput && rollingEmailInput.value;
+                            var hasTag = rollingOrgTag && rollingOrgTag.value;
+                            rollingEnrollBtn.disabled = !(hasUser || hasTag);
+                        }
+
+                        if (rollingEnrollBtn) {
+                            rollingEnrollBtn.addEventListener('click', function() {
+                                var btn = this;
+                                var resultDiv = document.getElementById('rollingEnrollResult');
+                                var email = rollingEmailInput ? rollingEmailInput.value : '';
+                                var orgTag = rollingOrgTag ? rollingOrgTag.value : '';
+                                var startDate = document.getElementById('rollingStartDate').value;
+
+                                if (!email && !orgTag) return;
+
+                                btn.disabled = true;
+                                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Skriver in...';
+                                resultDiv.style.display = 'none';
+
+                                var formData = new FormData();
+                                formData.append('course_id', '<?= $courseId ?? '' ?>');
+                                formData.append('csrf_token', CSRF_TOKEN);
+                                formData.append('start_date', startDate);
+                                if (email) formData.append('email', email);
+                                if (orgTag) formData.append('org_tag', orgTag);
+
+                                fetch('ajax/enroll_user_sequential.php', {
+                                    method: 'POST',
+                                    body: formData
+                                })
+                                .then(function(r) { return r.json(); })
+                                .then(function(data) {
+                                    resultDiv.style.display = 'block';
+                                    resultDiv.className = 'alert ' + (data.success ? 'alert-success' : 'alert-danger');
+                                    resultDiv.textContent = data.message || 'Ett fel uppstod.';
+                                    btn.disabled = false;
+                                    btn.innerHTML = '<i class="bi bi-person-plus me-1"></i>Skriv in';
+                                    if (data.success && data.enrolled > 0) {
+                                        rollingSearch.value = '';
+                                        rollingEmailInput.value = '';
+                                        if (rollingOrgTag) rollingOrgTag.value = '';
+                                        updateRollingEnrollBtn();
+                                        // Ladda om sidan efter 2 sekunder för att visa uppdaterad lista
+                                        setTimeout(function() { location.reload(); }, 2000);
+                                    }
+                                })
+                                .catch(function() {
+                                    resultDiv.style.display = 'block';
+                                    resultDiv.className = 'alert alert-danger';
+                                    resultDiv.textContent = 'Nätverksfel. Försök igen.';
+                                    btn.disabled = false;
+                                    btn.innerHTML = '<i class="bi bi-person-plus me-1"></i>Skriv in';
+                                });
+                            });
+                        }
 
                         // Testmail
                         const seqTestBtn = document.getElementById('sendSeqTestBtn');
@@ -914,6 +1313,25 @@ require_once 'include/header.php';
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Dynamisk statusindikator
+    const statusToggle = document.getElementById('status');
+    const statusCard = document.getElementById('statusCard');
+    const statusIcon = document.getElementById('statusIcon');
+    const statusText = document.getElementById('statusText');
+    if (statusToggle) {
+        statusToggle.addEventListener('change', function() {
+            if (this.checked) {
+                statusCard.className = 'card mb-3 border-success';
+                statusIcon.className = 'bi bi-check-circle-fill text-success me-2 fs-5';
+                statusText.textContent = 'Kursen är aktiv och synlig';
+            } else {
+                statusCard.className = 'card mb-3 border-warning';
+                statusIcon.className = 'bi bi-pause-circle-fill text-warning me-2 fs-5';
+                statusText.textContent = 'Kursen är inaktiv och dold';
+            }
+        });
+    }
+
     const imageInput = document.getElementById('image');
     if (imageInput) {
         imageInput.addEventListener('change', function(e) {

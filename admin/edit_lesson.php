@@ -31,9 +31,14 @@ if (isset($_GET['id'])) {
     }
 }
 
-// Hämta kurser för dropdown (filtrerat på användarens organisation)
+// Hämta kurser för dropdown (filtrerat på användarens organisation, alla orgens domäner)
 $userDomain = substr(strrchr($_SESSION['user_email'], "@"), 1);
-$courses = queryAll("SELECT * FROM " . DB_DATABASE . ".courses WHERE organization_domain = ? ORDER BY sort_order ASC", [$userDomain]);
+$lessonOrgScope = getOrgScopeDomains($_SESSION['user_email']);
+$lessonCourseClause = buildDomainInClause($lessonOrgScope, 'organization_domain');
+$courses = queryAll(
+    "SELECT * FROM " . DB_DATABASE . ".courses WHERE {$lessonCourseClause['fragment']} ORDER BY sort_order ASC",
+    $lessonCourseClause['params']
+);
 
 // Hantera formulär
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -54,6 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $ai_instruction = $_POST['ai_instruction'] ?? '';
     $ai_prompt = $_POST['ai_prompt'] ?? '';
     $quiz_question = $_POST['quiz_question'] ?? '';
+    $background_color = trim($_POST['background_color'] ?? '');
     
     // Hantera vanliga textfält
     $quiz_type = $_POST['quiz_type'] ?? 'single_choice';
@@ -165,6 +171,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             execute("UPDATE " . DB_DATABASE . ".lessons SET
                     title = ?,
                     content = ?,
+                    background_color = ?,
                     course_id = ?,
                     image_url = ?,
                     video_url = ?,
@@ -183,7 +190,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     quiz_correct_answers = ?,
                     updated_at = NOW()
                     WHERE id = ?",
-                    [$title, $content, $course_id, $image_url, $video_url, $video_type, $status,
+                    [$title, $content, $background_color ?: null, $course_id, $image_url, $video_url, $video_type, $status,
                      $ai_instruction, $ai_prompt, $quiz_question, $quiz_type,
                      $quiz_answer1, $quiz_answer2, $quiz_answer3, $quiz_answer4, $quiz_answer5,
                      $quiz_correct_answer, $quiz_correct_answers, $_GET['id']]);
@@ -202,13 +209,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             // Skapa ny lektion
             execute("INSERT INTO " . DB_DATABASE . ".lessons
-                    (title, content, course_id, image_url, video_url, video_type, status,
+                    (title, content, background_color, course_id, image_url, video_url, video_type, status,
                      ai_instruction, ai_prompt, quiz_question, quiz_type,
                      quiz_answer1, quiz_answer2, quiz_answer3, quiz_answer4, quiz_answer5,
                      quiz_correct_answer, quiz_correct_answers,
                      sort_order, author_id, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
-                    [$title, $content, $course_id, $image_url, $video_url, $video_type, $status,
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                    [$title, $content, $background_color ?: null, $course_id, $image_url, $video_url, $video_type, $status,
                      $ai_instruction, $ai_prompt, $quiz_question, $quiz_type,
                      $quiz_answer1, $quiz_answer2, $quiz_answer3, $quiz_answer4, $quiz_answer5,
                      $quiz_correct_answer, $quiz_correct_answers,
@@ -248,6 +255,7 @@ $quizAnswer4 = '';
 $quizAnswer5 = '';
 $quizCorrectAnswer = 0;
 $quizCorrectAnswers = '';
+$backgroundColor = '';
 
 // Kontrollera om vi redigerar en befintlig lektion eller skapar en ny
 if (isset($_GET['id']) && is_numeric($_GET['id'])) {
@@ -273,6 +281,7 @@ if (isset($_GET['id']) && is_numeric($_GET['id'])) {
         $quizAnswer5 = $lesson['quiz_answer5'] ?? '';
         $quizCorrectAnswer = (int)($lesson['quiz_correct_answer'] ?? 0);
         $quizCorrectAnswers = $lesson['quiz_correct_answers'] ?? '';
+        $backgroundColor = $lesson['background_color'] ?? '';
     } else {
         $_SESSION['message'] = "Lektionen kunde inte hittas.";
         $_SESSION['message_type'] = "danger";
@@ -298,8 +307,11 @@ if (isset($_GET['id']) && is_numeric($_GET['id'])) {
     exit;
 }
 
-// Hämta kurser för dropdown (filtrerat på användarens organisation)
-$courses = queryAll("SELECT * FROM " . DB_DATABASE . ".courses WHERE organization_domain = ? ORDER BY sort_order ASC", [$userDomain]);
+// Hämta kurser för dropdown (filtrerat på användarens organisation, alla orgens domäner)
+$courses = queryAll(
+    "SELECT * FROM " . DB_DATABASE . ".courses WHERE {$lessonCourseClause['fragment']} ORDER BY sort_order ASC",
+    $lessonCourseClause['params']
+);
 ?>
 
 <div class="container-fluid">
@@ -346,6 +358,26 @@ $courses = queryAll("SELECT * FROM " . DB_DATABASE . ".courses WHERE organizatio
                         <div class="mb-3">
                             <label for="content" class="form-label fw-normal">Innehåll</label>
                             <?php require_once 'include/editor.php'; renderEditor($content ?? '', 'content', 'contentEditor'); ?>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="background_color" class="form-label fw-normal">Bakgrundsfärg för lektionen</label>
+                            <div class="d-flex align-items-center gap-2">
+                                <input type="color" class="form-control form-control-color" id="bg_color_picker"
+                                       value="<?= htmlspecialchars($backgroundColor ?: '#ffffff') ?>"
+                                       onchange="document.getElementById('background_color').value = this.value">
+                                <input type="text" class="form-control" id="background_color" name="background_color"
+                                       value="<?= htmlspecialchars($backgroundColor ?? '') ?>"
+                                       placeholder="T.ex. #f5f5dc eller lämna tomt för standard"
+                                       style="max-width: 200px;"
+                                       onchange="if(this.value) document.getElementById('bg_color_picker').value = this.value">
+                                <button type="button" class="btn btn-sm btn-outline-secondary"
+                                        onclick="document.getElementById('background_color').value=''; document.getElementById('bg_color_picker').value='#ffffff';"
+                                        title="Återställ till standard">
+                                    <i class="bi bi-x-lg"></i> Rensa
+                                </button>
+                            </div>
+                            <small class="text-muted">Lämna tomt för standardbakgrund (vit).</small>
                         </div>
 
                         <div class="mb-3">

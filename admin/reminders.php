@@ -95,23 +95,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
-// Hämta statistik
-$reminderStats = queryOne("SELECT
-    COUNT(*) as total_sent,
-    SUM(CASE WHEN email_status = 'sent' THEN 1 ELSE 0 END) as successful,
-    SUM(CASE WHEN email_status = 'failed' THEN 1 ELSE 0 END) as failed
-    FROM " . DB_DATABASE . ".reminder_log rl
-    JOIN " . DB_DATABASE . ".users u ON rl.user_id = u.id
-    WHERE u.email LIKE ?", ['%@' . $userDomain]);
+// Hämta statistik (org-scope: alla orgens domäner)
+// Notera: reminder_settings är fortsatt per-domän, men statistiken över skickade
+// påminnelser visas för hela organisationen.
+$reminderOrgScope = getOrgScopeDomains($userEmail);
+$reminderEmailClause = buildEmailDomainInClause($reminderOrgScope, 'u.email');
+
+$reminderStats = queryOne(
+    "SELECT
+        COUNT(*) as total_sent,
+        SUM(CASE WHEN email_status = 'sent' THEN 1 ELSE 0 END) as successful,
+        SUM(CASE WHEN email_status = 'failed' THEN 1 ELSE 0 END) as failed
+     FROM " . DB_DATABASE . ".reminder_log rl
+     JOIN " . DB_DATABASE . ".users u ON rl.user_id = u.id
+     WHERE {$reminderEmailClause['fragment']}",
+    $reminderEmailClause['params']
+);
 
 // Hämta senaste påminnelser
-$recentReminders = query("SELECT rl.*, u.email, u.name, c.title as course_title
-    FROM " . DB_DATABASE . ".reminder_log rl
-    JOIN " . DB_DATABASE . ".users u ON rl.user_id = u.id
-    JOIN " . DB_DATABASE . ".courses c ON rl.course_id = c.id
-    WHERE u.email LIKE ?
-    ORDER BY rl.sent_at DESC
-    LIMIT 10", ['%@' . $userDomain]);
+$recentReminders = query(
+    "SELECT rl.*, u.email, u.name, c.title as course_title
+     FROM " . DB_DATABASE . ".reminder_log rl
+     JOIN " . DB_DATABASE . ".users u ON rl.user_id = u.id
+     JOIN " . DB_DATABASE . ".courses c ON rl.course_id = c.id
+     WHERE {$reminderEmailClause['fragment']}
+     ORDER BY rl.sent_at DESC
+     LIMIT 10",
+    $reminderEmailClause['params']
+);
 
 // Inkludera header
 require_once 'include/header.php';

@@ -36,6 +36,12 @@ $isLoggedIn = isLoggedIn();
 
 if ($isLoggedIn) {
     $user = queryOne("SELECT * FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
+    // Publika deltagare ska använda leave_public_course.php (hård radering)
+    // istället för soft-abandon här.
+    if ($user && $courseId > 0 && hasPublicCourseAccess((int)$user['id'], $courseId)) {
+        redirect('leave_public_course.php?course_id=' . $courseId);
+        exit;
+    }
 }
 
 // Validera token för icke-inloggade användare

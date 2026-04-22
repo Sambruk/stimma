@@ -224,6 +224,20 @@ foreach ($allPubSettings as $setting) {
     $pubSettings[$setting['domain']] = $setting;
 }
 
+// Hämta org-tillhörighet per domän (för Organisation-kolumnen i listan)
+$domainOrgMap = [];
+$allOrgDomains = query(
+    "SELECT od.domain, od.organization_id, o.name AS org_name
+     FROM " . DB_DATABASE . ".organization_domains od
+     JOIN " . DB_DATABASE . ".organizations o ON od.organization_id = o.id"
+);
+foreach (($allOrgDomains ?: []) as $row) {
+    $domainOrgMap[$row['domain']] = [
+        'id' => (int)$row['organization_id'],
+        'name' => $row['org_name'],
+    ];
+}
+
 // Hämta signeringsartefakter för alla domäner med PUB-avtal
 $pubArtifacts = [];
 $allArtifacts = query("SELECT * FROM " . DB_DATABASE . ".pub_agreement_artifacts ORDER BY signed_at DESC");
@@ -340,6 +354,7 @@ require_once 'include/header.php';
                                     <thead class="table-light">
                                         <tr>
                                             <th>Domän</th>
+                                            <th style="width: 200px;">Organisation</th>
                                             <th class="text-center" style="width: 100px;" title="PUB-avtal tecknat">
                                                 <i class="bi bi-file-earmark-check text-success"></i> PUB
                                             </th>
@@ -368,6 +383,16 @@ require_once 'include/header.php';
                                                 <td>
                                                     <i class="bi bi-globe2 text-primary me-2"></i>
                                                     <strong><?= htmlspecialchars($domain) ?></strong>
+                                                </td>
+                                                <td>
+                                                    <?php if (isset($domainOrgMap[$domain])): ?>
+                                                        <a href="organizations.php" class="text-decoration-none">
+                                                            <i class="bi bi-diagram-3 me-1 text-primary"></i>
+                                                            <?= htmlspecialchars($domainOrgMap[$domain]['name']) ?>
+                                                        </a>
+                                                    <?php else: ?>
+                                                        <span class="text-muted">—</span>
+                                                    <?php endif; ?>
                                                 </td>
                                                 <td class="text-center">
                                                     <?php
@@ -471,6 +496,7 @@ require_once 'include/header.php';
                                     <tfoot class="table-light">
                                         <tr class="fw-bold">
                                             <td>Summa (<?= count($filteredDomains) ?> domäner)</td>
+                                            <td></td>
                                             <td class="text-center"><?= $totalPub ?></td>
                                             <td class="text-center"><?= $totalAdmins ?></td>
                                             <td class="text-center"><?= $totalEditors ?></td>

@@ -3,6 +3,7 @@ require_once '../../include/config.php';
 require_once '../../include/database.php';
 require_once '../../include/functions.php';
 require_once '../../include/auth.php';
+require_once '../../include/mail.php';
 
 // Include AJAX-compatible authentication check
 require_once '../include/ajax_auth_check.php';
@@ -72,6 +73,39 @@ try {
     if ($result1) {
         // Bekräfta transaktion
         execute("COMMIT");
+
+        // Skicka e-postnotifiering till den nya redaktören
+        $courseInfo = queryOne("SELECT title FROM " . DB_DATABASE . ".courses WHERE id = ?", [$courseId]);
+        $addedByUser = queryOne("SELECT name, email FROM " . DB_DATABASE . ".users WHERE email = ?", [$userEmail]);
+        $addedByName = !empty($addedByUser['name']) ? $addedByUser['name'] : $addedByUser['email'];
+        $courseTitle = $courseInfo ? htmlspecialchars($courseInfo['title']) : 'Okänd kurs';
+        $systemName = getenv('SYSTEM_NAME') ?: 'Stimma';
+        $siteUrl = defined('SITE_URL') ? SITE_URL : 'https://stimma.sambruk.se';
+
+        $emailBody = "
+        <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+            <div style='background: #0F3B5F; color: #fff; padding: 20px; text-align: center;'>
+                <h2 style='margin: 0;'>$systemName</h2>
+            </div>
+            <div style='padding: 30px; background: #f9f9f9;'>
+                <h3 style='color: #333;'>Du har lagts till som redaktör</h3>
+                <p>Hej!</p>
+                <p><strong>$addedByName</strong> har lagt till dig som redaktör för kursen:</p>
+                <div style='background: #fff; border-left: 4px solid #0F3B5F; padding: 15px; margin: 20px 0;'>
+                    <strong style='font-size: 1.1em;'>$courseTitle</strong>
+                </div>
+                <p>Som redaktör kan du redigera kursens innehåll och lektioner.</p>
+                <p style='text-align: center; margin-top: 25px;'>
+                    <a href='$siteUrl/admin/courses.php' style='background: #0F3B5F; color: #fff; padding: 12px 30px; text-decoration: none; border-radius: 5px;'>Gå till kurser</a>
+                </p>
+            </div>
+            <div style='padding: 15px; text-align: center; color: #999; font-size: 12px;'>
+                Detta meddelande skickades från $systemName
+            </div>
+        </div>";
+
+        sendSmtpMail($newEditorEmail, "Du har lagts till som redaktör - $courseTitle", $emailBody);
+
         echo json_encode(['success' => true]);
     } else {
         // Återställ transaktion vid fel

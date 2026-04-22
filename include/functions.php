@@ -162,12 +162,45 @@ function generateCsrfToken() {
 
 /**
  * Validera en CSRF-token
- * 
+ *
  * @param string $token Token att validera
  * @return bool True om token är giltig, false annars
  */
 function validateCsrfToken($token) {
     return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
+}
+
+/**
+ * Bygg en visningsetikett för kursens ursprungsorganisation.
+ *
+ * Returnerar ett namn + domän om domänen är grupperad i en organisation, annars
+ * enbart domänen. Används av admin-vyerna för att visa den permanenta "ursprung"-
+ * etiketten på kopierade/importerade kurser. Returnerar null om fältet saknas.
+ *
+ * @param string|null $originalDomain Värdet av courses.original_organization_domain
+ * @return string|null Etikett som "Säters kommun (sater.se)" eller "sater.se"
+ */
+function getOriginalOrganizationLabel($originalDomain) {
+    if (empty($originalDomain)) {
+        return null;
+    }
+    $org = getOrganizationByDomain($originalDomain);
+    if ($org && !empty($org['name'])) {
+        return $org['name'] . ' (' . $originalDomain . ')';
+    }
+    return $originalDomain;
+}
+
+/**
+ * Kontrollera om aktuell session är en superadmin som "visar som" en annan användare.
+ *
+ * Används av header-banner och eventuella behörighetskontroller som vill skilja
+ * på riktig sessionsägare vs. den användare vars vy visas just nu.
+ *
+ * @return bool
+ */
+function isImpersonating() {
+    return isset($_SESSION['impersonator_user_id']);
 }
 
 function sendOpenAIRequest($messages) {
@@ -493,89 +526,216 @@ function cleanHtml($html) {
 
     // Lista över tillåtna HTML-taggar
     $allowedTags = [
-        'br',      // Radbrytning
-        'strong',  // Fet stil
-        'b',       // Fet stil (alternativ)
-        'em',      // Kursiv stil
-        'i',       // Kursiv stil (alternativ)
-        'u',       // Understruken
-        'h3',      // Underrubrik (används i lektionsinnehåll)
-        'h4',      // Underrubrik (används i sammanfattningar)
-        'ul',      // Punktlista
-        'ol',      // Numrerad lista
-        'li',      // Listobjekt
-        'p',       // Stycke
-        'div',     // Div (konverteras till p, eller behålls med lesson-*-klass)
-        'img'      // Bilder (med begränsade attribut)
+        'br',         // Radbrytning
+        'hr',         // Horisontell linje
+        'strong',     // Fet stil
+        'b',          // Fet stil (alternativ)
+        'em',         // Kursiv stil
+        'i',          // Kursiv stil (alternativ)
+        'u',          // Understruken
+        's',          // Genomstruken
+        'sub',        // Nedsänkt
+        'sup',        // Upphöjd
+        'span',       // Inline-formatering (typsnitt, färger, storlekar)
+        'h2',         // Rubrik
+        'h3',         // Underrubrik
+        'h4',         // Underrubrik
+        'h5',         // Underrubrik
+        'ul',         // Punktlista
+        'ol',         // Numrerad lista
+        'li',         // Listobjekt
+        'p',          // Stycke
+        'div',        // Div (för lesson-*-block och styling)
+        'blockquote', // Citat
+        'img',        // Bilder
+        'a',          // Länkar
+        'table',      // Tabell
+        'thead',      // Tabellhuvud
+        'tbody',      // Tabellkropp
+        'tr',         // Tabellrad
+        'td',         // Tabellcell
+        'th'          // Tabellrubrikcell
     ];
 
     // Ta bort alla HTML-taggar förutom de tillåtna
     $html = strip_tags($html, '<' . implode('><', $allowedTags) . '>');
 
-    // Sanitera <img>-taggar: behåll bara src, alt, class med säkra värden
-    $html = preg_replace_callback('/<img\b[^>]*>/i', function($match) {
-        $tag = $match[0];
+    // Tillåtna CSS-egenskaper (för inline style-attribut)
+    $allowedCssProperties = [
+        'color', 'background-color', 'background',
+        'font-family', 'font-size', 'font-weight', 'font-style',
+        'text-align', 'text-decoration', 'text-indent', 'text-transform',
+        'line-height', 'letter-spacing', 'word-spacing',
+        'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+        'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+        'border', 'border-top', 'border-right', 'border-bottom', 'border-left',
+        'border-color', 'border-style', 'border-width', 'border-collapse',
+        'border-radius',
+        'width', 'max-width', 'min-width', 'height', 'max-height', 'min-height',
+        'float', 'clear', 'display',
+        'list-style-type', 'list-style',
+        'vertical-align',
+        'opacity',
+        'white-space',
+        'overflow'
+    ];
 
-        // Extrahera src
-        $src = '';
-        if (preg_match('/\bsrc\s*=\s*"([^"]*)"/', $tag, $m) ||
-            preg_match("/\bsrc\s*=\s*'([^']*)'/", $tag, $m)) {
-            $src = $m[1];
+    /**
+     * Saniterar ett style-attribut: behåller bara tillåtna CSS-egenskaper
+     */
+    $sanitizeStyle = function($styleValue) use ($allowedCssProperties) {
+        if (empty($styleValue)) return '';
+
+        // Ta bort javascript: och liknande protokoll
+        $styleValue = preg_replace('/javascript\s*:/i', '', $styleValue);
+        $styleValue = preg_replace('/vbscript\s*:/i', '', $styleValue);
+
+        // Farliga CSS-funktioner (XSS-vektorer)
+        $dangerousFunctions = '/\b(url|expression|import|behavior)\s*\(/i';
+
+        $declarations = explode(';', $styleValue);
+        $safe = [];
+        foreach ($declarations as $decl) {
+            $decl = trim($decl);
+            if (empty($decl)) continue;
+            $parts = explode(':', $decl, 2);
+            if (count($parts) !== 2) continue;
+            $property = strtolower(trim($parts[0]));
+            $value = trim($parts[1]);
+            // Blockera farliga CSS-funktioner men tillåt rgb(), rgba(), hsl(), hsla(), calc()
+            if (in_array($property, $allowedCssProperties) && !empty($value) && !preg_match($dangerousFunctions, $value)) {
+                $safe[] = $property . ': ' . $value;
+            }
         }
+        return implode('; ', $safe);
+    };
 
-        // Normalisera ../upload/ till upload/
-        $src = preg_replace('#^(\.\./)+upload/#', 'upload/', $src);
-
-        // Validera src: tillåt bara relativa upload-sökvägar
-        if (empty($src) || !preg_match('#^upload/[a-zA-Z0-9_\-]+\.(jpg|jpeg|png|gif|webp)$#', $src)) {
-            return ''; // Ta bort bilder med ogiltiga sökvägar
+    /**
+     * Extraherar ett attributvärde från en HTML-tagg
+     */
+    $extractAttr = function($tag, $attrName) {
+        if (preg_match('/\b' . $attrName . '\s*=\s*"([^"]*)"/', $tag, $m) ||
+            preg_match("/\b" . $attrName . "\s*=\s*'([^']*)'/", $tag, $m)) {
+            return $m[1];
         }
+        return '';
+    };
 
-        // Extrahera alt
-        $alt = '';
-        if (preg_match('/\balt\s*=\s*"([^"]*)"/', $tag, $m) ||
-            preg_match("/\balt\s*=\s*'([^']*)'/", $tag, $m)) {
-            $alt = htmlspecialchars($m[1], ENT_QUOTES, 'UTF-8');
-        }
-
-        // Extrahera och filtrera class
-        $class = '';
-        if (preg_match('/\bclass\s*=\s*"([^"]*)"/', $tag, $m) ||
-            preg_match("/\bclass\s*=\s*'([^']*)'/", $tag, $m)) {
-            $allowedClasses = ['img-sm', 'img-md', 'img-lg', 'img-full', 'img-left', 'img-center', 'img-right'];
-            $classes = array_filter(preg_split('/\s+/', $m[1]), function($c) use ($allowedClasses) {
-                return in_array($c, $allowedClasses);
-            });
-            $class = implode(' ', $classes);
-        }
-
-        return '<img src="' . $src . '"' .
-               ($alt ? ' alt="' . $alt . '"' : '') .
-               ($class ? ' class="' . $class . '"' : '') .
-               '>';
-    }, $html);
-
-    // Preserve styled div blocks (lesson content classes) before attribute stripping
-    // These divs don't nest inside each other, so non-greedy match is safe
-    $styledDivPlaceholders = [];
+    // Tillåtna div-klasser (lesson-block-typer)
     $allowedDivClasses = ['lesson-intro', 'lesson-tip', 'lesson-info', 'lesson-example', 'lesson-warning', 'lesson-summary'];
-    $classPattern = implode('|', array_map(function($c) { return preg_quote($c, '/'); }, $allowedDivClasses));
-    $html = preg_replace_callback('/<div\s+class\s*=\s*["\'](' . $classPattern . ')["\']\s*>(.*?)<\/div>/si', function($match) use (&$styledDivPlaceholders) {
-        $key = '%%STYLEDIV_' . count($styledDivPlaceholders) . '%%';
-        $styledDivPlaceholders[$key] = '<div class="' . $match[1] . '">' . $match[2] . '</div>';
-        return $key;
+
+    // Sanitera alla öppningstaggar med attribut
+    $html = preg_replace_callback('/<([a-z][a-z0-9]*)\b([^>]*)>/i', function($match) use ($sanitizeStyle, $extractAttr, $allowedDivClasses) {
+        $tagName = strtolower($match[1]);
+        $attrs = $match[2];
+        $safeAttrs = '';
+
+        // Taggar som inte ska ha några attribut alls
+        $noAttrTags = ['br', 'hr', 'strong', 'b', 'em', 'i', 'u', 's', 'sub', 'sup', 'ul', 'ol', 'li', 'thead', 'tbody', 'tr'];
+
+        // --- IMG: src, alt, class, style, width, height ---
+        if ($tagName === 'img') {
+            $src = $extractAttr($attrs, 'src');
+            $src = preg_replace('#^(\.\./)+upload/#', 'upload/', $src);
+            if (empty($src) || !preg_match('#^upload/[a-zA-Z0-9_\-]+\.(jpg|jpeg|png|gif|webp)$#', $src)) {
+                return '';
+            }
+            $safeAttrs = 'src="' . $src . '"';
+
+            $alt = $extractAttr($attrs, 'alt');
+            if ($alt) $safeAttrs .= ' alt="' . htmlspecialchars($alt, ENT_QUOTES, 'UTF-8') . '"';
+
+            $class = $extractAttr($attrs, 'class');
+            if ($class) $safeAttrs .= ' class="' . htmlspecialchars($class, ENT_QUOTES, 'UTF-8') . '"';
+
+            $style = $sanitizeStyle($extractAttr($attrs, 'style'));
+            if ($style) $safeAttrs .= ' style="' . $style . '"';
+
+            $width = $extractAttr($attrs, 'width');
+            if ($width && preg_match('/^\d+(%|px)?$/', $width)) $safeAttrs .= ' width="' . $width . '"';
+
+            $height = $extractAttr($attrs, 'height');
+            if ($height && preg_match('/^\d+(%|px)?$/', $height)) $safeAttrs .= ' height="' . $height . '"';
+
+            return '<img ' . $safeAttrs . '>';
+        }
+
+        // --- A: href, target, rel, style ---
+        if ($tagName === 'a') {
+            $href = $extractAttr($attrs, 'href');
+            if (empty($href) || !preg_match('#^https?://#i', $href)) {
+                return '<a>';
+            }
+            $safeAttrs = 'href="' . htmlspecialchars($href, ENT_QUOTES, 'UTF-8') . '" target="_blank" rel="noopener noreferrer"';
+
+            $style = $sanitizeStyle($extractAttr($attrs, 'style'));
+            if ($style) $safeAttrs .= ' style="' . $style . '"';
+
+            return '<a ' . $safeAttrs . '>';
+        }
+
+        // --- TD/TH: colspan, rowspan, style ---
+        if ($tagName === 'td' || $tagName === 'th') {
+            $colspan = $extractAttr($attrs, 'colspan');
+            if ($colspan && preg_match('/^\d+$/', $colspan)) $safeAttrs .= ' colspan="' . $colspan . '"';
+
+            $rowspan = $extractAttr($attrs, 'rowspan');
+            if ($rowspan && preg_match('/^\d+$/', $rowspan)) $safeAttrs .= ' rowspan="' . $rowspan . '"';
+
+            $style = $sanitizeStyle($extractAttr($attrs, 'style'));
+            if ($style) $safeAttrs .= ' style="' . $style . '"';
+
+            return '<' . $tagName . $safeAttrs . '>';
+        }
+
+        // --- DIV: class (lesson-* only) + style ---
+        if ($tagName === 'div') {
+            $class = $extractAttr($attrs, 'class');
+            if ($class && in_array($class, $allowedDivClasses)) {
+                $safeAttrs .= ' class="' . $class . '"';
+            }
+
+            $style = $sanitizeStyle($extractAttr($attrs, 'style'));
+            if ($style) $safeAttrs .= ' style="' . $style . '"';
+
+            return '<div' . $safeAttrs . '>';
+        }
+
+        // --- Tags som inte ska ha attribut ---
+        if (in_array($tagName, $noAttrTags)) {
+            // Men tillåt style på ul, ol, li för listor
+            if (in_array($tagName, ['ul', 'ol', 'li'])) {
+                $style = $sanitizeStyle($extractAttr($attrs, 'style'));
+                if ($style) return '<' . $tagName . ' style="' . $style . '">';
+            }
+            return '<' . $tagName . '>';
+        }
+
+        // --- Övriga taggar (p, span, h2-h5, blockquote, table, tr): style + class ---
+        $style = $sanitizeStyle($extractAttr($attrs, 'style'));
+        if ($style) $safeAttrs .= ' style="' . $style . '"';
+
+        $class = $extractAttr($attrs, 'class');
+        if ($class) $safeAttrs .= ' class="' . htmlspecialchars($class, ENT_QUOTES, 'UTF-8') . '"';
+
+        return '<' . $tagName . $safeAttrs . '>';
     }, $html);
 
-    // SECURITY FIX: Remove ALL attributes from non-img tags
-    $html = preg_replace('/<((?!img\b)[a-z][a-z0-9]*)\s+[^>]*>/i', '<$1>', $html);
-
-    // Konvertera div-taggar till p-taggar
-    $html = str_replace(['<div>', '</div>'], ['<p>', '</p>'], $html);
-
-    // Restore styled div blocks
-    foreach ($styledDivPlaceholders as $key => $divBlock) {
-        $html = str_replace($key, $divBlock, $html);
-    }
+    // Konvertera nakna div-taggar (utan attribut) till p-taggar
+    // Div-taggar med class/style-attribut behålls som div (de saniterades korrekt ovan)
+    $html = preg_replace('/<div>/', '<p>', $html);
+    // Ersätt </div> som hör till nakna divs — vi placeholdar stilade divs först
+    $html = preg_replace_callback('/<div\s+[^>]+>(.*?)<\/div>/si', function($match) {
+        return $match[0]; // Behåll hela matchningen oförändrad
+    }, $html);
+    // Resterande </div> (de som inte matchades ovan, dvs. hör till konverterade <p>)
+    // Vi kan inte enbart göra str_replace eftersom stilade </div> också finns
+    // Lösning: temporärt markera stilade div-block, konvertera resten, sedan återställ
+    $html = preg_replace_callback('/(<div\s+[^>]+>)(.*?)(<\/div>)/si', function($m) {
+        return $m[1] . $m[2] . '%%CLOSEDIV%%';
+    }, $html);
+    $html = str_replace('</div>', '</p>', $html);
+    $html = str_replace('%%CLOSEDIV%%', '</div>', $html);
 
     // Ta bort kapslade p-taggar
     $html = preg_replace('/<p>\s*<p>/i', '<p>', $html);
@@ -705,6 +865,436 @@ function getUserDomain($email) {
     return isset($parts[1]) ? strtolower($parts[1]) : '';
 }
 
+// =============================================================================
+// Organisationsgruppering (migration 023)
+//
+// Flera e-postdomäner kan tillhöra samma organisation. Domäner som inte
+// tilldelats någon organisation behandlas som "implicit single-domain org" och
+// fungerar som tidigare. Helpern getOrgScopeDomains() är central — den används
+// av alla refaktorerade admin-/student-queries för att expandera filterklausuler
+// från en enskild domän till orgens samtliga domäner.
+// =============================================================================
+
+/**
+ * Hämta organisation som en domän tillhör.
+ *
+ * @param string $domain Domännamn (utan @)
+ * @return array|null Organisationsraden eller null om domänen inte är grupperad
+ */
+function getOrganizationByDomain($domain) {
+    if (empty($domain)) {
+        return null;
+    }
+    return queryOne(
+        "SELECT o.* FROM " . DB_DATABASE . ".organizations o
+         JOIN " . DB_DATABASE . ".organization_domains od ON od.organization_id = o.id
+         WHERE od.domain = ?",
+        [strtolower($domain)]
+    );
+}
+
+/**
+ * Hämta organisation via ID.
+ *
+ * @param int $orgId
+ * @return array|null
+ */
+function getOrganizationById($orgId) {
+    return queryOne(
+        "SELECT * FROM " . DB_DATABASE . ".organizations WHERE id = ?",
+        [(int)$orgId]
+    );
+}
+
+/**
+ * Hämta alla domäner som tillhör en organisation.
+ *
+ * @param int $orgId
+ * @return array<string> Lista av domännamn
+ */
+function getOrganizationDomains($orgId) {
+    $rows = query(
+        "SELECT domain FROM " . DB_DATABASE . ".organization_domains
+         WHERE organization_id = ? ORDER BY is_primary DESC, domain ASC",
+        [(int)$orgId]
+    );
+    return array_column($rows ?: [], 'domain');
+}
+
+/**
+ * Hämta organisationens primära domän (eller första domänen om ingen är markerad).
+ *
+ * @param int $orgId
+ * @return string|null
+ */
+function getOrganizationPrimaryDomain($orgId) {
+    $row = queryOne(
+        "SELECT domain FROM " . DB_DATABASE . ".organization_domains
+         WHERE organization_id = ? ORDER BY is_primary DESC, domain ASC LIMIT 1",
+        [(int)$orgId]
+    );
+    return $row ? $row['domain'] : null;
+}
+
+/**
+ * Returnera de domäner som en användares "organisationsscope" omfattar.
+ *
+ * Den centrala helpern för alla org-scope-queries: returnerar samtliga domäner
+ * i användarens organisation om e-postdomänen är grupperad, annars en lista
+ * med bara den egna domänen. Resultatet är alltid icke-tomt (så länge $email
+ * har en giltig domändel) och kan användas direkt i en IN-klausul.
+ *
+ * @param string $email E-postadress
+ * @return array<string> Lista av domännamn (alltid minst en post)
+ */
+function getOrgScopeDomains($email) {
+    $domain = getUserDomain($email);
+    if (empty($domain)) {
+        return [];
+    }
+    $org = getOrganizationByDomain($domain);
+    if (!$org) {
+        return [$domain];
+    }
+    $domains = getOrganizationDomains($org['id']);
+    return !empty($domains) ? $domains : [$domain];
+}
+
+/**
+ * Bygg en parametriserad IN-klausul för en kolumn baserat på en lista av domäner.
+ *
+ * Returnerar ['fragment' => "col IN (?, ?, ?)", 'params' => [...]].
+ *
+ * @param array<string> $domains
+ * @param string $column SQL-kolumnnamn (eller uttryck) att jämföra mot
+ * @return array{fragment:string, params:array}
+ */
+function buildDomainInClause(array $domains, $column) {
+    if (empty($domains)) {
+        // Inga domäner → garantera att klausulen aldrig matchar
+        return ['fragment' => "$column IN (NULL)", 'params' => []];
+    }
+    $placeholders = implode(',', array_fill(0, count($domains), '?'));
+    return [
+        'fragment' => "$column IN ($placeholders)",
+        'params' => array_values($domains),
+    ];
+}
+
+/**
+ * Bygg en parametriserad IN-klausul för en e-postkolumn där vi vill matcha
+ * användare vars e-postdomän finns i listan.
+ *
+ * @param array<string> $domains
+ * @param string $emailColumn Tabell.kolumn för e-postfältet (t.ex. "u.email")
+ * @return array{fragment:string, params:array}
+ */
+function buildEmailDomainInClause(array $domains, $emailColumn) {
+    if (empty($domains)) {
+        return ['fragment' => "LOWER(SUBSTRING_INDEX($emailColumn, '@', -1)) IN (NULL)", 'params' => []];
+    }
+    $placeholders = implode(',', array_fill(0, count($domains), '?'));
+    return [
+        'fragment' => "LOWER(SUBSTRING_INDEX($emailColumn, '@', -1)) IN ($placeholders)",
+        'params' => array_values(array_map('strtolower', $domains)),
+    ];
+}
+
+/**
+ * Kontrollera om en användares organisation (eller domän, om ingen org finns)
+ * har tecknat PUB-avtal.
+ *
+ * Logiken hanterar tre fall:
+ * 1. Domänen är inte grupperad → kolla domain_settings för domänen (legacy).
+ * 2. Domänen är grupperad och orgen har egen PUB-flagga → returnera true.
+ * 3. Domänen är grupperad men orgen har inte egen PUB-flagga ännu → faller
+ *    tillbaka på att kolla domain_settings för någon av orgens domäner. Detta
+ *    täcker fallet där en domän tecknade PUB innan den grupperades in i orgen
+ *    (t.ex. sater.se hade PUB innan den lades till i en organisation).
+ *
+ * @param string $email Användarens e-post
+ * @return bool
+ */
+function userHasPubAgreement($email) {
+    $domain = getUserDomain($email);
+    if (empty($domain)) {
+        return false;
+    }
+    $org = getOrganizationByDomain($domain);
+    if ($org) {
+        // Fall 2: orgen har egen PUB
+        if ((int)$org['has_pub_agreement'] === 1) {
+            return true;
+        }
+        // Fall 3: legacy-fallback — någon av orgens domäner har PUB sen tidigare
+        $orgDomains = getOrganizationDomains($org['id']);
+        foreach ($orgDomains as $od) {
+            if (hasPubAgreement($od)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    // Fall 1: ingen org, kolla bara domänens egen PUB
+    return hasPubAgreement($domain);
+}
+
+/**
+ * Hämta senaste PUB-avtalsartefakt för en organisation.
+ *
+ * @param int $orgId
+ * @return array|null
+ */
+function getOrgPubAgreementArtifact($orgId) {
+    return queryOne(
+        "SELECT * FROM " . DB_DATABASE . ".pub_agreement_artifacts
+         WHERE organization_id = ? ORDER BY signed_at DESC LIMIT 1",
+        [(int)$orgId]
+    );
+}
+
+/**
+ * Skapa en organisation.
+ *
+ * @param string $name
+ * @param string|null $orgNumber
+ * @param string|null $contactEmail
+ * @return int|null Nytt organisations-ID eller null vid fel
+ */
+function createOrganization($name, $orgNumber = null, $contactEmail = null) {
+    return execute(
+        "INSERT INTO " . DB_DATABASE . ".organizations (name, org_number, contact_email)
+         VALUES (?, ?, ?)",
+        [trim($name), $orgNumber ? trim($orgNumber) : null, $contactEmail ? trim($contactEmail) : null]
+    );
+}
+
+/**
+ * Uppdatera organisationsdetaljer (namn, org-nummer, kontakt-e-post).
+ *
+ * @param int $orgId
+ * @param string $name
+ * @param string|null $orgNumber
+ * @param string|null $contactEmail
+ * @return bool
+ */
+function updateOrganization($orgId, $name, $orgNumber = null, $contactEmail = null) {
+    return execute(
+        "UPDATE " . DB_DATABASE . ".organizations
+         SET name = ?, org_number = ?, contact_email = ?
+         WHERE id = ?",
+        [
+            trim($name),
+            $orgNumber ? trim($orgNumber) : null,
+            $contactEmail ? trim($contactEmail) : null,
+            (int)$orgId
+        ]
+    ) !== null;
+}
+
+/**
+ * Radera en organisation. organization_domains-rader raderas via CASCADE,
+ * pub_agreement_artifacts.organization_id sätts till NULL via SET NULL.
+ *
+ * @param int $orgId
+ * @return bool
+ */
+function deleteOrganization($orgId) {
+    return execute(
+        "DELETE FROM " . DB_DATABASE . ".organizations WHERE id = ?",
+        [(int)$orgId]
+    ) !== null;
+}
+
+/**
+ * Tilldela en domän till en organisation. Om domänen redan tillhör en annan
+ * organisation flyttas den. Om domänen redan tillhör samma org händer ingenting.
+ *
+ * @param int $orgId
+ * @param string $domain
+ * @return bool
+ */
+function assignDomainToOrg($orgId, $domain) {
+    $domain = strtolower(trim($domain));
+    if (empty($domain)) {
+        return false;
+    }
+    $existing = queryOne(
+        "SELECT id FROM " . DB_DATABASE . ".organization_domains WHERE domain = ?",
+        [$domain]
+    );
+    if ($existing) {
+        return execute(
+            "UPDATE " . DB_DATABASE . ".organization_domains SET organization_id = ? WHERE id = ?",
+            [(int)$orgId, $existing['id']]
+        ) !== null;
+    }
+    return execute(
+        "INSERT INTO " . DB_DATABASE . ".organization_domains (organization_id, domain) VALUES (?, ?)",
+        [(int)$orgId, $domain]
+    ) !== null;
+}
+
+/**
+ * Ta bort en domän från sin organisation.
+ *
+ * @param string $domain
+ * @return bool
+ */
+function removeDomainFromOrg($domain) {
+    return execute(
+        "DELETE FROM " . DB_DATABASE . ".organization_domains WHERE domain = ?",
+        [strtolower(trim($domain))]
+    ) !== null;
+}
+
+/**
+ * Sätt en domän som organisationens primära domän (rensar tidigare primary).
+ *
+ * @param int $orgId
+ * @param string $domain
+ * @return bool
+ */
+function setPrimaryDomainForOrg($orgId, $domain) {
+    execute(
+        "UPDATE " . DB_DATABASE . ".organization_domains SET is_primary = 0 WHERE organization_id = ?",
+        [(int)$orgId]
+    );
+    return execute(
+        "UPDATE " . DB_DATABASE . ".organization_domains SET is_primary = 1
+         WHERE organization_id = ? AND domain = ?",
+        [(int)$orgId, strtolower(trim($domain))]
+    ) !== null;
+}
+
+/**
+ * Uppdatera PUB-avtalsstatus på organisationsnivå.
+ *
+ * @param int $orgId
+ * @param bool $hasPubAgreement
+ * @param string|null $agreementDate (YYYY-MM-DD)
+ * @param string|null $notes
+ * @return bool
+ */
+function updateOrgPubAgreement($orgId, $hasPubAgreement, $agreementDate = null, $notes = null) {
+    return execute(
+        "UPDATE " . DB_DATABASE . ".organizations
+         SET has_pub_agreement = ?, pub_agreement_date = ?, pub_agreement_notes = ?
+         WHERE id = ?",
+        [$hasPubAgreement ? 1 : 0, $agreementDate, $notes, (int)$orgId]
+    ) !== null;
+}
+
+/**
+ * Hämta alla organisationer med antal domäner.
+ *
+ * @return array
+ */
+function getAllOrganizations() {
+    return query(
+        "SELECT o.*,
+                (SELECT COUNT(*) FROM " . DB_DATABASE . ".organization_domains od
+                 WHERE od.organization_id = o.id) AS domain_count
+         FROM " . DB_DATABASE . ".organizations o
+         ORDER BY o.name ASC"
+    );
+}
+
+// =============================================================================
+// Slut på organisationsgruppering
+// =============================================================================
+
+// =============================================================================
+// Underhållsläge
+//
+// Superadmin kan aktivera ett globalt underhållsläge som blockerar icke-superadmins
+// från att använda systemet. När flaggan är aktiv visas maintenance.php och alla
+// requests svarar med HTTP 503. Superadmin har bypass så de kan stänga av läget.
+// Flaggan lagras som JSON-fil i data/ (utanför webbservermount via .htaccess deny).
+// =============================================================================
+
+/**
+ * Returnera den absoluta sökvägen till maintenance-flaggfilen.
+ *
+ * @return string
+ */
+function getMaintenanceFlagPath() {
+    return realpath(__DIR__ . '/..') . '/data/maintenance.json';
+}
+
+/**
+ * Är underhållsläge aktivt?
+ *
+ * @return bool
+ */
+function isMaintenanceModeActive() {
+    return file_exists(getMaintenanceFlagPath());
+}
+
+/**
+ * Hämta detaljer om underhållsläget (eller null om inaktivt).
+ *
+ * @return array|null Array med keys: active, since, by_email, message
+ */
+function getMaintenanceMode() {
+    $path = getMaintenanceFlagPath();
+    if (!file_exists($path)) {
+        return null;
+    }
+    $raw = @file_get_contents($path);
+    if ($raw === false) {
+        return ['active' => true, 'since' => null, 'by_email' => null, 'message' => null];
+    }
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        return ['active' => true, 'since' => null, 'by_email' => null, 'message' => null];
+    }
+    return [
+        'active' => true,
+        'since' => $data['since'] ?? null,
+        'by_email' => $data['by_email'] ?? null,
+        'message' => $data['message'] ?? null,
+    ];
+}
+
+/**
+ * Aktivera underhållsläge.
+ *
+ * @param string $byEmail E-post för superadmin som aktiverar
+ * @param string|null $message Valfritt meddelande som visas för slutanvändare
+ * @return bool
+ */
+function enableMaintenanceMode($byEmail, $message = null) {
+    $path = getMaintenanceFlagPath();
+    $dir = dirname($path);
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0775, true);
+    }
+    $payload = json_encode([
+        'since' => date('Y-m-d H:i:s'),
+        'by_email' => $byEmail,
+        'message' => $message,
+    ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    return @file_put_contents($path, $payload) !== false;
+}
+
+/**
+ * Avaktivera underhållsläge.
+ *
+ * @return bool
+ */
+function disableMaintenanceMode() {
+    $path = getMaintenanceFlagPath();
+    if (!file_exists($path)) {
+        return true;
+    }
+    return @unlink($path);
+}
+
+// =============================================================================
+// Slut på underhållsläge
+// =============================================================================
+
 /**
  * Skicka e-postnotifikation när en användares rättigheter ändras
  *
@@ -727,18 +1317,30 @@ function generateUuid() {
 }
 
 /**
- * Spara en PUB-avtalssigneringsartefakt
+ * Spara en PUB-avtalssigneringsartefakt.
+ *
+ * Slår automatiskt upp organization_id via domänen om det inte angavs explicit
+ * i $data, så att signeringen kopplas till orgen om domänen är grupperad.
  *
  * @param array $data Artefaktdata
  * @return int|null ID för den sparade artefakten eller null vid fel
  */
 function savePubAgreementArtifact($data) {
+    // Slå upp organisation om den inte angavs (automatkoppling vid signering)
+    $orgId = $data['organization_id'] ?? null;
+    if ($orgId === null && !empty($data['domain'])) {
+        $org = getOrganizationByDomain($data['domain']);
+        if ($org) {
+            $orgId = (int)$org['id'];
+        }
+    }
+
     return execute(
         "INSERT INTO " . DB_DATABASE . ".pub_agreement_artifacts
          (agreement_id, version, pdf_filename, pdf_hash, signed_at, ip_address,
           user_id, user_email, user_name, user_title, user_phone,
-          domain, org_name, org_number, agreement_email, certification_text)
-         VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          domain, organization_id, org_name, org_number, agreement_email, certification_text)
+         VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
             $data['agreement_id'],
             $data['version'] ?? '1.0',
@@ -751,6 +1353,7 @@ function savePubAgreementArtifact($data) {
             $data['user_title'] ?? null,
             $data['user_phone'] ?? null,
             $data['domain'],
+            $orgId,
             $data['org_name'],
             $data['org_number'],
             $data['agreement_email'],
@@ -898,9 +1501,10 @@ function getUserOrgTags($userId) {
  *
  * @param int $userId Användarens ID
  * @param int $courseId Kursens ID
+ * @param string|null $startDate Valfritt startdatum (Y-m-d H:i:s eller Y-m-d). Default: nu.
  * @return bool True om det lyckades
  */
-function enrollUserInSequentialCourse($userId, $courseId) {
+function enrollUserInSequentialCourse($userId, $courseId, $startDate = null) {
     // Kontrollera om redan inskriven
     $existing = queryOne(
         "SELECT id FROM " . DB_DATABASE . ".sequential_lesson_schedule WHERE user_id = ? AND course_id = ? LIMIT 1",
@@ -921,8 +1525,9 @@ function enrollUserInSequentialCourse($userId, $courseId) {
     }
 
     // Skapa schedule-rader
+    $effectiveStart = $startDate ? date('Y-m-d H:i:s', strtotime($startDate)) : date('Y-m-d H:i:s');
     foreach ($lessons as $index => $lesson) {
-        $availableAt = ($index === 0) ? date('Y-m-d H:i:s') : null;
+        $availableAt = ($index === 0) ? $effectiveStart : null;
         execute(
             "INSERT IGNORE INTO " . DB_DATABASE . ".sequential_lesson_schedule
              (user_id, course_id, lesson_id, available_at)
@@ -938,12 +1543,252 @@ function enrollUserInSequentialCourse($userId, $courseId) {
     );
     if (!$enrollment) {
         execute(
-            "INSERT INTO " . DB_DATABASE . ".course_enrollments (user_id, course_id, status) VALUES (?, ?, 'active')",
-            [$userId, $courseId]
+            "INSERT INTO " . DB_DATABASE . ".course_enrollments (user_id, course_id, status, started_at) VALUES (?, ?, 'active', ?)",
+            [$userId, $courseId, $effectiveStart]
         );
     }
 
     return true;
+}
+
+// =============================================================================
+// Publika kurser (migration 025)
+//
+// En organisation kan publicera en kurs så att externa användare kan registrera
+// sig via en unik länk. Registrerade användare får åtkomst ENDAST till den kurs
+// de registrerat sig för. Samma e-post kan kopplas till flera publika kurser
+// över olika organisationer via rader i public_course_access.
+// =============================================================================
+
+/**
+ * Generera och spara ett nytt publikt registreringstoken för en kurs.
+ * Skriver över ev. tidigare token — den gamla länken slutar omedelbart fungera.
+ *
+ * @param int $courseId
+ * @return string Det nya token-värdet (64 hex-tecken)
+ */
+function generatePublicRegistrationToken($courseId) {
+    $token = bin2hex(random_bytes(32));
+    execute(
+        "UPDATE " . DB_DATABASE . ".courses SET public_registration_token = ? WHERE id = ?",
+        [$token, (int)$courseId]
+    );
+    return $token;
+}
+
+/**
+ * Validera ett publikt registreringstoken mot en kurs.
+ *
+ * @param int $courseId
+ * @param string $token
+ * @return array|null Kursrad om allt är giltigt, annars null
+ */
+function validatePublicRegistrationToken($courseId, $token) {
+    if (empty($token) || !preg_match('/^[a-f0-9]{64}$/', $token)) {
+        return null;
+    }
+    $course = queryOne(
+        "SELECT * FROM " . DB_DATABASE . ".courses
+         WHERE id = ? AND is_public = 1 AND public_registration_token = ? LIMIT 1",
+        [(int)$courseId, $token]
+    );
+    return $course ?: null;
+}
+
+/**
+ * Ge en användare tillgång till en publik kurs. INSERT IGNORE på
+ * public_course_access + enroll enligt kursens typ (stegvis vs bulk_start).
+ * Idempotent — om användaren redan har access händer inget skadligt.
+ *
+ * @param int $userId
+ * @param int $courseId
+ * @return bool True om allt gick vägen
+ */
+function grantPublicCourseAccess($userId, $courseId) {
+    $course = queryOne(
+        "SELECT id, organization_domain, sequential_mode, is_public FROM " . DB_DATABASE . ".courses WHERE id = ? LIMIT 1",
+        [(int)$courseId]
+    );
+    if (!$course) {
+        return false;
+    }
+
+    // Slå upp organization_id via kursens organization_domain om den är grupperad.
+    $orgId = null;
+    if (!empty($course['organization_domain'])) {
+        $org = getOrganizationByDomain($course['organization_domain']);
+        $orgId = $org ? (int)$org['id'] : null;
+    }
+
+    execute(
+        "INSERT IGNORE INTO " . DB_DATABASE . ".public_course_access
+         (user_id, course_id, organization_id) VALUES (?, ?, ?)",
+        [(int)$userId, (int)$courseId, $orgId]
+    );
+
+    // Anmäl till kursen enligt dess typ
+    if (!empty($course['sequential_mode'])) {
+        enrollUserInSequentialCourse((int)$userId, (int)$courseId, date('Y-m-d H:i:s'));
+    } else {
+        // Bulk_start / icke-stegvis: en course_enrollments-rad räcker
+        $existing = queryOne(
+            "SELECT id FROM " . DB_DATABASE . ".course_enrollments WHERE user_id = ? AND course_id = ?",
+            [(int)$userId, (int)$courseId]
+        );
+        if (!$existing) {
+            execute(
+                "INSERT INTO " . DB_DATABASE . ".course_enrollments (user_id, course_id, status, started_at) VALUES (?, ?, 'active', NOW())",
+                [(int)$userId, (int)$courseId]
+            );
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Kontrollera om en användare har publik access till en viss kurs.
+ *
+ * @param int $userId
+ * @param int $courseId
+ * @return bool
+ */
+function hasPublicCourseAccess($userId, $courseId) {
+    $row = queryOne(
+        "SELECT 1 FROM " . DB_DATABASE . ".public_course_access WHERE user_id = ? AND course_id = ? LIMIT 1",
+        [(int)$userId, (int)$courseId]
+    );
+    return $row !== null && $row !== false;
+}
+
+/**
+ * Returnera kurs-IDs som användaren har publik åtkomst till.
+ *
+ * @param int $userId
+ * @return int[]
+ */
+function getPublicCourseIdsForUser($userId) {
+    $rows = query(
+        "SELECT course_id FROM " . DB_DATABASE . ".public_course_access WHERE user_id = ?",
+        [(int)$userId]
+    );
+    return array_map('intval', array_column($rows ?: [], 'course_id'));
+}
+
+/**
+ * Rensa ALL data för en användare i en specifik publik kurs. Gemensam för
+ * självradering (leave_public_course.php) och admin-bulk-delete. Rör INTE
+ * users-raden — det sköts av maybeDeleteOrphanPublicUser() efter sista access
+ * är borta.
+ *
+ * Körs i transaktion.
+ *
+ * @param int $userId
+ * @param int $courseId
+ * @return void
+ */
+function purgePublicCourseUserData($userId, $courseId) {
+    $userId = (int)$userId;
+    $courseId = (int)$courseId;
+
+    execute("START TRANSACTION");
+    try {
+        // Per-lektion progress för den här kursens lektioner
+        execute(
+            "DELETE p FROM " . DB_DATABASE . ".progress p
+             JOIN " . DB_DATABASE . ".lessons l ON l.id = p.lesson_id
+             WHERE p.user_id = ? AND l.course_id = ?",
+            [$userId, $courseId]
+        );
+        execute(
+            "DELETE FROM " . DB_DATABASE . ".sequential_lesson_schedule WHERE user_id = ? AND course_id = ?",
+            [$userId, $courseId]
+        );
+        execute(
+            "DELETE FROM " . DB_DATABASE . ".course_enrollments WHERE user_id = ? AND course_id = ?",
+            [$userId, $courseId]
+        );
+        // sequential_reminder_log och reminder_log finns kanske inte alltid — try/catch
+        try {
+            execute(
+                "DELETE FROM " . DB_DATABASE . ".sequential_reminder_log WHERE user_id = ? AND course_id = ?",
+                [$userId, $courseId]
+            );
+        } catch (Exception $e) { /* tabell finns ev. inte */ }
+        try {
+            execute(
+                "DELETE FROM " . DB_DATABASE . ".reminder_log WHERE user_id = ? AND course_id = ?",
+                [$userId, $courseId]
+            );
+        } catch (Exception $e) { /* tabell finns ev. inte */ }
+        execute(
+            "DELETE FROM " . DB_DATABASE . ".public_course_access WHERE user_id = ? AND course_id = ?",
+            [$userId, $courseId]
+        );
+        execute("COMMIT");
+    } catch (Exception $e) {
+        execute("ROLLBACK");
+        throw $e;
+    }
+}
+
+/**
+ * Om en användare har access_mode='public_only' OCH saknar kvarvarande rader
+ * i public_course_access, radera användaren helt (med full cascade via FK).
+ *
+ * @param int $userId
+ * @return bool True om användaren raderades
+ */
+function maybeDeleteOrphanPublicUser($userId) {
+    $user = queryOne(
+        "SELECT id, access_mode FROM " . DB_DATABASE . ".users WHERE id = ?",
+        [(int)$userId]
+    );
+    if (!$user || $user['access_mode'] !== 'public_only') {
+        return false;
+    }
+    $remaining = queryOne(
+        "SELECT COUNT(*) AS c FROM " . DB_DATABASE . ".public_course_access WHERE user_id = ?",
+        [(int)$userId]
+    );
+    if ((int)($remaining['c'] ?? 0) > 0) {
+        return false;
+    }
+    // Städa upp rester som inte är FK-cascade-skyddade
+    try { execute("DELETE FROM " . DB_DATABASE . ".remember_tokens WHERE user_id = ?", [(int)$userId]); } catch (Exception $e) {}
+    try { execute("DELETE FROM " . DB_DATABASE . ".user_org_tags WHERE user_id = ?", [(int)$userId]); } catch (Exception $e) {}
+    execute("DELETE FROM " . DB_DATABASE . ".users WHERE id = ?", [(int)$userId]);
+    return true;
+}
+
+/**
+ * Beräkna beräknat slutdatum för en användare i en stegvis kurs.
+ *
+ * @param string $startedAt Startdatum (Y-m-d eller datetime)
+ * @param int $lessonCount Antal lektioner i kursen
+ * @param int $intervalDays Dagar mellan lektioner
+ * @return string|null Beräknat slutdatum (Y-m-d) eller null
+ */
+function getProjectedEndDate($startedAt, $lessonCount, $intervalDays) {
+    if (!$startedAt || $lessonCount <= 0) return null;
+    $totalDays = ($lessonCount - 1) * $intervalDays;
+    return date('Y-m-d', strtotime($startedAt) + $totalDays * 86400);
+}
+
+/**
+ * Hämta senaste tillgängliga lektionsdatum för en användare i en stegvis kurs.
+ *
+ * @param int $userId Användarens ID
+ * @param int $courseId Kursens ID
+ * @return string|null Senaste available_at (datetime) eller null
+ */
+function getLatestAvailableLessonDate($userId, $courseId) {
+    $row = queryOne(
+        "SELECT MAX(available_at) AS latest FROM " . DB_DATABASE . ".sequential_lesson_schedule
+         WHERE user_id = ? AND course_id = ? AND available_at <= NOW()",
+        [$userId, $courseId]
+    );
+    return $row ? $row['latest'] : null;
 }
 
 /**
@@ -1458,4 +2303,173 @@ function sendPermissionChangeNotification($userEmail, $changeType, $newStatus, $
     </html>";
 
     return sendSmtpMail($userEmail, $subject, $message);
+}
+
+/**
+ * Utför användarsynkronisering mot databasen.
+ * Delad logik som används av både API-endpointen (api/sync_users.php)
+ * och admin-synkverktyget (admin/ajax/sync_users_direct.php).
+ *
+ * @param array $users Lista av användare [{email, name, role, organization}]
+ * @param string $domain Domän att synka mot
+ * @param bool $deactivateMissing Om true, markera saknade synkade användare som inaktiva
+ * @param int|null $apiKeyId API-nyckel-ID (null vid admin-sessionssynk)
+ * @param string $ipAddress IP-adress
+ * @return array ['success' => bool, 'summary' => [...], 'sync_id' => int, 'error' => string|null]
+ */
+function performUserSync(array $users, string $domain, bool $deactivateMissing, ?int $apiKeyId, string $ipAddress): array {
+    $startTime = microtime(true);
+    $userCount = count($users);
+    $created = 0;
+    $updated = 0;
+    $deactivated = 0;
+    $reactivated = 0;
+    $syncLogId = null;
+
+    $db = getDb();
+
+    try {
+        $db->beginTransaction();
+
+        $processedEmails = [];
+
+        foreach ($users as $userData) {
+            $email = strtolower(trim($userData['email']));
+            $name = trim($userData['name'] ?? '');
+            $role = $userData['role'] ?? 'student';
+            $organization = trim($userData['organization'] ?? '');
+
+            $processedEmails[] = $email;
+
+            $existingUser = queryOne(
+                "SELECT id, is_synced, sync_status, role FROM " . DB_DATABASE . ".users WHERE email = ?",
+                [$email]
+            );
+
+            $isAdmin = ($role === 'admin') ? 1 : 0;
+            $isEditor = ($role === 'admin' || $role === 'teacher') ? 1 : 0;
+
+            if (!$existingUser) {
+                $stmt = $db->prepare(
+                    "INSERT INTO " . DB_DATABASE . ".users (email, name, role, is_admin, is_editor, is_synced, sync_status, synced_at, verified_at, created_at)
+                     VALUES (?, ?, ?, ?, ?, 1, 'active', NOW(), NOW(), NOW())"
+                );
+                $stmt->execute([$email, $name, $role, $isAdmin, $isEditor]);
+                $userId = $db->lastInsertId();
+                $created++;
+            } else {
+                $userId = $existingUser['id'];
+
+                if ($existingUser['is_synced'] == 1 && $existingUser['sync_status'] === 'inactive') {
+                    $reactivated++;
+                }
+
+                $newRole = $role;
+                $newIsAdmin = $isAdmin;
+                $newIsEditor = $isEditor;
+                if ($existingUser['role'] === 'super_admin') {
+                    $newRole = 'super_admin';
+                    $newIsAdmin = 1;
+                    $newIsEditor = 1;
+                }
+
+                $stmt = $db->prepare(
+                    "UPDATE " . DB_DATABASE . ".users
+                     SET name = ?, role = ?, is_admin = ?, is_editor = ?, is_synced = 1, sync_status = 'active', synced_at = NOW()
+                     WHERE id = ?"
+                );
+                $stmt->execute([$name, $newRole, $newIsAdmin, $newIsEditor, $userId]);
+                $updated++;
+            }
+
+            // Hantera organisationstaggar
+            $stmt = $db->prepare("DELETE FROM " . DB_DATABASE . ".user_org_tags WHERE user_id = ?");
+            $stmt->execute([$userId]);
+
+            if (!empty($organization)) {
+                $segments = array_map('trim', explode('/', $organization));
+                $segments = array_filter($segments, function($s) { return $s !== ''; });
+
+                foreach ($segments as $tag) {
+                    $stmt = $db->prepare(
+                        "INSERT IGNORE INTO " . DB_DATABASE . ".user_org_tags (user_id, tag) VALUES (?, ?)"
+                    );
+                    $stmt->execute([$userId, $tag]);
+                }
+            }
+        }
+
+        // Markera saknade användare som inaktiva
+        if ($deactivateMissing && !empty($processedEmails)) {
+            $placeholders = implode(',', array_fill(0, count($processedEmails), '?'));
+            $params = array_merge($processedEmails, [$domain]);
+
+            $stmt = $db->prepare(
+                "UPDATE " . DB_DATABASE . ".users
+                 SET sync_status = 'inactive'
+                 WHERE is_synced = 1
+                   AND sync_status = 'active'
+                   AND role != 'super_admin'
+                   AND email NOT IN ($placeholders)
+                   AND SUBSTRING_INDEX(email, '@', -1) = ?"
+            );
+            $stmt->execute($params);
+            $deactivated = $stmt->rowCount();
+        }
+
+        // Logga synk
+        $durationMs = (int)((microtime(true) - $startTime) * 1000);
+
+        $stmt = $db->prepare(
+            "INSERT INTO " . DB_DATABASE . ".sync_log
+             (domain, api_key_id, users_in_payload, users_created, users_updated, users_deactivated, users_reactivated, status, ip_address, duration_ms)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'success', ?, ?)"
+        );
+        $stmt->execute([$domain, $apiKeyId, $userCount, $created, $updated, $deactivated, $reactivated, $ipAddress, $durationMs]);
+        $syncLogId = $db->lastInsertId();
+
+        $db->commit();
+
+        return [
+            'success' => true,
+            'summary' => [
+                'total_in_payload' => $userCount,
+                'created' => $created,
+                'updated' => $updated,
+                'deactivated' => $deactivated,
+                'reactivated' => $reactivated
+            ],
+            'sync_id' => (int)$syncLogId,
+            'error' => null
+        ];
+
+    } catch (Exception $e) {
+        $db->rollBack();
+
+        // Logga fel
+        $durationMs = (int)((microtime(true) - $startTime) * 1000);
+        $errorMsg = $e->getMessage();
+
+        execute(
+            "INSERT INTO " . DB_DATABASE . ".sync_log
+             (domain, api_key_id, users_in_payload, users_created, users_updated, users_deactivated, users_reactivated, status, error_message, ip_address, duration_ms)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'failed', ?, ?, ?)",
+            [$domain, $apiKeyId, $userCount, $created, $updated, $deactivated, $reactivated, $errorMsg, $ipAddress, $durationMs]
+        );
+
+        error_log("Stimma sync error: " . $errorMsg);
+
+        return [
+            'success' => false,
+            'summary' => [
+                'total_in_payload' => $userCount,
+                'created' => $created,
+                'updated' => $updated,
+                'deactivated' => $deactivated,
+                'reactivated' => $reactivated
+            ],
+            'sync_id' => null,
+            'error' => 'Ett internt fel uppstod vid synkronisering.'
+        ];
+    }
 }

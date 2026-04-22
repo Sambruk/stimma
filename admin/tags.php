@@ -24,6 +24,13 @@ $isAdmin = $currentUser['is_admin'] == 1;
 $isEditor = $currentUser['is_editor'] == 1;
 $isSuperAdmin = $currentUser['role'] === 'super_admin';
 
+// Org-scope: alla domäner i adminens organisation. Tag-listor och dubblettkontroller
+// expanderas till hela orgen så taggar är delade mellan grupperade domäner.
+// Nya taggar skapas dock fortfarande på adminens egen domän.
+$orgScopeDomains = getOrgScopeDomains($_SESSION['user_email']);
+$tagDomClause = buildDomainInClause($orgScopeDomains, 'organization_domain');
+$tDomClause = buildDomainInClause($orgScopeDomains, 't.organization_domain');
+
 // Kontrollera behörighet - endast redaktörer, admin och superadmin
 if (!$isAdmin && !$isEditor && !$isSuperAdmin) {
     $_SESSION['message'] = 'Du har inte behörighet att hantera taggar.';
@@ -57,10 +64,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['message'] = 'Taggnamnet får inte vara längre än 100 tecken.';
             $_SESSION['message_type'] = 'danger';
         } else {
-            // Kontrollera om taggen redan finns för organisationen
+            // Kontrollera om taggen redan finns någonstans i orgens samtliga domäner
             $existingTag = queryOne(
-                "SELECT id FROM " . DB_DATABASE . ".tags WHERE name = ? AND organization_domain = ?",
-                [$tagName, $userDomain]
+                "SELECT id FROM " . DB_DATABASE . ".tags WHERE name = ? AND {$tagDomClause['fragment']}",
+                array_merge([$tagName], $tagDomClause['params'])
             );
 
             if ($existingTag) {
@@ -99,20 +106,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['message'] = 'Taggnamnet får inte vara längre än 100 tecken.';
             $_SESSION['message_type'] = 'danger';
         } else {
-            // Kontrollera att taggen tillhör användarens organisation
+            // Kontrollera att taggen tillhör någon av orgens domäner
             $tag = queryOne(
-                "SELECT * FROM " . DB_DATABASE . ".tags WHERE id = ? AND organization_domain = ?",
-                [$tagId, $userDomain]
+                "SELECT * FROM " . DB_DATABASE . ".tags WHERE id = ? AND {$tagDomClause['fragment']}",
+                array_merge([$tagId], $tagDomClause['params'])
             );
 
             if (!$tag) {
                 $_SESSION['message'] = 'Taggen kunde inte hittas eller tillhör inte din organisation.';
                 $_SESSION['message_type'] = 'danger';
             } else {
-                // Kontrollera om nytt namn redan finns
+                // Kontrollera om nytt namn redan finns inom orgen
                 $existingTag = queryOne(
-                    "SELECT id FROM " . DB_DATABASE . ".tags WHERE name = ? AND organization_domain = ? AND id != ?",
-                    [$tagName, $userDomain, $tagId]
+                    "SELECT id FROM " . DB_DATABASE . ".tags WHERE name = ? AND {$tagDomClause['fragment']} AND id != ?",
+                    array_merge([$tagName], $tagDomClause['params'], [$tagId])
                 );
 
                 if ($existingTag) {
@@ -144,10 +151,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'delete_tag') {
         $tagId = (int)($_POST['tag_id'] ?? 0);
 
-        // Kontrollera att taggen tillhör användarens organisation
+        // Kontrollera att taggen tillhör någon av orgens domäner
         $tag = queryOne(
-            "SELECT * FROM " . DB_DATABASE . ".tags WHERE id = ? AND organization_domain = ?",
-            [$tagId, $userDomain]
+            "SELECT * FROM " . DB_DATABASE . ".tags WHERE id = ? AND {$tagDomClause['fragment']}",
+            array_merge([$tagId], $tagDomClause['params'])
         );
 
         if (!$tag) {
@@ -184,15 +191,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
-// Hämta alla taggar för organisationen
+// Hämta alla taggar för organisationens samtliga domäner
 $tags = query(
     "SELECT t.*, u.email as creator_email,
             (SELECT COUNT(*) FROM " . DB_DATABASE . ".course_tags ct WHERE ct.tag_id = t.id) as course_count
      FROM " . DB_DATABASE . ".tags t
      LEFT JOIN " . DB_DATABASE . ".users u ON t.created_by = u.id
-     WHERE t.organization_domain = ?
+     WHERE {$tDomClause['fragment']}
      ORDER BY t.name ASC",
-    [$userDomain]
+    $tDomClause['params']
 );
 
 // Inkludera header

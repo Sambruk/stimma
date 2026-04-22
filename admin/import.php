@@ -258,13 +258,20 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'
                 }
             }
 
+            // Ursprungsorganisation: om exportfilen innehåller fältet (exporterat
+            // från Stimma efter 2026-04-22) så respektera det, annars antag att
+            // importören är ursprungsorganisationen.
+            $originalOrgDomain = $data['course']['original_organization_domain']
+                ?? $data['course']['organization_domain']
+                ?? $organizationDomain;
+
             // Skapa kursen
             $courseId = execute("
                 INSERT INTO " . DB_DATABASE . ".courses (
                     title, description, difficulty_level, duration_minutes,
                     prerequisites, tags, image_url, status, sort_order,
-                    featured, author_id, organization_domain, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                    featured, author_id, organization_domain, original_organization_domain, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
             ", [
                 $data['course']['title'],
                 $data['course']['description'],
@@ -277,7 +284,8 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'
                 $data['course']['sort_order'] ?? 0,
                 $data['course']['featured'] ?? 0,
                 $user['id'],
-                $organizationDomain
+                $organizationDomain,
+                $originalOrgDomain
             ]);
 
             // Om användaren inte är admin, lägg till i course_editors

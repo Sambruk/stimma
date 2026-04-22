@@ -37,7 +37,7 @@ $page_title = 'Kopiera kurs';
 /**
  * Kopiera en kurs med alla dess lektioner till den egna organisationen
  */
-function copyCourse($sourceCourseId, $targetDomain, $newAuthorId) {
+function copyCourse($sourceCourseId, $targetDomain, $newAuthorId, $orgScopeDomains = null) {
     // Hämta källkursen
     $sourceCourse = queryOne("SELECT * FROM " . DB_DATABASE . ".courses WHERE id = ?", [$sourceCourseId]);
 
@@ -48,22 +48,32 @@ function copyCourse($sourceCourseId, $targetDomain, $newAuthorId) {
     // Skapa ny kurs med kopierad data
     $newTitle = $sourceCourse['title'] . ' (kopia)';
 
-    // Kontrollera om en kurs med samma namn redan finns i organisationen
+    // Kontrollera om en kurs med samma namn redan finns någonstans i orgens
+    // samtliga domäner (annars kan vi få dubbletter mellan grupperade domäner)
+    $scope = !empty($orgScopeDomains) ? $orgScopeDomains : [$targetDomain];
+    $dupClause = buildDomainInClause($scope, 'organization_domain');
     $existingCourse = queryOne(
-        "SELECT id FROM " . DB_DATABASE . ".courses WHERE title = ? AND organization_domain = ?",
-        [$newTitle, $targetDomain]
+        "SELECT id FROM " . DB_DATABASE . ".courses WHERE title = ? AND {$dupClause['fragment']}",
+        array_merge([$newTitle], $dupClause['params'])
     );
 
     if ($existingCourse) {
         $newTitle = $sourceCourse['title'] . ' (kopia ' . date('Y-m-d H:i') . ')';
     }
 
+    // Bevara ursprungsorganisationen. Om källan redan är en kopia har den
+    // ett original_organization_domain satt — det ska följa med vidare. Annars
+    // är källans egen organisation den ursprungliga.
+    $originalOrgDomain = !empty($sourceCourse['original_organization_domain'])
+        ? $sourceCourse['original_organization_domain']
+        : $sourceCourse['organization_domain'];
+
     // Infoga ny kurs
     $result = execute(
         "INSERT INTO " . DB_DATABASE . ".courses
         (category_id, title, description, difficulty_level, duration_minutes, prerequisites, tags,
-         image_url, status, sort_order, featured, author_id, organization_domain, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'inactive', ?, 0, ?, ?, NOW())",
+         image_url, status, sort_order, featured, author_id, organization_domain, original_organization_domain, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'inactive', ?, 0, ?, ?, ?, NOW())",
         [
             $sourceCourse['category_id'],
             $newTitle,
@@ -75,7 +85,8 @@ function copyCourse($sourceCourseId, $targetDomain, $newAuthorId) {
             $sourceCourse['image_url'],
             $sourceCourse['sort_order'],
             $newAuthorId,
-            $targetDomain
+            $targetDomain,
+            $originalOrgDomain
         ]
     );
 
@@ -175,7 +186,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $sourceCourseId = (int)($_POST['course_id'] ?? 0);
 
     if ($sourceCourseId > 0) {
-        $result = copyCourse($sourceCourseId, $userDomain, $currentUser['id']);
+        $orgScopeDomains = getOrgScopeDomains($_SESSION['user_email']);
+
+        // Server-side skydd: inaktiva kurser får bara kopieras från egen org.
+        $sourceCheck = queryOne(
+            "SELECT organization_domain, status FROM " . DB_DATABASE . ".courses WHERE id = ?",
+            [$sourceCourseId]
+        );
+        if ($sourceCheck
+            && $sourceCheck['status'] !== 'active'
+            && !in_array($sourceCheck['organization_domain'], $orgScopeDomains, true)
+        ) {
+            $_SESSION['message'] = 'Inaktiva kurser från andra organisationer kan inte kopieras.';
+            $_SESSION['message_type'] = 'danger';
+            header('Location: copy_course.php');
+            exit;
+        }
+
+        $result = copyCourse($sourceCourseId, $userDomain, $currentUser['id'], $orgScopeDomains);
 
         $_SESSION['message'] = $result['message'];
         $_SESSION['message_type'] = $result['success'] ? 'success' : 'danger';
@@ -210,13 +238,21 @@ $domains = query("SELECT DISTINCT organization_domain FROM " . DB_DATABASE . ".c
                   WHERE organization_domain IS NOT NULL AND organization_domain != ''
                   ORDER BY organization_domain ASC");
 
+// Egen orgs domäner — dessa får kopieras även om de är inaktiva (admins kan
+// kopiera arbetsutkast). Alla andra organisationer får bara visa aktiva kurser.
+$ownOrgDomains = getOrgScopeDomains($_SESSION['user_email']);
+$ownPlaceholders = implode(',', array_fill(0, count($ownOrgDomains), '?'));
+
 // Bygg SQL för att hämta kurser
 $sql = "SELECT c.*, u.email as author_email,
         (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons l WHERE l.course_id = c.id) as lesson_count
         FROM " . DB_DATABASE . ".courses c
         LEFT JOIN " . DB_DATABASE . ".users u ON c.author_id = u.id
-        WHERE 1=1";
-$params = [];
+        WHERE (
+            c.organization_domain IN ($ownPlaceholders)
+            OR c.status = 'active'
+        )";
+$params = array_values($ownOrgDomains);
 
 if ($filterDomain) {
     $sql .= " AND c.organization_domain = ?";

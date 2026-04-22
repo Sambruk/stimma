@@ -26,6 +26,12 @@ $currentUserDomain = substr(strrchr($currentUser['email'], "@"), 1);
 $isSuperAdmin = $currentUser['role'] === 'super_admin';
 $isCurrentUserAdmin = $currentUser['is_admin'] == 1;
 
+// Adminens organisations-scope: alla domäner som tillhör samma organisation
+// (eller bara $currentUserDomain om domänen inte är grupperad). Används i
+// behörighetscheckar nedan så att vanlig admin kan hantera användare på alla
+// orgens domäner.
+$adminScopeDomains = getOrgScopeDomains($currentUser['email']);
+
 // Kontrollera att användaren har behörighet att hantera användare
 if (!$isSuperAdmin && !$isCurrentUserAdmin) {
     $_SESSION['message'] = 'Du har inte behörighet att hantera användare.';
@@ -65,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' &&
     $targetUserDomain = $targetUser ? substr(strrchr($targetUser['email'], "@"), 1) : '';
 
     // Kontrollera behörighet: Superadmin kan radera alla, Admin kan radera inom sin domän
-    if (!$isSuperAdmin && $targetUserDomain !== $currentUserDomain) {
+    if (!$isSuperAdmin && !in_array($targetUserDomain, $adminScopeDomains, true)) {
         $_SESSION['message'] = "Du kan endast radera användare i din egen organisation.";
         $_SESSION['message_type'] = "danger";
         header('Location: users.php');
@@ -76,10 +82,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' &&
     execute("START TRANSACTION");
 
     try {
-        // Radera användarens framsteg
+        // Komplett cascade — rensa alla tabeller som refererar user_id utan FK.
+        // (public_course_access rensas via FK ON DELETE CASCADE på users.)
         execute("DELETE FROM " . DB_DATABASE . ".progress WHERE user_id = ?", [$userId]);
+        execute("DELETE FROM " . DB_DATABASE . ".course_enrollments WHERE user_id = ?", [$userId]);
+        execute("DELETE FROM " . DB_DATABASE . ".sequential_lesson_schedule WHERE user_id = ?", [$userId]);
+        try { execute("DELETE FROM " . DB_DATABASE . ".sequential_reminder_log WHERE user_id = ?", [$userId]); } catch (Exception $e) {}
+        try { execute("DELETE FROM " . DB_DATABASE . ".reminder_log WHERE user_id = ?", [$userId]); } catch (Exception $e) {}
+        try { execute("DELETE FROM " . DB_DATABASE . ".remember_tokens WHERE user_id = ?", [$userId]); } catch (Exception $e) {}
+        try { execute("DELETE FROM " . DB_DATABASE . ".user_org_tags WHERE user_id = ?", [$userId]); } catch (Exception $e) {}
 
-        // Radera användaren
+        // Radera användaren (FK cascades public_course_access)
         execute("DELETE FROM " . DB_DATABASE . ".users WHERE id = ?", [$userId]);
 
         // Commit transaktionen
@@ -115,7 +128,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'toggle_admin' && isset($_PO
     $targetUserDomain = $targetUser ? substr(strrchr($targetUser['email'], "@"), 1) : '';
 
     // Kontrollera behörighet: Superadmin kan ändra alla, Admin kan ändra inom sin domän
-    if (!$isSuperAdmin && $targetUserDomain !== $currentUserDomain) {
+    if (!$isSuperAdmin && !in_array($targetUserDomain, $adminScopeDomains, true)) {
         $_SESSION['message'] = "Du kan endast ändra admin-status för användare i din egen organisation.";
         $_SESSION['message_type'] = "danger";
         header('Location: users.php');
@@ -162,7 +175,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'toggle_editor' && isset($_P
     $targetUserDomain = $targetUser ? substr(strrchr($targetUser['email'], "@"), 1) : '';
 
     // Kontrollera behörighet: Superadmin kan ändra alla, Admin kan ändra inom sin domän
-    if (!$isSuperAdmin && $targetUserDomain !== $currentUserDomain) {
+    if (!$isSuperAdmin && !in_array($targetUserDomain, $adminScopeDomains, true)) {
         $_SESSION['message'] = "Du kan endast ändra redaktör-status för användare i din egen organisation.";
         $_SESSION['message_type'] = "danger";
         header('Location: users.php');
@@ -203,17 +216,27 @@ if (isset($_POST['action']) && $_POST['action'] === 'toggle_editor' && isset($_P
 if (isset($_POST['action']) && $_POST['action'] === 'create_user') {
     $inputValue = trim($_POST['email'] ?? '');
 
-    // För icke-superadmins: bygg e-postadressen från användarnamn + domän
+    // För icke-superadmins: bygg e-postadressen från användarnamn + domän.
+    // När adminens domän tillhör en organisation med flera domäner får adminen
+    // välja vilken av orgens domäner användaren ska skapas på (POST-fält "domain").
     if (!$isSuperAdmin) {
-        // Kontrollera att användarnamnet inte innehåller @
-        if (strpos($inputValue, '@') !== false) {
-            $error = 'Ange endast användarnamnet utan @' . $currentUserDomain . '. Domänen läggs till automatiskt.';
+        // Bestäm vilken domän användaren ska skapas på
+        $chosenDomain = trim($_POST['domain'] ?? '');
+        if ($chosenDomain === '') {
+            $chosenDomain = $currentUserDomain;
+        }
+
+        // Validera att vald domän tillhör adminens org-scope (eller är adminens egen)
+        if (!in_array($chosenDomain, $adminScopeDomains, true)) {
+            $error = 'Du har inte behörighet att skapa användare på domänen ' . htmlspecialchars($chosenDomain) . '.';
+        } elseif (strpos($inputValue, '@') !== false) {
+            $error = 'Ange endast användarnamnet utan @-tecken. Domänen väljs separat.';
         } elseif (empty($inputValue)) {
             $error = 'Ange ett användarnamn.';
         } elseif (!preg_match('/^[a-zA-Z0-9._-]+$/', $inputValue)) {
             $error = 'Användarnamnet får endast innehålla bokstäver, siffror, punkt, bindestreck och understreck.';
         } else {
-            $email = $inputValue . '@' . $currentUserDomain;
+            $email = $inputValue . '@' . $chosenDomain;
         }
     } else {
         // Superadmin kan ange full e-postadress
@@ -270,17 +293,26 @@ if ($isSuperAdmin) {
     }
 }
 
-// Bestäm vilken domän som ska användas för filtrering
-$filterDomain = $isSuperAdmin ? $selectedDomain : $currentUserDomain;
+// Bestäm vilken domän som ska användas för filtrering.
+// För superadmin styrs scopet av den valda domänen i dropdownen (per-domän, oförändrat).
+// För vanlig admin används orgens samtliga domäner (gruppering via organization_domains).
+if ($isSuperAdmin) {
+    $filterDomains = !empty($selectedDomain) ? [$selectedDomain] : [];
+} else {
+    $filterDomains = $adminScopeDomains;
+}
 
 // Hämta det totala antalet lektioner för organisationen
 if ($isSuperAdmin && empty($selectedDomain)) {
     $totalLessonsInSystem = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".lessons")['count'] ?? 0;
 } else {
-    $domainForLessons = $isSuperAdmin ? $selectedDomain : $currentUserDomain;
-    $totalLessonsInSystem = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".lessons l
-        JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
-        WHERE c.organization_domain = ?", [$domainForLessons])['count'] ?? 0;
+    $lessonCourseClause = buildDomainInClause($filterDomains, 'c.organization_domain');
+    $totalLessonsInSystem = queryOne(
+        "SELECT COUNT(*) as count FROM " . DB_DATABASE . ".lessons l
+         JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
+         WHERE {$lessonCourseClause['fragment']}",
+        $lessonCourseClause['params']
+    )['count'] ?? 0;
 }
 
 // Synk-filter
@@ -325,7 +357,8 @@ if ($isSuperAdmin && empty($selectedDomain)) {
         ORDER BY user_domain ASC, u.email ASC
     ", ['%@' . $selectedDomain]);
 } else {
-    // Vanlig admin: filtrera på egen domän, sortera på e-post
+    // Vanlig admin: filtrera på alla domäner i orgen, sortera på domän + e-post
+    $userEmailClause = buildEmailDomainInClause($filterDomains, 'u.email');
     $users = queryAll("
         SELECT u.*,
                COUNT(p.id) as completed_lessons,
@@ -334,10 +367,10 @@ if ($isSuperAdmin && empty($selectedDomain)) {
                 FROM " . DB_DATABASE . ".user_org_tags uot WHERE uot.user_id = u.id) as org_tags
         FROM " . DB_DATABASE . ".users u
         LEFT JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id AND p.status = 'completed'
-        WHERE u.email LIKE ? $syncWhere
+        WHERE {$userEmailClause['fragment']} $syncWhere
         GROUP BY u.id
-        ORDER BY u.email ASC
-    ", ['%@' . $currentUserDomain]);
+        ORDER BY user_domain ASC, u.email ASC
+    ", $userEmailClause['params']);
 }
 
 // Sätt sidtitel baserat på vald domän
@@ -524,6 +557,17 @@ require_once 'include/header.php';
                                                 </div>
                                             </td>
                                             <td>
+                                                <?php if ($isSuperAdmin && !$targetIsSuperAdmin && $user['id'] !== $currentUser['id']): ?>
+                                                <form method="post" action="impersonate.php" class="d-inline">
+                                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                                                    <input type="hidden" name="user_id" value="<?= $user['id'] ?>">
+                                                    <button type="submit" class="btn btn-sm btn-outline-primary"
+                                                            title="Visa sidan som den här användaren ser den">
+                                                        <i class="bi bi-eye"></i>
+                                                        <span class="d-none d-lg-inline">Visa som</span>
+                                                    </button>
+                                                </form>
+                                                <?php endif; ?>
                                                 <?php if ($canToggleAdmin && $user['id'] !== $currentUser['id']): ?>
                                                 <button type="button" class="btn btn-sm btn-danger delete-user"
                                                         data-id="<?= $user['id'] ?>"
@@ -565,6 +609,25 @@ require_once 'include/header.php';
                         <label for="email" class="form-label">E-postadress</label>
                         <input type="email" class="form-control" id="email" name="email" placeholder="namn@domän.se" required>
                         <div class="form-text">Som superadmin kan du skapa användare för alla organisationer.</div>
+                    </div>
+                    <?php elseif (count($adminScopeDomains) > 1): ?>
+                    <!-- Admin för en organisation med flera domäner: välj domän -->
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Användarnamn</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="email" name="email" placeholder="fornamn.efternamn" required pattern="[a-zA-Z0-9._-]+">
+                            <span class="input-group-text">@</span>
+                            <select class="form-select" name="domain" id="create_user_domain" required style="max-width: 220px;">
+                                <?php foreach ($adminScopeDomains as $scopeDomain): ?>
+                                <option value="<?= htmlspecialchars($scopeDomain) ?>" <?= $scopeDomain === $currentUserDomain ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($scopeDomain) ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="form-text">
+                            Din organisation har flera domäner. Välj på vilken domän användaren ska skapas.
+                        </div>
                     </div>
                     <?php else: ?>
                     <div class="mb-3">

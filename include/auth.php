@@ -4,6 +4,50 @@ require_once 'database.php';
 require_once 'functions.php';
 require_once 'mail.php';
 
+// =============================================================================
+// Underhållsläge-gate
+//
+// Körs vid varje sidladdning som inkluderar auth.php. Om underhållsläget är
+// aktivt visas maintenance.php (HTTP 503) för alla utom superadmin. Login,
+// verify, logout och själva maintenance-sidorna är undantagna så superadmin
+// kan logga in och stänga av läget igen.
+// =============================================================================
+if (PHP_SAPI !== 'cli' && isMaintenanceModeActive()) {
+    $scriptName = basename($_SERVER['SCRIPT_NAME'] ?? '');
+    $bypassScripts = ['login.php', 'verify.php', 'logout.php', 'maintenance.php', 'sms.php'];
+    $isBypassPath = in_array($scriptName, $bypassScripts, true);
+
+    // admin/maintenance.php och alla AJAX-endpoints under admin/ajax/ ska också gå
+    // igenom så att superadmin kan toggla läget. Slutbedömningen om superadmin
+    // görs nedan.
+    $requestPath = $_SERVER['REQUEST_URI'] ?? '';
+    $isAdminMaintenance = strpos($requestPath, '/admin/maintenance.php') !== false;
+
+    if (!$isBypassPath && !$isAdminMaintenance) {
+        // Slå upp om inloggad användare är superadmin
+        $isSuperAdminBypass = false;
+        if (isset($_SESSION['user_id'])) {
+            $maintUser = queryOne(
+                "SELECT role FROM " . DB_DATABASE . ".users WHERE id = ?",
+                [$_SESSION['user_id']]
+            );
+            $isSuperAdminBypass = $maintUser && ($maintUser['role'] ?? '') === 'super_admin';
+        }
+
+        if (!$isSuperAdminBypass) {
+            // Bestäm rätt sökväg till maintenance.php beroende på var requesten kommer ifrån
+            $maintenancePath = __DIR__ . '/../maintenance.php';
+            if (file_exists($maintenancePath)) {
+                require $maintenancePath;
+            } else {
+                http_response_code(503);
+                echo 'Underhåll pågår. Försök igen senare.';
+            }
+            exit;
+        }
+    }
+}
+
 /**
  * Kontrollera om användaren är inloggad
  * 
@@ -162,6 +206,25 @@ function verifyLoginToken($email, $token) {
         execute("UPDATE " . DB_DATABASE . ".users
                  SET verified_at = NOW()
                  WHERE id = ?", [$user['id']]);
+    }
+
+    // Auto-promotion: om en 'public_only'-användare loggar in från en domän som
+    // nu är grupperad i en organisation, flippa dem till 'domain' så de får
+    // normal domänbaserad åtkomst utöver sina publika kurser. Envägs — aldrig
+    // demotering.
+    if (($user['access_mode'] ?? 'domain') === 'public_only') {
+        $domain = getUserDomain($email);
+        if (!empty($domain)) {
+            $org = getOrganizationByDomain($domain);
+            if ($org) {
+                execute(
+                    "UPDATE " . DB_DATABASE . ".users SET access_mode = 'domain' WHERE id = ?",
+                    [$user['id']]
+                );
+                $user['access_mode'] = 'domain';
+                logActivity($email, "access_mode uppgraderad: public_only → domain (org: " . $org['name'] . ")");
+            }
+        }
     }
 
     logActivity($email, "Lyckad inloggning med token");

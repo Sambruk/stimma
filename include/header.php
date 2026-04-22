@@ -50,26 +50,106 @@
 <body>
 
 <?php if (isLoggedIn()): ?>
+    <?php if (isImpersonating()): ?>
     <?php
-    // Kontrollera PUB-avtalsstatus för användarens domän
-    $userDomainForPub = getUserDomain($_SESSION['user_email']);
-    $userHasPubAgreementForBanner = hasPubAgreement($userDomainForPub);
+    // Beräkna rätt relativ sökväg till stop_impersonate.php beroende på om
+    // sidan ligger i roten eller i admin/.
+    $impersonateScript = basename(dirname($_SERVER['SCRIPT_NAME'] ?? '')) === 'admin'
+        ? 'stop_impersonate.php'
+        : 'admin/stop_impersonate.php';
     ?>
-    <?php if (!$userHasPubAgreementForBanner): ?>
+    <div class="alert alert-danger mb-0 rounded-0 py-2" role="alert" style="z-index: 1032;">
+        <div class="container-fluid">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-eye-fill me-2 fs-5"></i>
+                    <div>
+                        <strong>Du visar som <?= htmlspecialchars($_SESSION['user_email']) ?></strong>
+                        <span class="d-none d-md-inline">
+                            — inloggad som superadmin <?= htmlspecialchars($_SESSION['impersonator_user_email'] ?? '') ?>.
+                            Allt du ser här är vad användaren ser.
+                        </span>
+                    </div>
+                </div>
+                <form method="post" action="<?= htmlspecialchars($impersonateScript) ?>" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCsrfToken()) ?>">
+                    <button type="submit" class="btn btn-light btn-sm text-nowrap">
+                        <i class="bi bi-box-arrow-left me-1"></i>Sluta visa som
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+    <?php
+    // Kontrollera PUB-avtalsstatus för användarens organisation (eller domän
+    // om domänen inte är grupperad). Banner visas så länge varken org eller
+    // domän har tecknat PUB. Publika kursdeltagare (access_mode='public_only')
+    // tillhör ingen organisation och ska inte se bannern.
+    $userDomainForPub = getUserDomain($_SESSION['user_email']);
+    $userHasPubAgreementForBanner = userHasPubAgreement($_SESSION['user_email']);
+    $headerUserOrganization = getOrganizationByDomain($userDomainForPub);
+    $pubBannerUser = queryOne("SELECT is_admin, access_mode FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
+    $isPubAdmin = $pubBannerUser && $pubBannerUser['is_admin'] == 1;
+    $isHeaderPublicOnly = $pubBannerUser && ($pubBannerUser['access_mode'] ?? 'domain') === 'public_only';
+    ?>
+    <?php if (!$userHasPubAgreementForBanner && !$isHeaderPublicOnly): ?>
     <!-- PUB-avtalsvarning -->
-    <div class="alert alert-danger mb-0 rounded-0 py-2" role="alert" style="z-index: 1031;">
+    <div class="alert alert-<?= $isPubAdmin ? 'danger' : 'warning' ?> mb-0 rounded-0 py-2" role="alert" style="z-index: 1031;">
         <div class="container-fluid">
             <div class="d-flex align-items-center justify-content-between">
                 <div class="d-flex align-items-center">
                     <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
                     <div>
                         <strong>Er organisation har inte tecknat ett PUB-avtal med Sambruk ännu.</strong>
+                        <?php if ($isPubAdmin): ?>
                         Stimma får därför bara nyttjas för att skapa utbildningar och att testa dem.
+                        <?php else: ?>
+                        Kontakta er organisations administratör för att teckna avtalet.
+                        <?php endif; ?>
                     </div>
                 </div>
-                <a href="pub_agreement.php" class="btn btn-light btn-sm ms-3 text-nowrap">
-                    <i class="bi bi-pen me-1"></i>Teckna PUB-avtal
-                </a>
+                <div class="d-flex gap-2 ms-3 flex-shrink-0">
+                    <?php if ($isPubAdmin): ?>
+                    <a href="pub_agreement.php" class="btn btn-light btn-sm text-nowrap">
+                        <i class="bi bi-pen me-1"></i>Teckna PUB-avtal
+                    </a>
+                    <?php endif; ?>
+                    <button type="button" class="btn btn-outline-light btn-sm text-nowrap" data-bs-toggle="modal" data-bs-target="#pubInfoModal">
+                        <i class="bi bi-info-circle me-1"></i>Information om att teckna PUB-avtal
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PUB-informationsmodal -->
+    <div class="modal fade" id="pubInfoModal" tabindex="-1" aria-labelledby="pubInfoModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="pubInfoModalLabel"><i class="bi bi-file-earmark-lock me-2"></i>Om PUB-avtal</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Stäng"></button>
+                </div>
+                <div class="modal-body">
+                    <h6 class="fw-bold">Vad är ett PUB-avtal?</h6>
+                    <p>Ett personuppgiftsbiträdesavtal (PUB-avtal) reglerar hur personuppgifter hanteras mellan er organisation och Sambruk. Avtalet krävs enligt GDPR för att Stimma ska få användas fullt ut.</p>
+
+                    <h6 class="fw-bold mt-3">Hur tecknas avtalet?</h6>
+                    <ol>
+                        <li>En <strong>administratör</strong> för er organisation loggar in i Stimma.</li>
+                        <li>Administratören klickar på <strong>"Teckna PUB-avtal"</strong> i varningsrutan som visas överst på sidan.</li>
+                        <li>PUB-avtalet granskas genom att öppna PDF-dokumentet.</li>
+                        <li>Administratören verifierar sin identitet via <strong>SMS-kod</strong>.</li>
+                        <li>Uppgifter om organisation och undertecknare fylls i och avtalet tecknas digitalt.</li>
+                    </ol>
+
+                    <h6 class="fw-bold mt-3">Vem kan teckna avtalet?</h6>
+                    <p class="mb-0">Endast användare med <strong>administratörsrollen</strong> kan teckna PUB-avtalet. Om du inte är administratör, kontakta den person i er organisation som ansvarar för Stimma.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Stäng</button>
+                </div>
             </div>
         </div>
     </div>
@@ -95,7 +175,11 @@
                 ?>
                 <div class="d-none d-md-block text-center">
                     <span class="fw-bold text-dark" style="font-size: 1.4rem; letter-spacing: 0.5px;">
+                        <?php if ($isHeaderPublicOnly): ?>
+                        Stimma - en nanolearningsplattform
+                        <?php else: ?>
                         Stimma - en nanolearningsplattform för <span class="text-primary"><?= htmlspecialchars($userDomain) ?></span>
+                        <?php endif; ?>
                     </span>
                 </div>
 
@@ -144,7 +228,7 @@
                        aria-label="Diplom">
                         <i class="bi bi-award text-dark" aria-hidden="true"></i>
                     </a>
-                    <?php if ($isAdmin || $isCourseEditor): ?>
+                    <?php if (($isAdmin || $isCourseEditor) && !$isHeaderPublicOnly): ?>
                         <!-- Admin panel link (hidden on small screens) -->
                         <a href="admin/index.php"
                            class="btn btn-link p-1 me-2 d-inline-flex align-items-center justify-content-center d-none d-sm-inline-flex"
@@ -186,6 +270,12 @@
             </div>
 
             <ul class="list-group list-group-flush mb-3">
+                <?php if ($headerUserOrganization): ?>
+                <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                    <span class="text-muted">Organisation</span>
+                    <span class="fw-semibold"><?= htmlspecialchars($headerUserOrganization['name']) ?></span>
+                </li>
+                <?php endif; ?>
                 <li class="list-group-item d-flex justify-content-between align-items-center px-0">
                     <span class="text-muted">Domän</span>
                     <span class="fw-semibold"><?= htmlspecialchars($userDomain) ?></span>
