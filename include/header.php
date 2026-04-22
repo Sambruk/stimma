@@ -221,13 +221,6 @@
                        aria-label="Dashboard">
                         <i class="bi bi-speedometer2 text-dark" aria-hidden="true"></i>
                     </a>
-                    <!-- Certificates link -->
-                    <a href="certificate.php"
-                       class="btn btn-link p-1 me-2 d-inline-flex align-items-center justify-content-center"
-                       title="Mina diplom"
-                       aria-label="Diplom">
-                        <i class="bi bi-award text-dark" aria-hidden="true"></i>
-                    </a>
                     <?php if (($isAdmin || $isCourseEditor) && !$isHeaderPublicOnly): ?>
                         <!-- Admin panel link (hidden on small screens) -->
                         <a href="admin/index.php"
