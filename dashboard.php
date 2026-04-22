@@ -148,8 +148,10 @@ $maxLessonsInDay = max(array_column($activityHistory, 'lessons') + [0]);
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css">
     <style>
         body { background: #f6f7fb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
-        .dash-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1rem 0; }
-        .dash-header .avatar { width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,.2); display: inline-flex; align-items: center; justify-content: center; font-size: 1.25rem; border: 2px solid rgba(255,255,255,.35); }
+        .dash-header { background: #fff; border-bottom: 1px solid #e9ecef; padding: 0.85rem 0; }
+        .dash-header h1 { color: #212529; }
+        .dash-header small { color: #6c757d !important; }
+        .dash-header .avatar { width: 40px; height: 40px; border-radius: 50%; background: #f1f3f5; color: #6c757d; display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem; border: 1px solid #e9ecef; }
         .stat-card { background: white; border: 1px solid #e9ecef; border-radius: 10px; padding: 0.85rem 1rem; height: 100%; transition: box-shadow .15s; }
         .stat-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,.06); }
         .stat-icon { width: 36px; height: 36px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem; color: white; flex-shrink: 0; }
@@ -198,10 +200,10 @@ $maxLessonsInDay = max(array_column($activityHistory, 'lessons') + [0]);
 <header class="dash-header">
     <div class="container">
         <div class="d-flex align-items-center gap-3 flex-wrap">
-            <div class="avatar"><i class="bi bi-person-fill"></i></div>
+            <div class="avatar"><i class="bi bi-person"></i></div>
             <div class="flex-grow-1">
-                <h1 class="h5 mb-0"><?= htmlspecialchars($user['name'] ?: $user['email']) ?></h1>
-                <small class="opacity-75"><?= $today ?> · Nivå <?= $level ?> · <?= number_format($xp) ?> XP</small>
+                <h1 class="h6 mb-0 fw-semibold"><?= htmlspecialchars($user['name'] ?: $user['email']) ?></h1>
+                <small class="text-muted"><?= $today ?></small>
             </div>
         </div>
     </div>
