@@ -797,9 +797,9 @@ function renderHotspotFields($data) {
         </div>
     </div>
     <div class="row g-3">
-        <div class="col-md-4"><label class="form-label">Mål X (0–1)</label><input type="number" step="0.01" min="0" max="1" class="form-control" name="hotspot_x" id="hotspot_x_field" value="<?= htmlspecialchars((string)$t['x']) ?>"></div>
-        <div class="col-md-4"><label class="form-label">Mål Y (0–1)</label><input type="number" step="0.01" min="0" max="1" class="form-control" name="hotspot_y" id="hotspot_y_field" value="<?= htmlspecialchars((string)$t['y']) ?>"></div>
-        <div class="col-md-4"><label class="form-label">Radie (0–1)</label><input type="number" step="0.01" min="0.01" max="0.5" class="form-control" name="hotspot_radius" id="hotspot_r_field" value="<?= htmlspecialchars((string)($t['radius'] ?? 0.08)) ?>"></div>
+        <div class="col-md-4"><label class="form-label">Mål X (0–1)</label><input type="number" step="any" min="0" max="1" class="form-control" name="hotspot_x" id="hotspot_x_field" value="<?= htmlspecialchars((string)$t['x']) ?>"></div>
+        <div class="col-md-4"><label class="form-label">Mål Y (0–1)</label><input type="number" step="any" min="0" max="1" class="form-control" name="hotspot_y" id="hotspot_y_field" value="<?= htmlspecialchars((string)$t['y']) ?>"></div>
+        <div class="col-md-4"><label class="form-label">Radie (0–1)</label><input type="number" step="any" min="0.01" max="0.5" class="form-control" name="hotspot_radius" id="hotspot_r_field" value="<?= htmlspecialchars((string)($t['radius'] ?? 0.08)) ?>"></div>
     </div>
     <div class="form-check mt-2 mb-2">
         <input class="form-check-input" type="checkbox" id="hotspot_grid_toggle" checked>
