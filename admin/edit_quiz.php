@@ -459,8 +459,10 @@ require_once 'include/header.php';
             c.appendChild(d);
         });
 
-        // Image-choice: ladda upp bild inline (AJAX med CSRF) — skapar en dold file-input per klick
-        var csrfToken = <?= json_encode($_SESSION['csrf_token']) ?>;
+        // Image-choice: ladda upp bild inline via AJAX. Använder den globala
+        // CSRF_TOKEN-konstanten från admin/include/header.php. Skickar tokenet
+        // både som multipart-fält OCH X-CSRF-Token-header för robusthet.
+        var csrfToken = (typeof CSRF_TOKEN !== 'undefined') ? CSRF_TOKEN : <?= json_encode($_SESSION['csrf_token']) ?>;
         document.addEventListener('click', function(ev) {
             var btn = ev.target.closest('.btn-upload-to-row');
             if (!btn) return;
@@ -479,14 +481,20 @@ require_once 'include/header.php';
                 fd.append('csrf_token', csrfToken);
                 btn.disabled = true;
                 btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-                fetch('upload_image.php', { method: 'POST', body: fd })
+                fetch('upload_image.php', {
+                    method: 'POST',
+                    body: fd,
+                    headers: { 'X-CSRF-Token': csrfToken }
+                })
                     .then(r => r.json())
                     .then(data => {
                         if (data.success && data.url) {
                             var inp = row.querySelector('.img-filename-input');
                             if (inp) inp.value = data.url;
                         } else {
-                            alert('Uppladdning misslyckades: ' + (data.error || 'okänt fel'));
+                            var msg = data.error || 'okänt fel';
+                            if (data.debug) msg += '\n(debug: ' + JSON.stringify(data.debug) + ')';
+                            alert('Uppladdning misslyckades: ' + msg);
                         }
                     })
                     .catch(() => alert('Nätverksfel vid uppladdning.'))

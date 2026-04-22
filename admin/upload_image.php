@@ -17,10 +17,24 @@ require_once '../include/auth.php';
 // Include AJAX-compatible authentication check
 require_once 'include/ajax_auth_check.php';
 
-// Kontrollera CSRF-token
-if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+// Kontrollera CSRF-token — accepteras i antingen $_POST eller HTTP-header
+$csrfToken = $_POST['csrf_token'] ?? null;
+if (!$csrfToken) {
+    // Flera vanliga header-namn: X-CSRF-Token, X-CSRFToken
+    $csrfToken = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_SERVER['HTTP_X_CSRFTOKEN'] ?? null;
+}
+if (!$csrfToken || !validateCsrfToken($csrfToken)) {
     header('Content-Type: application/json');
-    echo json_encode(['success' => false, 'error' => 'Invalid CSRF token']);
+    echo json_encode([
+        'success' => false,
+        'error' => 'Invalid CSRF token',
+        'debug' => [
+            'post_received' => !empty($_POST),
+            'post_keys' => array_keys($_POST ?? []),
+            'has_token' => !empty($csrfToken),
+            'content_length' => $_SERVER['CONTENT_LENGTH'] ?? null,
+        ],
+    ]);
     exit;
 }
 
