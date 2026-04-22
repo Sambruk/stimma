@@ -175,11 +175,7 @@
                 ?>
                 <div class="d-none d-md-block text-center">
                     <span class="fw-bold text-dark" style="font-size: 1.4rem; letter-spacing: 0.5px;">
-                        <?php if ($isHeaderPublicOnly): ?>
-                        Stimma - en nanolearningsplattform
-                        <?php else: ?>
-                        Stimma - en nanolearningsplattform för <span class="text-primary"><?= htmlspecialchars($userDomain) ?></span>
-                        <?php endif; ?>
+                        <?= getHeaderText($_SESSION['user_id']) ?>
                     </span>
                 </div>
 

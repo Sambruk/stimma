@@ -180,7 +180,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 </li>
                 <li class="nav-item">
                     <a href="organization_icon.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'organization_icon.php' ? 'active' : '' ?>">
-                        <i class="bi bi-image me-2"></i> Organisationsikon
+                        <i class="bi bi-palette me-2"></i> Varumärke
                     </a>
                 </li>
                 <li class="nav-item">

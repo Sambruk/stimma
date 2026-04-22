@@ -171,6 +171,94 @@ function validateCsrfToken($token) {
 }
 
 /**
+ * Hämta headertexten som ska visas i top-nav för en användare.
+ *
+ * Resolutionsordning:
+ *   1. Om domänen är grupperad i en org och orgen har en satt header_text → den
+ *   2. Om domain_settings för användarens domän har header_text → den
+ *   3. Publik deltagare: org:ens header_text för deras första publika kurs
+ *   4. Default: "Stimma - en utbildningsplattform från Sambruk"
+ *
+ * Platshållare i lagrad text substitueras:
+ *   {{domain}}       — användarens e-postdomän
+ *   {{organization}} — organisationens namn (tom sträng om okänd)
+ *   {{date}}         — dagens datum (svensk format)
+ *
+ * @param int $userId
+ * @return string Den renderade texten, redan htmlspecialchar-säker (platshållare
+ *   substitueras från säkra källor, men anroparen bör ändå echo:a den som HTML-
+ *   tillåten då "Stimma" ska kunna innehålla <span>).
+ */
+function getHeaderText($userId) {
+    $user = queryOne(
+        "SELECT email, access_mode FROM " . DB_DATABASE . ".users WHERE id = ?",
+        [(int)$userId]
+    );
+    if (!$user) {
+        return 'Stimma - en utbildningsplattform från Sambruk';
+    }
+
+    $domain = getUserDomain($user['email']);
+    $orgName = '';
+    $template = null;
+
+    if (($user['access_mode'] ?? 'domain') === 'public_only') {
+        // Publik deltagare: hämta från orgen som publicerat deras kurs
+        $row = queryOne(
+            "SELECT o.name, o.header_text
+             FROM " . DB_DATABASE . ".public_course_access pca
+             LEFT JOIN " . DB_DATABASE . ".organizations o ON o.id = pca.organization_id
+             WHERE pca.user_id = ? AND pca.organization_id IS NOT NULL
+             ORDER BY pca.registered_at DESC LIMIT 1",
+            [(int)$userId]
+        );
+        if ($row) {
+            $orgName = $row['name'] ?? '';
+            if (!empty($row['header_text'])) $template = $row['header_text'];
+        }
+    } else {
+        // Domain-användare: först org:ens header_text
+        $org = $domain !== '' ? getOrganizationByDomain($domain) : null;
+        if ($org) {
+            $orgName = $org['name'] ?? '';
+            if (!empty($org['header_text'])) $template = $org['header_text'];
+        }
+        // Fallback: domain_settings
+        if ($template === null && $domain !== '') {
+            $ds = queryOne(
+                "SELECT header_text FROM " . DB_DATABASE . ".domain_settings WHERE domain = ?",
+                [$domain]
+            );
+            if ($ds && !empty($ds['header_text'])) {
+                $template = $ds['header_text'];
+            }
+        }
+    }
+
+    if ($template === null || $template === '') {
+        return 'Stimma - en utbildningsplattform från Sambruk';
+    }
+
+    // Substituera platshållare. Eskapera domain/orgName för säkerhet.
+    $monthNames = ['januari','februari','mars','april','maj','juni','juli','augusti','september','oktober','november','december'];
+    $today = date('j') . ' ' . $monthNames[(int)date('n') - 1] . ' ' . date('Y');
+
+    $rendered = str_replace(
+        ['{{domain}}', '{{organization}}', '{{date}}'],
+        [
+            htmlspecialchars($domain, ENT_QUOTES, 'UTF-8'),
+            htmlspecialchars($orgName, ENT_QUOTES, 'UTF-8'),
+            htmlspecialchars($today, ENT_QUOTES, 'UTF-8'),
+        ],
+        // Själva mall-strängen eskaperas också så att taggar i sparad text
+        // inte kan injicera HTML.
+        htmlspecialchars($template, ENT_QUOTES, 'UTF-8')
+    );
+
+    return $rendered;
+}
+
+/**
  * Hämta organisationsikonen som ska visas i top-nav för en användare.
  *
  * Regler:

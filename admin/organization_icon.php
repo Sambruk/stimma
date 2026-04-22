@@ -1,11 +1,14 @@
 <?php
 /**
- * Stimma - Ladda upp organisationsikon
+ * Stimma - Organisationens varumärke (ikon + headertext)
  *
- * Tillgänglig för admins. Laddar upp en ikon för den organisation som
- * användarens domän tillhör. Samma ikon används för alla domäner som är
- * grupperade i organisationen och visas i top-nav för alla användare
- * (inklusive publika deltagare i kurser som tillhör organisationen).
+ * Tillgänglig för admins. Laddar upp en ikon OCH sätter headertexten för den
+ * organisation som användarens domän tillhör. Samma inställningar används för
+ * alla domäner som är grupperade i organisationen och visas i top-nav för alla
+ * användare (inklusive publika deltagare i kurser som tillhör organisationen).
+ *
+ * Om domänen inte är grupperad i en organisation sparas headertexten istället
+ * på domain_settings för domänen (ikon kräver dock en organisation).
  */
 
 require_once '../include/config.php';
@@ -35,6 +38,40 @@ $uploadSuccess = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
         $uploadError = 'Ogiltig säkerhetstoken. Försök igen.';
+    } elseif (($_POST['action'] ?? '') === 'save_header') {
+        // Spara headertext. Fungerar även utan organisation — då lagras
+        // texten på domain_settings för den aktuella domänen.
+        $headerText = trim($_POST['header_text'] ?? '');
+        if (mb_strlen($headerText) > 500) {
+            $uploadError = 'Texten är för lång (max 500 tecken).';
+        } else {
+            $storeValue = $headerText !== '' ? $headerText : null;
+            if ($organization) {
+                execute(
+                    "UPDATE " . DB_DATABASE . ".organizations SET header_text = ? WHERE id = ?",
+                    [$storeValue, $organization['id']]
+                );
+                $organization['header_text'] = $storeValue;
+            } else {
+                // Sätt på domain_settings istället
+                $existing = queryOne(
+                    "SELECT id FROM " . DB_DATABASE . ".domain_settings WHERE domain = ?",
+                    [$userDomain]
+                );
+                if ($existing) {
+                    execute(
+                        "UPDATE " . DB_DATABASE . ".domain_settings SET header_text = ? WHERE domain = ?",
+                        [$storeValue, $userDomain]
+                    );
+                } else {
+                    execute(
+                        "INSERT INTO " . DB_DATABASE . ".domain_settings (domain, header_text) VALUES (?, ?)",
+                        [$userDomain, $storeValue]
+                    );
+                }
+            }
+            $uploadSuccess = $storeValue === null ? 'Headertexten återställd till standard.' : 'Headertexten är sparad.';
+        }
     } elseif (!$organization) {
         $uploadError = 'Din domän är inte grupperad i en organisation. Kontakta superadmin för att skapa en organisation först.';
     } elseif (($_POST['action'] ?? '') === 'remove') {
@@ -105,7 +142,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$page_title = 'Organisationsikon';
+$page_title = 'Organisationens varumärke';
+
+// Hämta nuvarande headertext (org först, annars domain_settings)
+$currentHeaderText = '';
+if ($organization && !empty($organization['header_text'])) {
+    $currentHeaderText = $organization['header_text'];
+} else {
+    $ds = queryOne(
+        "SELECT header_text FROM " . DB_DATABASE . ".domain_settings WHERE domain = ?",
+        [$userDomain]
+    );
+    if ($ds && !empty($ds['header_text'])) {
+        $currentHeaderText = $ds['header_text'];
+    }
+}
 require_once 'include/header.php';
 ?>
 
@@ -119,6 +170,59 @@ require_once 'include/header.php';
 
     <div class="row justify-content-center">
         <div class="col-lg-8">
+
+            <!-- Headertext -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-type me-2 text-primary"></i>Headertext</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">
+                        Ersätter default-texten <em>"Stimma - en utbildningsplattform från Sambruk"</em> som visas mitt i top-nav:en.
+                        <?php if ($organization): ?>
+                        Gäller alla domäner i <strong><?= htmlspecialchars($organization['name']) ?></strong>.
+                        <?php else: ?>
+                        Gäller domänen <strong><?= htmlspecialchars($userDomain) ?></strong>.
+                        <?php endif; ?>
+                    </p>
+
+                    <form method="post">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCsrfToken()) ?>">
+                        <input type="hidden" name="action" value="save_header">
+                        <div class="mb-3">
+                            <label for="header_text" class="form-label">Egen headertext</label>
+                            <input type="text" class="form-control" id="header_text" name="header_text"
+                                   maxlength="500"
+                                   placeholder="Lämna tom för standardtext"
+                                   value="<?= htmlspecialchars($currentHeaderText) ?>">
+                            <div class="form-text">
+                                Tillåtna platshållare (substitueras automatiskt vid visning):
+                                <code>{{domain}}</code> = användarens e-postdomän,
+                                <code>{{organization}}</code> = organisationens namn,
+                                <code>{{date}}</code> = dagens datum (t.ex. "22 april 2026").
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-save me-1"></i>Spara headertext
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('header_text').value=''; this.form.submit();">
+                                <i class="bi bi-arrow-counterclockwise me-1"></i>Återställ till standard
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="mt-3 p-3 bg-light rounded border">
+                        <small class="text-muted d-block mb-1">Exempel:</small>
+                        <ul class="small mb-0">
+                            <li><code>Utbildningsportal för {{organization}}</code> → <em>Utbildningsportal för Säters kommun</em></li>
+                            <li><code>Stimma – {{domain}} – {{date}}</code> → <em>Stimma – sater.se – 22 april 2026</em></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Organisationsikon -->
             <div class="card shadow-sm">
                 <div class="card-header">
                     <h5 class="mb-0"><i class="bi bi-image me-2 text-primary"></i>Organisationsikon</h5>
