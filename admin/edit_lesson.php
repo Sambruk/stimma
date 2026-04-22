@@ -420,6 +420,10 @@ if ($isAdmin) {
                         <div class="mb-3">
                             <label for="content" class="form-label fw-normal">Innehåll</label>
                             <?php require_once 'include/editor.php'; renderEditor($content ?? '', 'content', 'contentEditor'); ?>
+                            <div class="form-text">
+                                <i class="bi bi-image me-1"></i>
+                                Bilder som infogas i innehållet: <strong>max 5 MB</strong>, format <strong>JPG, PNG, GIF</strong>. Dra och släpp direkt i editorn, eller klicka på bildknappen i verktygsraden.
+                            </div>
                         </div>
 
                         <div class="mb-3">
@@ -453,10 +457,13 @@ if ($isAdmin) {
                             <?php if (!empty($imageUrl)): ?>
                                 <p class="text-muted">Ladda upp ny bild för att ersätta den nuvarande:</p>
                             <?php endif; ?>
+                            <div class="alert alert-info py-2 mb-2 small">
+                                <i class="bi bi-info-circle me-1"></i>
+                                <strong>Max 5 MB.</strong> Tillåtna format: <strong>JPG, PNG, GIF</strong>. Rekommenderad storlek: ca <strong>1200 × 630 px</strong> för fin visning i kurskatalogen.
+                            </div>
                             <div class="d-flex gap-2 align-items-start">
                                 <div class="flex-grow-1">
                                     <input type="file" class="form-control" id="image" name="image" accept="image/jpeg,image/png,image/gif">
-                                    <div class="form-text">Max 5MB. Tillåtna format: JPG, PNG, GIF</div>
                                 </div>
                                 <?php if ($id): ?>
                                 <button type="button" id="generate-ai-image-btn" class="btn btn-outline-primary" title="Generera AI-bild">

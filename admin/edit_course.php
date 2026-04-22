@@ -492,10 +492,13 @@ require_once 'include/header.php';
                             <?php if (!empty($course['image_url'])): ?>
                                 <p class="text-muted">Ladda upp ny bild för att ersätta den nuvarande:</p>
                             <?php endif; ?>
+                            <div class="alert alert-info py-2 mb-2 small">
+                                <i class="bi bi-info-circle me-1"></i>
+                                <strong>Max 5 MB.</strong> Tillåtna format: <strong>JPG, PNG, GIF</strong>. Rekommenderad storlek: ca <strong>1200 × 630 px</strong>.
+                            </div>
                             <div class="d-flex gap-2 align-items-start">
                                 <div class="flex-grow-1">
                                     <input type="file" class="form-control" id="image" name="image" accept="image/jpeg,image/png,image/gif">
-                                    <div class="form-text">Max 5MB. Tillåtna format: JPG, PNG, GIF</div>
                                 </div>
                                 <?php if (isset($course['id'])): ?>
                                 <button type="button" id="generate-ai-image-btn" class="btn btn-outline-primary" title="Generera AI-bild">
