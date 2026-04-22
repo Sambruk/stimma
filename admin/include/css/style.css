@@ -47,12 +47,29 @@ body {
 .sidebar {
     width: 280px;
     background: linear-gradient(180deg, var(--stimma-blue) 10%, #0c2e4a 100%);
-    min-height: 100vh;
+    height: 100vh;
     position: fixed;
     top: 0;
     left: 0;
     z-index: 100;
     padding-top: 1rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+/* Diskret scrollbar i sidebaren */
+.sidebar::-webkit-scrollbar {
+    width: 8px;
+}
+.sidebar::-webkit-scrollbar-track {
+    background: transparent;
+}
+.sidebar::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.15);
+    border-radius: 4px;
+}
+.sidebar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.3);
 }
 
 .main-content {
