@@ -67,15 +67,14 @@ $lastUpdated = '2026-04-22';
     <h2>Vad du kan göra om du inte kan använda delar av webbplatsen</h2>
     <p>Om du behöver innehållet från Stimma i något annat format, exempelvis tillgänglig PDF, lättläst, ljudinspelning eller punktskrift, kan du kontakta oss på följande sätt:</p>
     <ul>
-        <li>Mejla: <a href="mailto:kontakt@sambruk.se">kontakt@sambruk.se</a></li>
-        <li>Kontaktperson: <span class="placeholder-text">[FYLL I: Kontaktperson eller funktionsbrevlåda]</span></li>
+        <li>Mejla: <a href="mailto:info@sambruk.se">info@sambruk.se</a></li>
     </ul>
     <p>Svarstid är normalt <strong>tre arbetsdagar</strong>.</p>
 
     <h2>Rapportera brister i webbplatsens tillgänglighet</h2>
     <p>Vi strävar efter att hela tiden förbättra webbplatsens tillgänglighet. Om du upptäcker problem som inte är beskrivna på den här sidan, eller om du anser att vi inte uppfyller lagens krav, så meddela oss så att vi får veta att problemet finns.</p>
     <ul>
-        <li>Skriv till: <a href="mailto:kontakt@sambruk.se">kontakt@sambruk.se</a></li>
+        <li>Skriv till: <a href="mailto:info@sambruk.se">info@sambruk.se</a></li>
         <li>Ange gärna vilken sida/funktion det gäller och vilken webbläsare/hjälpmedel du använder</li>
     </ul>
 
@@ -131,7 +130,7 @@ $lastUpdated = '2026-04-22';
     </ul>
 
     <h2>Hur vi har testat webbplatsen</h2>
-    <p>Sambruk har gjort en intern testning av Stimma. <span class="placeholder-text">[FYLL I: Eventuell extern granskning och datum, t.ex. "Senaste bedömningen gjordes <datum> av <utvärderare>"]</span>.</p>
+    <p>Sambruk har gjort en intern testning av Stimma.</p>
     <p>I den interna testningen har vi använt:</p>
     <ul>
         <li>Automatiska verktyg (axe DevTools, WAVE, Lighthouse)</li>
@@ -140,7 +139,7 @@ $lastUpdated = '2026-04-22';
         <li>Granskning av färgkontraster mot WCAG 2.1 AA-nivå</li>
     </ul>
     <p><strong>Redogörelsen uppdaterades senast:</strong> <?= htmlspecialchars($lastUpdated) ?>.<br>
-    <strong>Webbplatsen publicerades:</strong> <span class="placeholder-text">[FYLL I: datum för publicering]</span>.</p>
+    <strong>Webbplatsen publicerades:</strong> 2025-06-01.</p>
 
     <hr class="my-5">
 
