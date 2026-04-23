@@ -556,11 +556,12 @@ require_once 'include/header.php';
     <?php else: ?>
     <div class="card shadow-sm">
         <div class="card-body p-0">
+            <div class="p-2 small text-muted border-bottom"><i class="bi bi-info-circle me-1"></i>Dra i grepp-ikonen till vänster för att ändra ordning på frågorna.</div>
             <ul class="list-group list-group-flush" id="question-list">
                 <?php foreach ($questions as $idx => $q): ?>
                 <li class="list-group-item d-flex align-items-center gap-3" data-qid="<?= $q['id'] ?>">
-                    <i class="bi bi-grip-vertical text-muted handle" style="cursor: grab;"></i>
-                    <span class="badge bg-secondary"><?= $idx + 1 ?></span>
+                    <i class="bi bi-grip-vertical text-muted handle" style="cursor: grab; font-size: 1.2rem;"></i>
+                    <span class="badge bg-secondary question-order-badge"><?= $idx + 1 ?></span>
                     <div class="flex-grow-1">
                         <?php
                         $previewText = trim(strip_tags(html_entity_decode($q['question_text'] ?? '', ENT_QUOTES | ENT_HTML5, 'UTF-8')));
@@ -578,8 +579,52 @@ require_once 'include/header.php';
                 </li>
                 <?php endforeach; ?>
             </ul>
+            <div id="reorder-status" class="p-2 small text-muted" style="display:none;"></div>
         </div>
     </div>
+    <script>
+    // Sortera frågor via jquery-ui sortable (redan inkluderad i admin-footer)
+    (function() {
+        if (typeof jQuery === 'undefined' || !jQuery.fn.sortable) return;
+        var $ = jQuery;
+        $('#question-list').sortable({
+            handle: '.handle',
+            axis: 'y',
+            cursor: 'grabbing',
+            placeholder: 'list-group-item bg-warning-subtle',
+            forcePlaceholderSize: true,
+            update: function() {
+                var ids = [];
+                $('#question-list li').each(function() {
+                    ids.push($(this).data('qid'));
+                });
+                // Uppdatera nummerbadges
+                $('#question-list .question-order-badge').each(function(i) { $(this).text(i + 1); });
+
+                var fd = new FormData();
+                fd.append('csrf_token', <?= json_encode($_SESSION['csrf_token']) ?>);
+                fd.append('action', 'reorder');
+                fd.append('order', ids.join(','));
+                var status = document.getElementById('reorder-status');
+                status.style.display = 'block';
+                status.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Sparar ny ordning...';
+                fetch('edit_quiz.php?lesson_id=<?= (int)$lessonId ?>', { method: 'POST', body: fd })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data && data.success) {
+                            status.innerHTML = '<i class="bi bi-check-circle text-success me-1"></i>Ordning sparad.';
+                            setTimeout(function() { status.style.display = 'none'; }, 2000);
+                        } else {
+                            status.innerHTML = '<i class="bi bi-x-circle text-danger me-1"></i>Kunde inte spara ordning.';
+                        }
+                    })
+                    .catch(function() {
+                        status.innerHTML = '<i class="bi bi-x-circle text-danger me-1"></i>Nätverksfel vid sparande.';
+                    });
+            }
+        });
+    })();
+    </script>
     <?php endif; ?>
     <?php endif; ?>
 </div>

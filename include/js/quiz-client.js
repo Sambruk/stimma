@@ -220,39 +220,67 @@
           return;
         }
 
-        if (data.correct) {
-          showFeedback(feedbackEl, true, 'Rätt!');
-          // Lås inputs för denna fråga
+        // Visa per-frågsfeedback
+        showFeedback(feedbackEl, data.correct, data.correct ? 'Rätt!' : 'Fel svar.');
+
+        // Ska frågan låsas? (alltid vid rätt, även vid fel i any_result-läge)
+        if (data.lock_question) {
           questionEl.querySelectorAll('input, select, textarea, button').forEach(function(el) {
             if (!el.classList.contains('quiz-answer-btn')) el.disabled = true;
           });
-          questionEl.classList.add('border-success');
-          btn.classList.remove('btn-primary');
-          btn.classList.add('btn-success');
-          btn.innerHTML = '<i class="bi bi-check-lg"></i> Rätt';
-
-          // Uppdatera progress-indikator
-          var progressEl = document.getElementById('quizProgress');
-          if (progressEl && typeof data.answered_ok === 'number') {
-            progressEl.textContent = data.answered_ok + ' av ' + data.total + ' frågor klara.';
+          if (data.correct) {
+            questionEl.classList.add('border-success');
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-success');
+            btn.innerHTML = '<i class="bi bi-check-lg"></i> Rätt';
+          } else {
+            questionEl.classList.add('border-danger');
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-danger');
+            btn.innerHTML = '<i class="bi bi-x-lg"></i> Fel';
           }
-
-          // Alla frågor rätt?
-          if (data.all_done) {
-            if (progressEl) progressEl.innerHTML = '<div class="alert alert-success mt-2"><i class="bi bi-trophy-fill me-1"></i>Alla frågor klarade — lektionen markeras som avklarad!</div>';
-            // Redirect till nästa lektion om det finns
-            setTimeout(function() {
-              if (data.nextLesson && data.nextLesson.available) {
-                window.location.href = 'lesson.php?id=' + data.nextLesson.id;
-              } else {
-                window.location.reload();
-              }
-            }, 1500);
-          }
+          btn.disabled = true;
         } else {
-          showFeedback(feedbackEl, false, 'Fel svar. Försök igen.');
+          // Fel svar i strikt läge → låt deltagaren försöka igen
           btn.disabled = false;
           btn.innerHTML = originalBtnHtml;
+        }
+
+        // Uppdatera löpande tally: "3 rätt, 1 fel, 2 kvar"
+        var progressEl = document.getElementById('quizProgress');
+        if (progressEl && typeof data.total === 'number') {
+          var left = data.total - (data.correct_count || 0) - (data.wrong_count || 0);
+          progressEl.innerHTML =
+            '<i class="bi bi-check-circle text-success me-1"></i>' + (data.correct_count || 0) + ' rätt · ' +
+            '<i class="bi bi-x-circle text-danger me-1"></i>' + (data.wrong_count || 0) + ' fel · ' +
+            (left > 0 ? left + ' kvar' : 'alla frågor besvarade');
+        }
+
+        // Alla frågor besvarade?
+        if (data.all_done) {
+          var total = data.total || 0;
+          var correctN = data.correct_count || 0;
+          var wrongN = data.wrong_count || 0;
+          var summary = '';
+          if (data.pass_mode === 'any_result') {
+            summary = '<strong>Quizet är klart!</strong> Du svarade rätt på <strong>' + correctN + ' av ' + total + '</strong> frågor. Dina svar är sparade.';
+          } else {
+            summary = '<strong>Alla rätt!</strong> Du besvarade <strong>' + total + ' av ' + total + '</strong> frågor korrekt.';
+          }
+
+          var nextBtnHtml = '';
+          if (data.nextLesson && data.nextLesson.available) {
+            nextBtnHtml = '<div class="mt-2"><a href="lesson.php?id=' + data.nextLesson.id + '" class="btn btn-primary"><i class="bi bi-arrow-right me-1"></i>Gå till nästa lektion: ' + escapeHtml(data.nextLesson.title || '') + '</a></div>';
+          } else if (data.nextLesson && !data.nextLesson.available) {
+            nextBtnHtml = '<div class="small text-muted mt-2"><i class="bi bi-clock me-1"></i>Nästa lektion låses upp senare (stegvis kurs).</div>';
+          } else {
+            nextBtnHtml = '<div class="mt-2"><a href="index.php" class="btn btn-outline-primary"><i class="bi bi-house me-1"></i>Tillbaka till kursöversikten</a></div>';
+          }
+
+          if (progressEl) {
+            progressEl.innerHTML = '<div class="alert alert-success mt-2"><i class="bi bi-trophy-fill me-1"></i>' + summary + nextBtnHtml + '</div>';
+            progressEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
         }
       })
       .catch(function() {
@@ -265,6 +293,12 @@
   function showFeedback(el, correct, msg) {
     if (!el) return;
     el.innerHTML = '<span class="badge bg-' + (correct ? 'success' : 'danger') + '"><i class="bi bi-' + (correct ? 'check-circle' : 'x-circle') + ' me-1"></i>' + msg + '</span>';
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
 })();

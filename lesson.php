@@ -206,30 +206,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['answer_question_id'])
         exit;
     }
 
-    // Håll reda på vilka frågor användaren svarat rätt på i denna lektion
+    // Lektionens pass-läge: 'require_all_correct' (default) eller 'any_result'
+    $lessonPassMode = $lesson['quiz_pass_mode'] ?? 'require_all_correct';
+
+    // Håll reda på svars-state per fråga: 'answered' + 'correct'.
     if (!isset($_SESSION['lesson_quiz_state'][$lessonId])) {
-        $_SESSION['lesson_quiz_state'][$lessonId] = [];
+        $_SESSION['lesson_quiz_state'][$lessonId] = ['correct' => [], 'wrong' => []];
     }
-    if ($g['correct']) {
-        $_SESSION['lesson_quiz_state'][$lessonId][$qid] = true;
+    // Migrera äldre state-struktur (innan migration 030) om den finns
+    if (!isset($_SESSION['lesson_quiz_state'][$lessonId]['correct'])) {
+        $old = $_SESSION['lesson_quiz_state'][$lessonId];
+        $_SESSION['lesson_quiz_state'][$lessonId] = ['correct' => is_array($old) ? $old : [], 'wrong' => []];
     }
 
-    // Räkna ut om alla frågor är rätt
+    if ($g['correct']) {
+        $_SESSION['lesson_quiz_state'][$lessonId]['correct'][$qid] = true;
+        unset($_SESSION['lesson_quiz_state'][$lessonId]['wrong'][$qid]);
+    } else {
+        // I strikt läge är det ok att försöka igen: spåra bara att det var fel
+        // I any_result-läget låser vi frågan vid första svaret oavsett
+        $_SESSION['lesson_quiz_state'][$lessonId]['wrong'][$qid] = true;
+    }
+
     $allQuestions = query(
         "SELECT id FROM " . DB_DATABASE . ".quiz_questions WHERE lesson_id = ?",
         [$lessonId]
     );
     $totalQ = count($allQuestions);
-    $answeredOk = count($_SESSION['lesson_quiz_state'][$lessonId] ?? []);
-    $allDone = $totalQ > 0 && $answeredOk >= $totalQ;
+    $correctCount = count($_SESSION['lesson_quiz_state'][$lessonId]['correct']);
+    $wrongCount = count(array_diff_key(
+        $_SESSION['lesson_quiz_state'][$lessonId]['wrong'],
+        $_SESSION['lesson_quiz_state'][$lessonId]['correct']
+    ));
+    $answeredCount = $correctCount + $wrongCount;
+
+    // All done-villkoret beror på pass-läget
+    if ($lessonPassMode === 'any_result') {
+        $allDone = $totalQ > 0 && $answeredCount >= $totalQ;
+        $lockQuestion = true; // lås frågan vid första svar, oavsett rätt/fel
+    } else {
+        $allDone = $totalQ > 0 && $correctCount >= $totalQ;
+        $lockQuestion = $g['correct']; // lås endast vid rätt svar
+    }
 
     $result = [
         'success' => true,
         'correct' => $g['correct'],
-        'answered_ok' => $answeredOk,
+        'lock_question' => $lockQuestion,
+        'correct_count' => $correctCount,
+        'wrong_count' => $wrongCount,
+        'answered_count' => $answeredCount,
         'total' => $totalQ,
+        'pass_mode' => $lessonPassMode,
         'all_done' => $allDone,
     ];
+
+    // Behåll legacy-namn för eventuell gammal JS
+    $result['answered_ok'] = $correctCount;
 
     // Om alla frågor är klara: markera lektion som avklarad + lås upp nästa sekventiellt
     if ($allDone) {

@@ -74,6 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $content = $_POST['content'] ?? '';
     $ai_instruction = $_POST['ai_instruction'] ?? '';
     $ai_prompt = $_POST['ai_prompt'] ?? '';
+    $quiz_pass_mode = ($_POST['quiz_pass_mode'] ?? '') === 'any_result' ? 'any_result' : 'require_all_correct';
     $quiz_question = $_POST['quiz_question'] ?? '';
     $background_color = trim($_POST['background_color'] ?? '');
     
@@ -226,10 +227,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     status = ?,
                     ai_instruction = ?,
                     ai_prompt = ?,
+                    quiz_pass_mode = ?,
                     updated_at = NOW()
                     WHERE id = ?",
                     [$title, $content, $background_color ?: null, $course_id, $image_url, $video_url, $video_type, $audio_url, $status,
-                     $ai_instruction, $ai_prompt, $_GET['id']]);
+                     $ai_instruction, $ai_prompt, $quiz_pass_mode, $_GET['id']]);
             
             // Logga ändringen
             logActivity($_SESSION['user_email'], "Uppdaterade lektionen '" . $title . "' (ID: " . $_GET['id'] . ")");
@@ -246,10 +248,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Skapa ny lektion (quiz hanteras separat via edit_quiz.php efter att lektionen är sparad)
             execute("INSERT INTO " . DB_DATABASE . ".lessons
                     (title, content, background_color, course_id, image_url, video_url, video_type, audio_url, status,
-                     ai_instruction, ai_prompt, sort_order, author_id, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                     ai_instruction, ai_prompt, quiz_pass_mode, sort_order, author_id, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
                     [$title, $content, $background_color ?: null, $course_id, $image_url, $video_url, $video_type, $audio_url, $status,
-                     $ai_instruction, $ai_prompt, $maxOrder + 1, $authorId]);
+                     $ai_instruction, $ai_prompt, $quiz_pass_mode, $maxOrder + 1, $authorId]);
             
             $newId = getDb()->lastInsertId();
             logActivity($_SESSION['user_email'], "Skapade ny lektion '" . $title . "' (ID: " . $newId . ")");
@@ -574,8 +576,13 @@ if ($isAdmin) {
                         <!-- Quizfrågor: hanteras i dedikerad vy -->
                         <?php
                         $questionCount = 0;
+                        $currentQuizPassMode = 'require_all_correct';
                         if ($id) {
                             $questionCount = (int)(queryOne("SELECT COUNT(*) AS c FROM " . DB_DATABASE . ".quiz_questions WHERE lesson_id = ?", [$id])['c'] ?? 0);
+                            $lpm = queryOne("SELECT quiz_pass_mode FROM " . DB_DATABASE . ".lessons WHERE id = ?", [$id]);
+                            if ($lpm && !empty($lpm['quiz_pass_mode'])) {
+                                $currentQuizPassMode = $lpm['quiz_pass_mode'];
+                            }
                         }
                         ?>
                         <div class="mb-3 p-3 border rounded bg-light">
@@ -596,6 +603,23 @@ if ($isAdmin) {
                                 <?php else: ?>
                                 <span class="text-muted small"><i class="bi bi-info-circle me-1"></i>Spara lektionen först, sedan kan du lägga till frågor.</span>
                                 <?php endif; ?>
+                            </div>
+
+                            <hr class="my-3">
+                            <label class="form-label fw-semibold mb-2"><i class="bi bi-signpost-2 me-1 text-primary"></i>Hur ska deltagaren komma vidare?</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="quiz_pass_mode" id="pass_strict" value="require_all_correct" <?= $currentQuizPassMode === 'require_all_correct' ? 'checked' : '' ?>>
+                                <label class="form-check-label" for="pass_strict">
+                                    <strong>Kräv alla rätt</strong>
+                                    <div class="small text-muted">Deltagaren måste svara rätt på samtliga frågor innan lektionen markeras som klar. Fel svar kan göras om.</div>
+                                </label>
+                            </div>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="radio" name="quiz_pass_mode" id="pass_any" value="any_result" <?= $currentQuizPassMode === 'any_result' ? 'checked' : '' ?>>
+                                <label class="form-check-label" for="pass_any">
+                                    <strong>Spara svar och fortsätt oavsett resultat</strong>
+                                    <div class="small text-muted">Deltagaren ser rätt/fel på varje fråga men kan gå vidare till nästa lektion oberoende av resultatet. Lämpligt för enkäter eller reflektionsfrågor.</div>
+                                </label>
                             </div>
                         </div>
 
