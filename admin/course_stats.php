@@ -300,41 +300,55 @@ require_once 'include/header.php';
         }
     }
 
-    // Räkna sammanfattning. "Inskrivna" = alla unika användare (med eller utan
-    // progress) — inkluderar publika deltagare som ännu inte öppnat någon lektion.
-    // "Ej påbörjat" = inskrivna utan någon progress-rad. "Klara" = har completed
-    // för alla lektioner.
+    // Räkna sammanfattning. "Inskrivna" = endast användare som FAKTISKT är
+    // inskrivna i kursen (rad i course_enrollments, sequential_lesson_schedule,
+    // public_course_access eller har progress för någon av kursens lektioner).
+    // Att bara vara medlem i orgen räcker inte — en användare som aldrig
+    // öppnat eller skrivits in i kursen ska inte räknas som inskriven.
+    $enrolledIdsRows = query(
+        "SELECT DISTINCT user_id FROM (
+            SELECT user_id FROM " . DB_DATABASE . ".course_enrollments WHERE course_id = ?
+            UNION
+            SELECT user_id FROM " . DB_DATABASE . ".sequential_lesson_schedule WHERE course_id = ?
+            UNION
+            SELECT user_id FROM " . DB_DATABASE . ".public_course_access WHERE course_id = ?
+            UNION
+            SELECT p.user_id FROM " . DB_DATABASE . ".progress p
+            JOIN " . DB_DATABASE . ".lessons l ON l.id = p.lesson_id
+            WHERE l.course_id = ?
+        ) AS src",
+        [$selectedCourseId, $selectedCourseId, $selectedCourseId, $selectedCourseId]
+    );
+    $enrolledIds = [];
+    foreach ($enrolledIdsRows as $r) { $enrolledIds[(int)$r['user_id']] = true; }
+
     $totalNotStarted = 0;
     $totalCompleted = 0;
     $totalLessonsInCourse = count($courseLessons);
-    $seenUserIds = [];
 
-    foreach ($userGroups as $users) {
-        foreach ($users as $u) {
-            if (isset($seenUserIds[$u['id']])) continue;
-            $seenUserIds[$u['id']] = true;
-
-            $userLessonsCompleted = 0;
-            $hasAnyProgress = false;
-            foreach ($courseLessons as $cl) {
-                if (isset($progressMap[$u['id']][$cl['id']]) && $progressMap[$u['id']][$cl['id']] === 'completed') {
-                    $userLessonsCompleted++;
-                    $hasAnyProgress = true;
-                } elseif (isset($progressMap[$u['id']][$cl['id']])) {
-                    $hasAnyProgress = true;
-                }
+    foreach ($enrolledIds as $uid => $_v) {
+        $userLessonsCompleted = 0;
+        $hasAnyProgress = false;
+        foreach ($courseLessons as $cl) {
+            if (isset($progressMap[$uid][$cl['id']]) && $progressMap[$uid][$cl['id']] === 'completed') {
+                $userLessonsCompleted++;
+                $hasAnyProgress = true;
+            } elseif (isset($progressMap[$uid][$cl['id']])) {
+                $hasAnyProgress = true;
             }
+        }
 
-            if (!$hasAnyProgress) {
-                $totalNotStarted++;
-            } elseif ($totalLessonsInCourse > 0 && $userLessonsCompleted >= $totalLessonsInCourse) {
-                $totalCompleted++;
-            }
+        if (!$hasAnyProgress) {
+            $totalNotStarted++;
+        } elseif ($totalLessonsInCourse > 0 && $userLessonsCompleted >= $totalLessonsInCourse) {
+            $totalCompleted++;
         }
     }
 
-    $totalEnrolled = count($seenUserIds);
+    $totalEnrolled = count($enrolledIds);
     $totalUniqueUsers = $totalEnrolled;
+    // $seenUserIds behövs fortfarande senare för avg-progress-beräkning
+    $seenUserIds = $enrolledIds;
 
     $avgProgress = 0;
     if ($totalEnrolled > 0 && $totalLessonsInCourse > 0) {

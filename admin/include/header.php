@@ -210,6 +210,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
                         <i class="bi bi-clipboard-data me-2"></i> Loggar
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a href="cron_jobs.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'cron_jobs.php' ? 'active' : '' ?>">
+                        <i class="bi bi-gear me-2"></i> Cronjobb
+                    </a>
+                </li>
                 <?php endif; ?>
                 <?php if ($isSuperAdmin): ?>
                 <li class="nav-item">
