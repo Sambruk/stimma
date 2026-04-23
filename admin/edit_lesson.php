@@ -92,6 +92,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // SECURITY FIX: Enhanced file upload validation
     $image_url = $_POST['image_url'] ?? ''; // Behåll befintlig bild om ingen ny laddas upp
 
+    // Om användaren har tryckt "Ta bort bild" (image_url kommer in som tom
+    // sträng men det finns en tidigare bild i DB): radera filen från disk.
+    if (isset($_GET['id']) && $image_url === '' && isset($lesson['image_url']) && !empty($lesson['image_url'])) {
+        $oldImagePath = __DIR__ . '/../upload/' . basename($lesson['image_url']);
+        if (file_exists($oldImagePath)) {
+            @unlink($oldImagePath);
+        }
+    }
+
     if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
         $allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
         $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif'];
@@ -438,6 +447,12 @@ if ($isAdmin) {
                                 <img id="current-image" src="<?= !empty($imageUrl) ? '../upload/' . htmlspecialchars($imageUrl) : '' ?>" alt="Lektionsbild" class="img-thumbnail" style="max-width: 200px;">
                                 <input type="hidden" name="image_url" id="image_url" value="<?= htmlspecialchars($imageUrl) ?>">
                                 <div class="form-text" id="image-path">Sökväg: <?= htmlspecialchars($imageUrl) ?></div>
+                                <div class="mt-2">
+                                    <button type="button" class="btn btn-sm btn-outline-danger" id="remove-image-btn" onclick="removeLessonImage()">
+                                        <i class="bi bi-trash me-1"></i>Ta bort bild
+                                    </button>
+                                    <span class="form-text ms-2">Tas bort när du sparar lektionen.</span>
+                                </div>
                             </div>
                             <?php if (!empty($imageUrl)): ?>
                                 <p class="text-muted">Ladda upp ny bild för att ersätta den nuvarande:</p>
@@ -765,6 +780,18 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Quiz hanteras nu i dedikerad sida edit_quiz.php — gammal UI-kod borttagen.
+
+// Ta bort lektionsbild — tömmer det dolda fältet så servern raderar filen
+// och rensar image_url i DB vid nästa spara.
+function removeLessonImage() {
+    if (!confirm('Ta bort lektionsbilden? Den raderas när du sparar lektionen.')) return;
+    var hidden = document.getElementById('image_url');
+    var container = document.getElementById('current-image-container');
+    var fileInput = document.getElementById('image');
+    if (hidden) hidden.value = '';
+    if (container) container.style.display = 'none';
+    if (fileInput) fileInput.value = '';
+}
 
 // Video tab switching
 function switchVideoTab(type) {
