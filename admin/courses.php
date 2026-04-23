@@ -167,6 +167,15 @@ require_once 'include/header.php';
                                     <i class="bi bi-globe me-1"></i>Publik
                                 </a>
                                 <?php endif; ?>
+                                <?php
+                                $courseSharedDoms = getCourseSharedDomains($course['id']);
+                                if (!empty($courseSharedDoms)):
+                                ?>
+                                <span class="badge bg-warning text-dark" style="font-size: 0.7rem;"
+                                      title="Kursen delas endast med: <?= htmlspecialchars(implode(', ', $courseSharedDoms)) ?>">
+                                    <i class="bi bi-share me-1"></i>Delad: <?= count($courseSharedDoms) ?> domän<?= count($courseSharedDoms) === 1 ? '' : 'er' ?>
+                                </span>
+                                <?php endif; ?>
                             </div>
                         </td>
                         <td>

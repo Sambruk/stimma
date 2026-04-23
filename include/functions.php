@@ -259,6 +259,44 @@ function getHeaderText($userId) {
 }
 
 /**
+ * Hämta listan av domäner en kurs är begränsad till (via
+ * course_shared_domains). Tom array = kursen delas med hela organisationen.
+ *
+ * @param int $courseId
+ * @return string[] Domännamn i listan (möjligen tom)
+ */
+function getCourseSharedDomains($courseId) {
+    $rows = query(
+        "SELECT domain FROM " . DB_DATABASE . ".course_shared_domains WHERE course_id = ? ORDER BY domain",
+        [(int)$courseId]
+    );
+    return array_column($rows ?: [], 'domain');
+}
+
+/**
+ * Spara listan av delade domäner för en kurs. Ersätter eventuella tidigare
+ * rader. Tom array rensar helt (= delas med hela organisationen).
+ *
+ * @param int $courseId
+ * @param string[] $domains
+ */
+function setCourseSharedDomains($courseId, array $domains) {
+    execute(
+        "DELETE FROM " . DB_DATABASE . ".course_shared_domains WHERE course_id = ?",
+        [(int)$courseId]
+    );
+    $clean = array_filter(array_unique(array_map(function($d) {
+        return strtolower(trim($d));
+    }, $domains)));
+    foreach ($clean as $d) {
+        execute(
+            "INSERT IGNORE INTO " . DB_DATABASE . ".course_shared_domains (course_id, domain) VALUES (?, ?)",
+            [(int)$courseId, $d]
+        );
+    }
+}
+
+/**
  * Hämta organisationsikonen som ska visas i top-nav för en användare.
  *
  * Regler:

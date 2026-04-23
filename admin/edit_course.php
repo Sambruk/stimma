@@ -240,6 +240,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
 
+                // Uppdatera delade domäner. share_mode = 'whole_org' rensar
+                // alla, 'specific_domains' sparar bara de rutade. Validerar att
+                // domänen faktiskt tillhör användarens organisation för att
+                // förhindra att admin begränsar till en främmande domän.
+                $shareMode = $_POST['share_mode'] ?? 'whole_org';
+                if ($shareMode === 'specific_domains') {
+                    $userOrgRow2 = getOrganizationByDomain(substr(strrchr($_SESSION['user_email'], '@'), 1));
+                    $allowedDomainList = $userOrgRow2 ? getOrganizationDomains($userOrgRow2['id']) : [];
+                    $submittedDomains = array_values(array_filter((array)($_POST['shared_domains'] ?? [])));
+                    $filtered = array_intersect($submittedDomains, $allowedDomainList);
+                    setCourseSharedDomains((int)$_GET['id'], $filtered);
+                } else {
+                    // Hela organisationen — rensa alla
+                    setCourseSharedDomains((int)$_GET['id'], []);
+                }
+
                 $_SESSION['message'] = 'Kursen har uppdaterats.';
             } else {
                 // Hitta högsta sort_order
@@ -293,6 +309,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             [$newCourseId, $orgTag]
                         );
                     }
+                }
+
+                // Delade domäner för ny kurs
+                $shareMode = $_POST['share_mode'] ?? 'whole_org';
+                if ($shareMode === 'specific_domains') {
+                    $userOrgRow2 = getOrganizationByDomain(substr(strrchr($_SESSION['user_email'], '@'), 1));
+                    $allowedDomainList = $userOrgRow2 ? getOrganizationDomains($userOrgRow2['id']) : [];
+                    $submittedDomains = array_values(array_filter((array)($_POST['shared_domains'] ?? [])));
+                    $filtered = array_intersect($submittedDomains, $allowedDomainList);
+                    setCourseSharedDomains((int)$newCourseId, $filtered);
                 }
 
                 $_SESSION['message'] = 'Kursen har skapats.';
@@ -1043,10 +1069,92 @@ require_once 'include/header.php';
                             $colLabels[$ci] = ($first === $last) ? $first : $first . '–' . $last;
                         }
                         ?>
+                        <!-- Domän-delning (primär mekanism för att begränsa inom org) -->
+                        <?php
+                        // Hämta användarens org + alla orgens domäner
+                        $courseOrgDomainList = [];
+                        $userOrgRow = !empty($currentUserDomain) ? getOrganizationByDomain($currentUserDomain) : null;
+                        if ($userOrgRow) {
+                            $courseOrgDomainList = getOrganizationDomains($userOrgRow['id']);
+                        } elseif (!empty($currentUserDomain)) {
+                            $courseOrgDomainList = [$currentUserDomain];
+                        }
+                        $courseSharedDomains = !empty($course['id']) ? getCourseSharedDomains($course['id']) : [];
+                        $shareMode = empty($courseSharedDomains) ? 'whole_org' : 'specific_domains';
+                        ?>
+                        <div class="mb-4 p-3 border rounded bg-light">
+                            <label class="form-label fw-semibold mb-2"><i class="bi bi-share me-1 text-primary"></i>Vem ska se kursen?</label>
+
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="share_mode" id="share_mode_org" value="whole_org" <?= $shareMode === 'whole_org' ? 'checked' : '' ?>>
+                                <label class="form-check-label" for="share_mode_org">
+                                    <strong>Delas med hela organisationen</strong>
+                                    <?php if ($userOrgRow): ?>
+                                    <div class="small text-muted">Alla användare i <strong><?= htmlspecialchars($userOrgRow['name']) ?></strong> (<?= count($courseOrgDomainList) ?> domäner) ser kursen.</div>
+                                    <?php else: ?>
+                                    <div class="small text-muted">Alla användare på <strong><?= htmlspecialchars($currentUserDomain) ?></strong> ser kursen.</div>
+                                    <?php endif; ?>
+                                </label>
+                            </div>
+
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="radio" name="share_mode" id="share_mode_specific" value="specific_domains" <?= $shareMode === 'specific_domains' ? 'checked' : '' ?> <?= count($courseOrgDomainList) < 2 ? 'disabled' : '' ?>>
+                                <label class="form-check-label" for="share_mode_specific">
+                                    <strong>Dela med vissa domäner inom organisationen</strong>
+                                    <?php if (count($courseOrgDomainList) < 2): ?>
+                                    <div class="small text-muted"><i class="bi bi-info-circle me-1"></i>Kräver att organisationen har flera grupperade domäner — din organisation har bara <?= count($courseOrgDomainList) ?>.</div>
+                                    <?php else: ?>
+                                    <div class="small text-muted">Endast användare med e-post i valda domäner ser kursen.</div>
+                                    <?php endif; ?>
+                                </label>
+                            </div>
+
+                            <div id="specificDomainsBox" class="ms-4 mt-2" style="<?= $shareMode === 'specific_domains' ? '' : 'display:none;' ?>">
+                                <div class="d-flex gap-2 mb-2">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="shareDomainsSelectAll">Markera alla</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="shareDomainsSelectNone">Avmarkera alla</button>
+                                </div>
+                                <div class="row g-2">
+                                    <?php foreach ($courseOrgDomainList as $dom): ?>
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input share-domain-check" type="checkbox" name="shared_domains[]"
+                                                   id="share_dom_<?= htmlspecialchars(md5($dom)) ?>" value="<?= htmlspecialchars($dom) ?>"
+                                                   <?= in_array($dom, $courseSharedDomains, true) ? 'checked' : '' ?>>
+                                            <label class="form-check-label font-monospace small" for="share_dom_<?= htmlspecialchars(md5($dom)) ?>">
+                                                <?= htmlspecialchars($dom) ?>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <?php endforeach; ?>
+                                </div>
+                                <div class="form-text mt-1"><i class="bi bi-exclamation-circle me-1"></i>Om inga domäner markeras blir kursen ej synlig för någon — välj minst en, eller byt till "Delas med hela organisationen".</div>
+                            </div>
+                        </div>
+
+                        <script>
+                        (function() {
+                            var radioOrg = document.getElementById('share_mode_org');
+                            var radioSpecific = document.getElementById('share_mode_specific');
+                            var box = document.getElementById('specificDomainsBox');
+                            var selectAll = document.getElementById('shareDomainsSelectAll');
+                            var selectNone = document.getElementById('shareDomainsSelectNone');
+                            function sync() { box.style.display = radioSpecific.checked ? '' : 'none'; }
+                            if (radioOrg) radioOrg.addEventListener('change', sync);
+                            if (radioSpecific) radioSpecific.addEventListener('change', sync);
+                            if (selectAll) selectAll.addEventListener('click', function() {
+                                document.querySelectorAll('.share-domain-check').forEach(function(cb) { cb.checked = true; });
+                            });
+                            if (selectNone) selectNone.addEventListener('click', function() {
+                                document.querySelectorAll('.share-domain-check').forEach(function(cb) { cb.checked = false; });
+                            });
+                        })();
+                        </script>
+
                         <div class="mb-3">
                             <label class="form-label">Organisationstaggar</label>
                             <div class="form-text mb-2">
-                                Begränsa vilka delar av organisationen som ska se kursen. Lämna tomt för att visa kursen för alla.
+                                Frivillig segmentering inom organisationen (avdelning, roll). Användare måste ha minst en matchande tagg för att se kursen — eller så krävs inga taggar om rutan ovan är satt till hela organisationen.
                             </div>
 
                             <!-- Valda taggar -->

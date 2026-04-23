@@ -252,14 +252,23 @@ else:
             $orgTagExtraParams = [];
         }
 
-        // Bygg scope som "(domänmatch OCH org-tag-filter) ELLER publik-access"
+        // Shared-domain-filter: kurs syns om den antingen delas med hela orgen
+        // (inga rader i course_shared_domains) ELLER användarens domän finns i
+        // listan av valda domäner.
+        $sharedDomainFilter = "AND (
+            NOT EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_shared_domains csd WHERE csd.course_id = c.id)
+            OR EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_shared_domains csd WHERE csd.course_id = c.id AND csd.domain = ?)
+        )";
+        $sharedDomainExtraParams = [$userDomain];
+
+        // Bygg scope som "(domänmatch OCH org-tag-filter OCH shared-domain-filter) ELLER publik-access"
         if (!empty($publicCourseIds)) {
             $publicPlaceholders = implode(',', array_fill(0, count($publicCourseIds), '?'));
-            $courseScopeFragment = "(({$courseDomainClause['fragment']} $orgTagFilter) OR c.id IN ($publicPlaceholders))";
-            $courseScopeParams = array_merge($courseDomainClause['params'], $orgTagExtraParams, $publicCourseIds);
+            $courseScopeFragment = "(({$courseDomainClause['fragment']} $orgTagFilter $sharedDomainFilter) OR c.id IN ($publicPlaceholders))";
+            $courseScopeParams = array_merge($courseDomainClause['params'], $orgTagExtraParams, $sharedDomainExtraParams, $publicCourseIds);
         } else {
-            $courseScopeFragment = "({$courseDomainClause['fragment']} $orgTagFilter)";
-            $courseScopeParams = array_merge($courseDomainClause['params'], $orgTagExtraParams);
+            $courseScopeFragment = "({$courseDomainClause['fragment']} $orgTagFilter $sharedDomainFilter)";
+            $courseScopeParams = array_merge($courseDomainClause['params'], $orgTagExtraParams, $sharedDomainExtraParams);
         }
     }
 

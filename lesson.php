@@ -104,6 +104,18 @@ if (!$isPreviewMode) {
         $courseOrg = $courseRow['organization_domain'] ?? '';
         $orgScope = getOrgScopeDomains($_SESSION['user_email'] ?? '');
         $inOwnOrg = $courseOrg !== '' && in_array($courseOrg, $orgScope, true);
+
+        // Respektera eventuella shared_domains: om kursen är begränsad till
+        // utvalda domäner måste användarens domän finnas i listan.
+        if ($inOwnOrg) {
+            $sharedDoms = getCourseSharedDomains((int)$lesson['course_id']);
+            if (!empty($sharedDoms)) {
+                $userDom = getUserDomain($_SESSION['user_email'] ?? '');
+                if (!in_array($userDom, $sharedDoms, true)) {
+                    $inOwnOrg = false; // begränsad — hens domän är inte med
+                }
+            }
+        }
         $allowed = $inOwnOrg || $hasPublic;
     }
 
