@@ -1073,11 +1073,11 @@ require_once 'include/header.php';
                         <?php
                         // Hämta användarens org + alla orgens domäner
                         $courseOrgDomainList = [];
-                        $userOrgRow = !empty($currentUserDomain) ? getOrganizationByDomain($currentUserDomain) : null;
+                        $userOrgRow = !empty($userDomain) ? getOrganizationByDomain($userDomain) : null;
                         if ($userOrgRow) {
                             $courseOrgDomainList = getOrganizationDomains($userOrgRow['id']);
-                        } elseif (!empty($currentUserDomain)) {
-                            $courseOrgDomainList = [$currentUserDomain];
+                        } elseif (!empty($userDomain)) {
+                            $courseOrgDomainList = [$userDomain];
                         }
                         $courseSharedDomains = !empty($course['id']) ? getCourseSharedDomains($course['id']) : [];
                         $shareMode = empty($courseSharedDomains) ? 'whole_org' : 'specific_domains';
@@ -1092,7 +1092,7 @@ require_once 'include/header.php';
                                     <?php if ($userOrgRow): ?>
                                     <div class="small text-muted">Alla användare i <strong><?= htmlspecialchars($userOrgRow['name']) ?></strong> (<?= count($courseOrgDomainList) ?> domäner) ser kursen.</div>
                                     <?php else: ?>
-                                    <div class="small text-muted">Alla användare på <strong><?= htmlspecialchars($currentUserDomain) ?></strong> ser kursen.</div>
+                                    <div class="small text-muted">Alla användare på <strong><?= htmlspecialchars($userDomain) ?></strong> ser kursen.</div>
                                     <?php endif; ?>
                                 </label>
                             </div>
