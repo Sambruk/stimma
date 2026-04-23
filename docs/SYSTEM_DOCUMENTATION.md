@@ -14,8 +14,9 @@ Teknisk dokumentation för installation, konfiguration och underhåll av Stimma 
 6. [API-endpoints](#api-endpoints)
 7. [Säkerhet](#säkerhet)
 8. [AI-integration](#ai-integration)
-9. [Felsökning](#felsökning)
-10. [Underhåll](#underhåll)
+9. [Schemalagda jobb (cron)](#schemalagda-jobb-cron)
+10. [Felsökning](#felsökning)
+11. [Underhåll](#underhåll)
 
 ---
 
@@ -78,10 +79,22 @@ stimma/
 ├── logout.php                # Utloggning
 ├── lesson.php                # Lektionsvisning
 ├── ai_chat.php               # AI-tutor endpoint
+├── cron/                     # Skript som körs av schedulern
+│   ├── send_sequential_notifications.php
+│   ├── process_sequential_starts.php
+│   └── send_reminders.php
 ├── init.sql                  # Databasschema
-├── docker-compose.yml        # Docker-konfiguration
+├── docker-compose.yml        # Docker-konfiguration (web + db + scheduler)
 └── .env                      # Miljövariabler
 ```
+
+Tre containers definieras i `docker-compose.yml`:
+
+- **`stimma-web-1`** — PHP-Apache-applikationen (port 13050 intern)
+- **`stimma-db-1`** — MariaDB 10.11
+- **`stimma-scheduler-1`** — Ofelia, docker-native cron. Se
+  [Schemalagda jobb (cron)](#schemalagda-jobb-cron).
+
 
 ### Multi-tenant modell
 
@@ -632,6 +645,98 @@ Superadmin kan konfigurera:
 - Svarsriktlinjer
 - Ämnesbegränsningar
 - Anpassade instruktioner
+
+---
+
+## Schemalagda jobb (cron)
+
+Stimma har flera bakgrundsjobb som måste köras automatiskt för att
+påminnelser, nya-lektions-mail och kursstarter ska fungera. Eftersom
+miljön är Docker-baserad finns ingen host-cron — istället används
+**Ofelia** (`mcuadros/ofelia`), en docker-native scheduler.
+
+### Arkitektur
+
+`docker-compose.yml` innehåller två relevanta containers:
+
+- **`web`** — PHP-Apache-servern. Har `labels:` som definierar schemat för
+  varje jobb (namn, kommando, tidsuttryck).
+- **`scheduler`** — Ofelia-container som mountar `/var/run/docker.sock`
+  (read-only) och läser jobbdefinitionerna från web-containerns labels.
+  När ett jobb ska triggas körs `docker exec stimma-web-1 <command>`
+  synkront.
+
+Varje `docker-compose up -d` startar schemalläggaren automatiskt.
+
+### Registrerade jobb
+
+| Jobb | Schema | Syfte | Skript |
+|---|---|---|---|
+| `stimma-sequential-notifications` | Varje timme (`@every 1h`) | Nya-lektions-mail + påminnelser för stegvisa kurser | `cron/send_sequential_notifications.php` |
+| `stimma-sequential-starts` | Dagligen kl 08:00 | Startar stegvisa kurser som nått startdatum | `cron/process_sequential_starts.php` |
+| `stimma-reminders` | Dagligen kl 09:00 | Allmänna påminnelser för icke-stegvisa kurser | `cron/send_reminders.php` |
+
+Scheman anges i Ofelias 6-fältsformat (`sec min hour day month weekday`).
+För "varje timme" används aliaset `@every 1h`.
+
+### Lägga till ett nytt jobb
+
+Redigera `docker-compose.yml` och lägg till två labels under `web.labels`:
+
+```yaml
+ofelia.job-exec.<jobb-namn>.schedule: "0 0 8 * * *"
+ofelia.job-exec.<jobb-namn>.command: "php /var/www/html/cron/<script>.php"
+```
+
+Registrera även jobbet i `cron_jobs`-tabellen så det syns i admin-UI:t
+under **Admin → Cronjobb**.
+
+Kör sedan:
+
+```bash
+cd /opt/app/stimma && docker-compose up -d
+```
+
+Ofelia läser om sina labels när containern startar om. Verifiera med:
+
+```bash
+docker logs stimma-scheduler-1 | tail -20
+```
+
+### Köra jobb manuellt
+
+**Via admin-UI:** Logga in som admin/superadmin → **Admin → Cronjobb** →
+klicka "Kör nu" på önskat jobb. Resultatet visas i en popup + status
+uppdateras i listan.
+
+**Via CLI:**
+
+```bash
+docker exec stimma-web-1 php /var/www/html/cron/send_sequential_notifications.php
+```
+
+### Felsökning
+
+- **Inget jobb körs:** Kontrollera att schedulern är igång:
+  `docker ps --filter name=stimma-scheduler-1`
+- **Loggar:** `docker logs stimma-scheduler-1` visar när jobb registreras,
+  triggas och om de lyckas. För individuella körningar, se utdatan i
+  databastabellen `cron_jobs.last_run_message` (uppdateras vid manuell
+  körning via admin-UI).
+- **Jobb registreras men triggar inte:** Verifiera att `ofelia.enabled:
+  "true"` finns på både web- och scheduler-labelen. Utan det här ignorerar
+  Ofelia labels.
+- **Manuell testkörning:** `docker exec stimma-scheduler-1 ofelia run
+  --name <jobb-namn>` triggar jobbet utan att vänta på schemat.
+
+### Cron_jobs-tabellen
+
+Tabellen `cron_jobs` är ursprungligen tänkt att vara central register
+över schemalagda jobb. Ofelia ignorerar den — jobben definieras i
+docker-compose-labels. Tabellen används nu endast av admin-UI:t
+(`admin/cron_jobs.php`) för att visa senaste körning + ge manuell-
+körningsfunktion. Håll båda källorna synkroniserade när du lägger till
+eller tar bort jobb.
 
 ---
 
