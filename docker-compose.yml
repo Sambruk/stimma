@@ -11,6 +11,18 @@ services:
       - /opt/app/stimma/upload:/var/www/html/upload
     environment:
       - APACHE_DOCUMENT_ROOT=/var/www/html
+    labels:
+      # Schemaläggning via Ofelia (scheduler-container nedan)
+      ofelia.enabled: "true"
+      # Stegvisa lektioner: varje timme — skickar nya-lektions-mail och påminnelser
+      ofelia.job-exec.stimma-sequential-notifications.schedule: "@every 1h"
+      ofelia.job-exec.stimma-sequential-notifications.command: "php /var/www/html/cron/send_sequential_notifications.php"
+      # Stegvisa kurs-starter: kl 08:00 varje dag
+      ofelia.job-exec.stimma-sequential-starts.schedule: "0 0 8 * * *"
+      ofelia.job-exec.stimma-sequential-starts.command: "php /var/www/html/cron/process_sequential_starts.php"
+      # Allmänna påminnelser (icke-stegvisa kurser): kl 09:00 varje dag
+      ofelia.job-exec.stimma-reminders.schedule: "0 0 9 * * *"
+      ofelia.job-exec.stimma-reminders.command: "php /var/www/html/cron/send_reminders.php"
     depends_on:
       db:
         condition: service_healthy
@@ -27,6 +39,19 @@ services:
         echo 'max_input_time = 300' >> /usr/local/etc/php/conf.d/uploads.ini &&
         apache2-foreground
       "
+
+  scheduler:
+    # Ofelia — docker-native cron som läser labels från web-containern.
+    # Ingen host-cron behövs.
+    image: mcuadros/ofelia:latest
+    restart: always
+    depends_on:
+      - web
+    command: daemon --docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      ofelia.enabled: "true"
 
   db:
     image: mariadb:10.11
