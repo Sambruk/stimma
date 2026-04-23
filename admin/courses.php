@@ -186,17 +186,21 @@ require_once 'include/header.php';
                         <td><?= $lessonCount ?></td>
                         <td>
                             <div class="d-flex gap-2">
-                                <a href="lessons.php?course_id=<?= $course['id'] ?>" class="btn btn-sm btn-outline-primary">
+                                <a href="lessons.php?course_id=<?= $course['id'] ?>" class="btn btn-sm btn-outline-primary" title="Hantera lektioner">
                                     <i class="bi bi-list-ul"></i>
                                 </a>
-                                <a href="edit_course.php?id=<?= $course['id'] ?>" class="btn btn-sm btn-outline-secondary">
+                                <a href="edit_course.php?id=<?= $course['id'] ?>" class="btn btn-sm btn-outline-secondary" title="Redigera">
                                     <i class="bi bi-pencil"></i>
                                 </a>
+                                <button type="button" class="btn btn-sm btn-outline-secondary copy-course-link" title="Kopiera direktlänk till kursens landningssida"
+                                        data-course-id="<?= (int)$course['id'] ?>">
+                                    <i class="bi bi-link-45deg"></i>
+                                </button>
                                 <a href="export.php?id=<?= $course['id'] ?>" class="btn btn-sm btn-outline-secondary" title="Exportera kurs">
                                     <i class="bi bi-box-arrow-up"></i>
                                 </a>
                                 <button type="button" onclick="deleteCourse(<?= $course['id'] ?>)"
-                                   class="btn btn-sm btn-outline-danger">
+                                   class="btn btn-sm btn-outline-danger" title="Radera kurs">
                                     <i class="bi bi-trash"></i>
                                 </button>
                             </div>
@@ -809,6 +813,29 @@ function deleteCourse(id) {
     document.body.appendChild(form);
     form.submit();
 }
+
+// Kopiera direktlänk till en kurs landningssida
+document.addEventListener("click", function(ev) {
+    var btn = ev.target.closest(".copy-course-link");
+    if (!btn) return;
+    var id = btn.dataset.courseId;
+    var url = window.location.protocol + "//" + window.location.host + "/course.php?id=" + id;
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(url).then(function() {
+            var original = btn.innerHTML;
+            btn.innerHTML = "<i class=\"bi bi-check\"></i>";
+            btn.classList.add("btn-success");
+            btn.classList.remove("btn-outline-secondary");
+            setTimeout(function() {
+                btn.innerHTML = original;
+                btn.classList.remove("btn-success");
+                btn.classList.add("btn-outline-secondary");
+            }, 1500);
+        }).catch(function() { prompt("Kopiera länken:", url); });
+    } else {
+        prompt("Kopiera länken:", url);
+    }
+});
 </script>';
 
 // Inkludera footer
