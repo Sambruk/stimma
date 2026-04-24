@@ -39,10 +39,17 @@ if (!$course) {
 }
 
 $lessons = query(
-    "SELECT id, title, sort_order, status FROM " . DB_DATABASE . ".lessons
+    "SELECT id, title, sort_order, status, lesson_type, belongs_to_lesson_id
+     FROM " . DB_DATABASE . ".lessons
      WHERE course_id = ? AND status = 'active' ORDER BY sort_order ASC, id ASC",
     [$courseId]
 );
+
+// Räkna bara riktiga lektioner för "X av Y klara"-summan. Infosidor visas i
+// innehållslistan men räknas inte mot progresskravet.
+$realLessonRows = array_values(array_filter($lessons, function($l) {
+    return ($l['lesson_type'] ?? 'lesson') === 'lesson';
+}));
 
 $loggedIn = isLoggedIn();
 $userId = $loggedIn ? (int)$_SESSION['user_id'] : 0;
@@ -89,7 +96,8 @@ if ($loggedIn) {
     }
 }
 
-// Hitta nästa lektion baserat på progress
+// Hitta nästa sida baserat på progress (kan vara lektion eller infosida).
+// Räkna bara riktiga lektioner som "klara" i "X av Y"-mätaren.
 $nextLessonId = null;
 $completedCount = 0;
 if ($loggedIn && $canAccess && !empty($lessons)) {
@@ -101,21 +109,23 @@ if ($loggedIn && $canAccess && !empty($lessons)) {
     foreach ($progressRows as $p) { $progressByLesson[(int)$p['lesson_id']] = $p['status']; }
 
     foreach ($lessons as $l) {
-        if (($progressByLesson[(int)$l['id']] ?? '') === 'completed') {
-            $completedCount++;
+        $isCompleted = ($progressByLesson[(int)$l['id']] ?? '') === 'completed';
+        $isInfo = ($l['lesson_type'] ?? 'lesson') === 'info_page';
+        if ($isCompleted) {
+            if (!$isInfo) $completedCount++;
             continue;
         }
         $nextLessonId = (int)$l['id'];
         break;
     }
-    // Om alla är klara, peka på sista lektionen (repetition/visa diplom)
+    // Om alla är klara, peka på sista sidan (repetition/visa diplom)
     if ($nextLessonId === null && !empty($lessons)) {
         $nextLessonId = (int)$lessons[count($lessons) - 1]['id'];
     }
 }
 
-// Visa publik/stegvis-metadata
-$totalLessons = count($lessons);
+// Visa publik/stegvis-metadata. Total räknas bara bland riktiga lektioner.
+$totalLessons = count($realLessonRows);
 $isSequential = !empty($course['sequential_mode']);
 $systemName = trim(getenv('SYSTEM_NAME'), '"\'') ?: 'Stimma';
 $page_title = $course['title'] . ' — ' . $systemName;
@@ -279,7 +289,13 @@ if ($loggedIn) {
             <?php if (empty($lessons)): ?>
                 <p class="p-3 text-muted mb-0">Kursen har inga publicerade lektioner ännu.</p>
             <?php else: ?>
-                <?php foreach ($lessons as $idx => $l):
+                <?php
+                // Numrera bara riktiga lektioner. Infosidor får en infoikon
+                // istället för ett nummer i listan.
+                $lessonNumber = 0;
+                foreach ($lessons as $idx => $l):
+                    $isInfo = ($l['lesson_type'] ?? 'lesson') === 'info_page';
+                    if (!$isInfo) $lessonNumber++;
                     $isDone = false;
                     if ($loggedIn) {
                         $pr = queryOne(
@@ -289,12 +305,14 @@ if ($loggedIn) {
                         $isDone = $pr && $pr['status'] === 'completed';
                     }
                 ?>
-                <div class="lesson-list-item">
-                    <div class="lesson-number <?= $isDone ? 'done' : '' ?>">
+                <div class="lesson-list-item<?= $isInfo ? ' bg-light' : '' ?>">
+                    <div class="lesson-number <?= $isDone ? 'done' : '' ?>"<?= $isInfo ? ' style="background:#cff4fc;color:#055160;"' : '' ?>>
                         <?php if ($isDone): ?>
                             <i class="bi bi-check"></i>
+                        <?php elseif ($isInfo): ?>
+                            <i class="bi bi-info-circle"></i>
                         <?php else: ?>
-                            <?= $idx + 1 ?>
+                            <?= $lessonNumber ?>
                         <?php endif; ?>
                     </div>
                     <div class="flex-grow-1">
@@ -302,6 +320,9 @@ if ($loggedIn) {
                             <a href="lesson.php?id=<?= (int)$l['id'] ?>" class="text-decoration-none text-dark"><?= htmlspecialchars($l['title']) ?></a>
                         <?php else: ?>
                             <span class="text-dark"><?= htmlspecialchars($l['title']) ?></span>
+                        <?php endif; ?>
+                        <?php if ($isInfo): ?>
+                            <span class="small text-muted ms-2"><i class="bi bi-info-circle me-1"></i>Informationssida</span>
                         <?php endif; ?>
                     </div>
                 </div>

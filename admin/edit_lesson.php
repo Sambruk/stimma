@@ -87,6 +87,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $quiz_answer5 = trim($_POST['quiz_answer5'] ?? '');
     $quiz_correct_answer = (int)($_POST['quiz_correct_answer'] ?? 0);
     $quiz_correct_answers = trim($_POST['quiz_correct_answers'] ?? '');
+
+    // Typ: lektion (default) eller informationssida
+    $lesson_type = ($_POST['lesson_type'] ?? 'lesson') === 'info_page' ? 'info_page' : 'lesson';
+    // belongs_to_lesson_id: endast meningsfullt för infosidor. Tomt/0 = NULL (fristående).
+    $belongs_to_raw = trim($_POST['belongs_to_lesson_id'] ?? '');
+    $belongs_to_lesson_id = ($lesson_type === 'info_page' && $belongs_to_raw !== '' && (int)$belongs_to_raw > 0)
+        ? (int)$belongs_to_raw : null;
     
     // Hantera bilduppladdning
     // SECURITY FIX: Enhanced file upload validation
@@ -229,6 +236,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     content = ?,
                     background_color = ?,
                     course_id = ?,
+                    lesson_type = ?,
+                    belongs_to_lesson_id = ?,
                     image_url = ?,
                     video_url = ?,
                     video_type = ?,
@@ -239,7 +248,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     quiz_pass_mode = ?,
                     updated_at = NOW()
                     WHERE id = ?",
-                    [$title, $content, $background_color ?: null, $course_id, $image_url, $video_url, $video_type, $audio_url, $status,
+                    [$title, $content, $background_color ?: null, $course_id, $lesson_type, $belongs_to_lesson_id,
+                     $image_url, $video_url, $video_type, $audio_url, $status,
                      $ai_instruction, $ai_prompt, $quiz_pass_mode, $_GET['id']]);
             
             // Logga ändringen
@@ -256,10 +266,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             // Skapa ny lektion (quiz hanteras separat via edit_quiz.php efter att lektionen är sparad)
             execute("INSERT INTO " . DB_DATABASE . ".lessons
-                    (title, content, background_color, course_id, image_url, video_url, video_type, audio_url, status,
+                    (title, content, background_color, course_id, lesson_type, belongs_to_lesson_id,
+                     image_url, video_url, video_type, audio_url, status,
                      ai_instruction, ai_prompt, quiz_pass_mode, sort_order, author_id, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
-                    [$title, $content, $background_color ?: null, $course_id, $image_url, $video_url, $video_type, $audio_url, $status,
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                    [$title, $content, $background_color ?: null, $course_id, $lesson_type, $belongs_to_lesson_id,
+                     $image_url, $video_url, $video_type, $audio_url, $status,
                      $ai_instruction, $ai_prompt, $quiz_pass_mode, $maxOrder + 1, $authorId]);
             
             $newId = getDb()->lastInsertId();
@@ -298,6 +310,8 @@ $quizAnswer5 = '';
 $quizCorrectAnswer = 0;
 $quizCorrectAnswers = '';
 $backgroundColor = '';
+$lessonType = 'lesson';
+$belongsToLessonId = null;
 
 // Kontrollera om vi redigerar en befintlig lektion eller skapar en ny
 if (isset($_GET['id']) && is_numeric($_GET['id'])) {
@@ -325,6 +339,8 @@ if (isset($_GET['id']) && is_numeric($_GET['id'])) {
         $quizCorrectAnswer = (int)($lesson['quiz_correct_answer'] ?? 0);
         $quizCorrectAnswers = $lesson['quiz_correct_answers'] ?? '';
         $backgroundColor = $lesson['background_color'] ?? '';
+        $lessonType = $lesson['lesson_type'] ?? 'lesson';
+        $belongsToLessonId = isset($lesson['belongs_to_lesson_id']) ? (int)$lesson['belongs_to_lesson_id'] : null;
     } else {
         $_SESSION['message'] = "Lektionen kunde inte hittas.";
         $_SESSION['message_type'] = "danger";
@@ -400,7 +416,7 @@ if ($isAdmin) {
                                 <div class="form-floating">
                                     <select class="form-select" id="course_id" name="course_id" required>
                                         <?php foreach ($courses as $course): ?>
-                                            <option value="<?= $course['id'] ?>" 
+                                            <option value="<?= $course['id'] ?>"
                                                     <?= $courseId == $course['id'] ? 'selected' : '' ?>>
                                                 <?= htmlspecialchars($course['title']) ?>
                                             </option>
@@ -410,6 +426,86 @@ if ($isAdmin) {
                                 </div>
                             </div>
                         </div>
+
+                        <?php
+                        // Hämta lektioner i samma kurs som kandidater för "Tillhör"-dropdown.
+                        // Utelämna sig själv (en infosida kan inte tillhöra sig själv).
+                        $parentCandidates = [];
+                        if ($courseId) {
+                            $parentCandidates = query(
+                                "SELECT id, title FROM " . DB_DATABASE . ".lessons
+                                 WHERE course_id = ? AND lesson_type = 'lesson'
+                                   AND (? IS NULL OR id != ?)
+                                 ORDER BY sort_order ASC, title ASC",
+                                [$courseId, $id, $id]
+                            );
+                        }
+                        ?>
+                        <div class="row mb-3 align-items-start">
+                            <div class="col-md-4">
+                                <label class="form-label fw-normal d-block">Typ</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="lesson_type" id="lesson_type_lesson"
+                                           value="lesson" <?= $lessonType !== 'info_page' ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="lesson_type_lesson">
+                                        <i class="bi bi-journal-text me-1 text-primary"></i>Lektion
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="lesson_type" id="lesson_type_info"
+                                           value="info_page" <?= $lessonType === 'info_page' ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="lesson_type_info">
+                                        <i class="bi bi-info-circle me-1 text-info"></i>Informationssida
+                                    </label>
+                                </div>
+                                <small class="text-muted">Infosidor räknas inte som lektioner, kräver inget quiz, och får en "Fortsätt"-knapp.</small>
+                            </div>
+                            <div class="col-md-8" id="belongsToCol" style="display: <?= $lessonType === 'info_page' ? 'block' : 'none' ?>;">
+                                <label for="belongs_to_lesson_id" class="form-label fw-normal">Tillhör lektion</label>
+                                <select class="form-select" id="belongs_to_lesson_id" name="belongs_to_lesson_id">
+                                    <option value="" <?= empty($belongsToLessonId) ? 'selected' : '' ?>>— Fristående (t.ex. kursens välkomstsida) —</option>
+                                    <?php foreach ($parentCandidates as $pc): ?>
+                                    <option value="<?= (int)$pc['id'] ?>" <?= ((int)$belongsToLessonId === (int)$pc['id']) ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($pc['title']) ?>
+                                    </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <small class="text-muted">Om sidan tillhör en lektion låses den upp samtidigt som den lektionen i stegvisa kurser.</small>
+                            </div>
+                        </div>
+
+                        <script>
+                        (function(){
+                            var IS_EDITING = <?= $id ? 'true' : 'false' ?>;
+                            function applyLessonType(val) {
+                                var isInfo = (val === 'info_page');
+                                // Tillhör-dropdown: bara relevant för infosidor
+                                var col = document.getElementById('belongsToCol');
+                                if (col) col.style.display = isInfo ? 'block' : 'none';
+                                // AI-rutor + quiz-frågor: dölj helt för infosidor
+                                document.querySelectorAll('.lesson-only-field').forEach(function(el){
+                                    el.style.display = isInfo ? 'none' : '';
+                                });
+                                // Submit-knappen: ändra label
+                                var btn = document.getElementById('saveLessonBtn');
+                                if (btn) {
+                                    if (IS_EDITING) {
+                                        btn.textContent = btn.getAttribute('data-label-save');
+                                    } else {
+                                        btn.textContent = isInfo
+                                            ? btn.getAttribute('data-label-create-info')
+                                            : btn.getAttribute('data-label-create-lesson');
+                                    }
+                                }
+                            }
+                            document.querySelectorAll('input[name="lesson_type"]').forEach(function(r){
+                                r.addEventListener('change', function(){ applyLessonType(this.value); });
+                            });
+                            // Kör en gång vid laddning för att synka knapp-label
+                            var checked = document.querySelector('input[name="lesson_type"]:checked');
+                            if (checked) applyLessonType(checked.value);
+                        })();
+                        </script>
 
                         <div class="mb-3">
                             <label for="content" class="form-label fw-normal">Innehåll</label>
@@ -575,17 +671,17 @@ if ($isAdmin) {
                             </div>
                         </div>
 
-                        <div class="mb-3">
+                        <div class="mb-3 lesson-only-field"<?= $lessonType === 'info_page' ? ' style="display:none;"' : '' ?>>
                             <label for="ai_instruction" class="form-label fw-normal">AI Instruktion<br><span class="form-text fw-normal">Instruktioner som visas för användaren i AI-chatten.</span></label>
                             <?php require_once 'include/editor.php'; renderEditor($aiInstruction ?? '', 'ai_instruction', 'aiInstructionEditor'); ?>
-                            
+
                         </div>
 
-                        <div class="mb-3">
+                        <div class="mb-3 lesson-only-field"<?= $lessonType === 'info_page' ? ' style="display:none;"' : '' ?>>
                             <label for="ai_prompt" class="form-label fw-normal">AI Prompt<br><span class="form-text fw-normal">Prompt som skickas till AI:n för att styra svaren. (Be gärna ett AI om hjälp)</span></label>
-                            
+
                             <?php require_once 'include/editor.php'; renderEditor($aiPrompt ?? '', 'ai_prompt', 'aiPromptEditor'); ?>
-                           
+
                         </div>
 
                         <!-- Quizfrågor: hanteras i dedikerad vy -->
@@ -600,7 +696,7 @@ if ($isAdmin) {
                             }
                         }
                         ?>
-                        <div class="mb-3 p-3 border rounded bg-light">
+                        <div class="mb-3 p-3 border rounded bg-light lesson-only-field"<?= $lessonType === 'info_page' ? ' style="display:none;"' : '' ?>>
                             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                                 <div>
                                     <strong><i class="bi bi-patch-question me-1 text-primary"></i>Quizfrågor</strong>
@@ -645,8 +741,14 @@ if ($isAdmin) {
                         </div>
 
                         <div class="mt-4 d-flex justify-content-between">
-                            <button type="submit" class="btn btn-primary">
-                                <?= $id ? 'Spara ändringar' : 'Skapa lektion' ?>
+                            <?php
+                            $createLabel = $lessonType === 'info_page' ? 'Skapa sida' : 'Skapa lektion';
+                            ?>
+                            <button type="submit" class="btn btn-primary" id="saveLessonBtn"
+                                    data-label-create-lesson="Skapa lektion"
+                                    data-label-create-info="Skapa sida"
+                                    data-label-save="Spara ändringar">
+                                <?= $id ? 'Spara ändringar' : $createLabel ?>
                             </button>
                             <a href="lessons.php" class="btn btn-secondary">Avbryt</a>
                         </div>

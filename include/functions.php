@@ -1690,9 +1690,14 @@ function enrollUserInSequentialCourse($userId, $courseId, $startDate = null) {
         return true; // Redan inskriven
     }
 
-    // Hämta alla lektioner sorterade
+    // Hämta bara lektioner (inte infosidor) sorterade — infosidor ingår i
+    // innehållet men har inga egna schedule-rader; deras tillgänglighet
+    // härleds från den lektion de tillhör (eller är alltid tillgängliga om
+    // fristående, typ en välkomstsida).
     $lessons = query(
-        "SELECT id FROM " . DB_DATABASE . ".lessons WHERE course_id = ? ORDER BY sort_order ASC",
+        "SELECT id FROM " . DB_DATABASE . ".lessons
+         WHERE course_id = ? AND lesson_type = 'lesson'
+         ORDER BY sort_order ASC",
         [$courseId]
     );
 
@@ -1835,6 +1840,48 @@ function hasPublicCourseAccess($userId, $courseId) {
         [(int)$userId, (int)$courseId]
     );
     return $row !== null && $row !== false;
+}
+
+/**
+ * Kontrollera om användaren har rättighet att se en specifik kurs —
+ * samma logik som i course.php (domän- eller publik åtkomst, respekterar
+ * course_shared_domains).
+ *
+ * @param int $userId
+ * @param int $courseId
+ * @return bool
+ */
+function userCanAccessCourse($userId, $courseId) {
+    $user = queryOne(
+        "SELECT email, access_mode FROM " . DB_DATABASE . ".users WHERE id = ? LIMIT 1",
+        [(int)$userId]
+    );
+    if (!$user) return false;
+
+    if (($user['access_mode'] ?? 'domain') === 'public_only') {
+        return hasPublicCourseAccess($userId, $courseId);
+    }
+
+    $course = queryOne(
+        "SELECT organization_domain FROM " . DB_DATABASE . ".courses WHERE id = ? LIMIT 1",
+        [(int)$courseId]
+    );
+    if (!$course) return false;
+
+    $orgScope = getOrgScopeDomains($user['email']);
+    $inOwnOrg = in_array($course['organization_domain'], $orgScope, true);
+
+    if ($inOwnOrg) {
+        $sharedDoms = getCourseSharedDomains($courseId);
+        if (!empty($sharedDoms)) {
+            $userDomain = getUserDomain($user['email']);
+            if (!in_array($userDomain, $sharedDoms, true)) {
+                $inOwnOrg = false;
+            }
+        }
+    }
+
+    return $inOwnOrg || hasPublicCourseAccess($userId, $courseId);
 }
 
 /**
@@ -1992,10 +2039,11 @@ function unlockNextSequentialLesson($userId, $courseId, $completedLessonId) {
     );
     $intervalDays = $course ? (int)$course['sequential_interval_days'] : 7;
 
-    // Hitta nästa lektion (via sort_order)
+    // Hitta nästa lektion (via sort_order) — hoppa över infosidor; de har
+    // inga schedule-rader och låses upp indirekt via sin parent-lektion.
     $nextLesson = queryOne(
         "SELECT l.id FROM " . DB_DATABASE . ".lessons l
-         WHERE l.course_id = ? AND l.sort_order > (
+         WHERE l.course_id = ? AND l.lesson_type = 'lesson' AND l.sort_order > (
              SELECT l2.sort_order FROM " . DB_DATABASE . ".lessons l2 WHERE l2.id = ?
          )
          ORDER BY l.sort_order ASC LIMIT 1",
@@ -2032,6 +2080,20 @@ function isLessonAvailableForUser($userId, $lessonId, $courseId) {
         return true; // Ej stegvis - alltid tillgänglig
     }
 
+    // För infosidor: härled tillgängligheten från den lektion sidan tillhör.
+    // Fristående infosidor (belongs_to_lesson_id = NULL) är alltid
+    // tillgängliga så snart användaren har kursåtkomst.
+    $lessonRow = queryOne(
+        "SELECT lesson_type, belongs_to_lesson_id FROM " . DB_DATABASE . ".lessons WHERE id = ?",
+        [$lessonId]
+    );
+    if ($lessonRow && ($lessonRow['lesson_type'] ?? 'lesson') === 'info_page') {
+        if (empty($lessonRow['belongs_to_lesson_id'])) {
+            return true;
+        }
+        return isLessonAvailableForUser($userId, (int)$lessonRow['belongs_to_lesson_id'], $courseId);
+    }
+
     // Kontrollera schedule
     $schedule = queryOne(
         "SELECT available_at FROM " . DB_DATABASE . ".sequential_lesson_schedule
@@ -2048,6 +2110,35 @@ function isLessonAvailableForUser($userId, $lessonId, $courseId) {
     }
 
     return strtotime($schedule['available_at']) <= time();
+}
+
+/**
+ * Returnerar ID:t för den "ingång" (sida) som hör till en given lektion — dvs
+ * den första infosidan som tillhör lektionen och ligger före den i sort_order,
+ * eller själva lektionens ID om inga sådana infosidor finns. Används för att
+ * bygga länkar i stegvis-e-post så att användaren kommer in via sin ev.
+ * intro-infosida istället för direkt på själva lektionen.
+ *
+ * @param int $courseId
+ * @param int $lessonId
+ * @return int Entry page-id
+ */
+function getSequentialEntryPageForLesson($courseId, $lessonId) {
+    $lesson = queryOne(
+        "SELECT sort_order FROM " . DB_DATABASE . ".lessons WHERE id = ?",
+        [$lessonId]
+    );
+    if (!$lesson) return (int)$lessonId;
+
+    $firstInfo = queryOne(
+        "SELECT id FROM " . DB_DATABASE . ".lessons
+         WHERE course_id = ? AND lesson_type = 'info_page'
+           AND belongs_to_lesson_id = ? AND sort_order < ?
+           AND status = 'active'
+         ORDER BY sort_order ASC LIMIT 1",
+        [$courseId, $lessonId, $lesson['sort_order']]
+    );
+    return $firstInfo ? (int)$firstInfo['id'] : (int)$lessonId;
 }
 
 /**
@@ -2176,7 +2267,12 @@ function processEmailQueue($courseId, $batchSize = 10, $delaySeconds = 30, $logC
                 [$item['id']]
             );
 
-            $lessonUrl = $systemUrl . '/lesson.php?id=' . $item['lesson_id'];
+            // Länka till "entry page" för lektionen — om det finns en
+            // infosida som tillhör lektionen och ligger före den i
+            // sort_order, använd den istället (så användaren går via
+            // intro-sidan). Annars direkt till lektionen.
+            $entryLessonId = getSequentialEntryPageForLesson($item['course_id'], $item['lesson_id']);
+            $lessonUrl = $systemUrl . '/lesson.php?id=' . $entryLessonId;
             $courseUrl = $systemUrl . '/course.php?id=' . $item['course_id'];
             $userName = $item['user_name'] ?: 'användare';
             $lessonNumber = $item['sort_order'] ?? 1;
@@ -2338,7 +2434,8 @@ function buildSequentialEmailHtml($bodyText, $systemName) {
  * @return string Fullständigt HTML-mail
  */
 function buildDefaultSequentialEmailHtml($item, $vars, $systemName, $systemUrl) {
-    $lessonUrl = $systemUrl . '/lesson.php?id=' . $item['lesson_id'];
+    $entryLessonId = getSequentialEntryPageForLesson($item['course_id'], $item['lesson_id']);
+    $lessonUrl = $systemUrl . '/lesson.php?id=' . $entryLessonId;
     $userName = $item['user_name'] ?: 'användare';
 
     if ($item['email_type'] === 'new_lesson') {

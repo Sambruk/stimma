@@ -139,16 +139,12 @@ if (!$isPreviewMode) {
 
 // Handle sequential course enrollment and access control (skip in preview mode)
 if (!$isPreviewMode && !empty($lesson['sequential_mode'])) {
-    // Check if this is the first lesson in the course (for enrollment)
-    $firstLesson = queryOne(
-        "SELECT id FROM " . DB_DATABASE . ".lessons WHERE course_id = ? ORDER BY sort_order ASC LIMIT 1",
-        [$lesson['course_id']]
-    );
-
-    if ($firstLesson && $firstLesson['id'] == $lessonId) {
-        // First lesson - enroll user if not already enrolled
-        enrollUserInSequentialCourse($userId, $lesson['course_id']);
-    }
+    // Auto-enroll: om användaren inte är inskriven i kursen, skriv in hen.
+    // Funktionen är idempotent (returnerar direkt om schedule redan finns),
+    // så vi kan trigga den vid vilken sida som helst — det betyder att även
+    // en fristående infosida som ligger först i sort_order (ev. välkomstsida)
+    // triggar inskrivningen för stegvisa kurser.
+    enrollUserInSequentialCourse($userId, $lesson['course_id']);
 
     // Check if the lesson is available
     if (!isLessonAvailableForUser($userId, $lessonId, $lesson['course_id'])) {
@@ -170,6 +166,59 @@ if (!$isPreviewMode) {
 
     // Check if lesson is completed
     $isCompleted = $progress && $progress['status'] === 'completed';
+}
+
+/**
+ * Hittar nästa sida i sort_order i samma kurs (oavsett typ: lektion
+ * eller informationssida). Används för att låta användaren stega
+ * igenom infosidor mellan lektioner.
+ */
+function findNextPageInCourse($courseId, $currentSortOrder) {
+    return queryOne(
+        "SELECT id, title, lesson_type FROM " . DB_DATABASE . ".lessons
+         WHERE course_id = ? AND sort_order > ? AND status = 'active'
+         ORDER BY sort_order ASC LIMIT 1",
+        [$courseId, $currentSortOrder]
+    );
+}
+
+// Infosida-completion: enkel POST-handler. Registrerar progress som
+// 'completed' för infosidan och returnerar URL till nästa sida.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_info_page_complete'])) {
+    header('Content-Type: application/json');
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        echo json_encode(['success' => false, 'message' => 'Ogiltig säkerhetstoken.']);
+        exit;
+    }
+    if (($lesson['lesson_type'] ?? 'lesson') !== 'info_page') {
+        echo json_encode(['success' => false, 'message' => 'Sidan är ingen informationssida.']);
+        exit;
+    }
+    if (!$isPreviewMode) {
+        $existing = queryOne(
+            "SELECT id FROM " . DB_DATABASE . ".progress WHERE user_id = ? AND lesson_id = ?",
+            [$userId, $lessonId]
+        );
+        if ($existing) {
+            execute(
+                "UPDATE " . DB_DATABASE . ".progress SET status = 'completed', score = 1 WHERE user_id = ? AND lesson_id = ?",
+                [$userId, $lessonId]
+            );
+        } else {
+            execute(
+                "INSERT INTO " . DB_DATABASE . ".progress (user_id, lesson_id, status, score) VALUES (?, ?, 'completed', 1)",
+                [$userId, $lessonId]
+            );
+        }
+    }
+
+    $nextPage = findNextPageInCourse($lesson['course_id'], $lesson['sort_order']);
+    echo json_encode([
+        'success' => true,
+        'nextPageUrl' => $nextPage ? ('lesson.php?id=' . (int)$nextPage['id']) : ('course.php?id=' . (int)$lesson['course_id']),
+        'nextPageTitle' => $nextPage ? $nextPage['title'] : null,
+    ]);
+    exit;
 }
 
 /**
@@ -307,9 +356,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['answer_question_id'])
                 unlockNextSequentialLesson($userId, $lesson['course_id'], $lessonId);
             }
 
-            // Hitta nästa lektion
+            // Hitta nästa sida — kan vara en lektion eller en infosida.
+            // Användaren ska kunna stega genom infosidor som ligger mellan
+            // lektioner i sort_order (ex. outro-sida efter en lektion).
             $nextRow = queryOne(
-                "SELECT id, title FROM " . DB_DATABASE . ".lessons
+                "SELECT id, title, lesson_type FROM " . DB_DATABASE . ".lessons
                  WHERE course_id = ? AND sort_order > ? AND status = 'active'
                  ORDER BY sort_order ASC LIMIT 1",
                 [$lesson['course_id'], $lesson['sort_order']]
@@ -648,7 +699,7 @@ function convertYoutubeUrl($url) {
         <div class="col-lg-2 d-none d-lg-block">
             <?php
             $navLessons = query(
-                "SELECT id, title, sort_order FROM " . DB_DATABASE . ".lessons
+                "SELECT id, title, sort_order, lesson_type, belongs_to_lesson_id FROM " . DB_DATABASE . ".lessons
                  WHERE course_id = ? AND status = 'active' ORDER BY sort_order ASC, id ASC",
                 [$lesson['course_id']]
             );
@@ -662,42 +713,68 @@ function convertYoutubeUrl($url) {
             foreach ($navProgressRows as $pr) {
                 if ($pr['status'] === 'completed') $navCompletedIds[(int)$pr['lesson_id']] = true;
             }
+            // Räkna bara riktiga lektioner i "X av Y klara"-summan — infosidor
+            // räknas inte som lektioner.
+            $realLessons = array_values(array_filter($navLessons, function($nl) { return ($nl['lesson_type'] ?? 'lesson') === 'lesson'; }));
+            $realLessonCount = count($realLessons);
+            $realDoneCount = 0;
+            foreach ($realLessons as $rl) {
+                if (isset($navCompletedIds[(int)$rl['id']])) $realDoneCount++;
+            }
+            // Numrering: bara riktiga lektioner får ett nummer i sidomenyn.
+            $lessonNumberByIdx = [];
+            $num = 0;
+            foreach ($navLessons as $i => $nl) {
+                if (($nl['lesson_type'] ?? 'lesson') === 'lesson') {
+                    $num++;
+                    $lessonNumberByIdx[$i] = $num;
+                }
+            }
             ?>
             <div class="card shadow-sm lesson-nav" style="position: sticky; top: 1rem;">
                 <div class="card-header py-2 px-3 small">
-                    <i class="bi bi-list-ol me-1 text-primary"></i><strong>Lektioner</strong>
+                    <i class="bi bi-list-ol me-1 text-primary"></i><strong>Innehåll</strong>
                 </div>
                 <ol class="list-group list-group-flush m-0" style="list-style: none; padding-left: 0;">
                     <?php foreach ($navLessons as $idx => $nl):
                         $isCurrent = (int)$nl['id'] === (int)$lessonId;
                         $isDone = isset($navCompletedIds[(int)$nl['id']]);
-                        // Regel: klickbar om lektionen är genomförd ELLER om det är
-                        // nuvarande lektion (redirect till sig själv är no-op). Lekt-
-                        // ioner som inte är genomförda och inte är aktuell = låsta.
-                        $isClickable = $isDone && !$isCurrent;
+                        $isInfo = ($nl['lesson_type'] ?? 'lesson') === 'info_page';
+                        // Regel: klickbar om den är tillgänglig via schedule-regler
+                        // (isLessonAvailableForUser hanterar infosidor via rekursion).
+                        // Nuvarande sida är självklart inte klickbar.
+                        $isAvailable = isLessonAvailableForUser($userId, (int)$nl['id'], $lesson['course_id']);
+                        $isClickable = !$isCurrent && $isAvailable;
+                        $numLabel = $isInfo ? '' : ($lessonNumberByIdx[$idx] . '. ');
                     ?>
-                    <li class="list-group-item py-2 px-2 small <?= $isCurrent ? 'bg-primary bg-opacity-10 border-start border-primary border-3' : '' ?>">
+                    <li class="list-group-item py-2 px-2 small <?= $isCurrent ? 'bg-primary bg-opacity-10 border-start border-primary border-3' : ($isInfo ? 'bg-info bg-opacity-10' : '') ?>">
                         <?php if ($isClickable): ?>
                             <a href="lesson.php?id=<?= (int)$nl['id'] ?>" class="text-decoration-none d-flex align-items-start gap-1 text-dark">
-                                <i class="bi bi-check-circle-fill text-success flex-shrink-0" style="line-height: 1.3;"></i>
-                                <span><?= ($idx + 1) ?>. <?= htmlspecialchars($nl['title']) ?></span>
+                                <?php if ($isDone): ?>
+                                    <i class="bi bi-check-circle-fill text-success flex-shrink-0" style="line-height: 1.3;"></i>
+                                <?php elseif ($isInfo): ?>
+                                    <i class="bi bi-info-circle text-info flex-shrink-0" style="line-height: 1.3;" title="Informationssida"></i>
+                                <?php else: ?>
+                                    <i class="bi bi-circle flex-shrink-0" style="line-height: 1.3;"></i>
+                                <?php endif; ?>
+                                <span><?= $numLabel ?><?= htmlspecialchars($nl['title']) ?></span>
                             </a>
                         <?php elseif ($isCurrent): ?>
                             <div class="d-flex align-items-start gap-1 fw-semibold">
-                                <i class="bi bi-play-circle-fill text-primary flex-shrink-0" style="line-height: 1.3;"></i>
-                                <span><?= ($idx + 1) ?>. <?= htmlspecialchars($nl['title']) ?></span>
+                                <i class="bi <?= $isInfo ? 'bi-info-circle-fill text-info' : 'bi-play-circle-fill text-primary' ?> flex-shrink-0" style="line-height: 1.3;"></i>
+                                <span><?= $numLabel ?><?= htmlspecialchars($nl['title']) ?></span>
                             </div>
                         <?php else: ?>
-                            <div class="d-flex align-items-start gap-1 text-muted" title="Låst — klarar du föregående lektion låses den upp">
+                            <div class="d-flex align-items-start gap-1 text-muted" title="Låst — låses upp när föregående lektion är klar">
                                 <i class="bi bi-lock-fill flex-shrink-0" style="line-height: 1.3;"></i>
-                                <span><?= ($idx + 1) ?>. <?= htmlspecialchars($nl['title']) ?></span>
+                                <span><?= $numLabel ?><?= htmlspecialchars($nl['title']) ?></span>
                             </div>
                         <?php endif; ?>
                     </li>
                     <?php endforeach; ?>
                 </ol>
                 <div class="card-footer py-2 px-3 small text-muted text-center">
-                    <?= count($navCompletedIds) ?> av <?= count($navLessons) ?> klara
+                    <?= $realDoneCount ?> av <?= $realLessonCount ?> <?= $realLessonCount === 1 ? 'lektion' : 'lektioner' ?> klara
                 </div>
             </div>
         </div>
@@ -717,8 +794,8 @@ function convertYoutubeUrl($url) {
                             unset($_SESSION['flash_message'], $_SESSION['flash_type']);
                         endif; ?>
                         
-                        <!-- Completion status badge -->
-                        <?php if ($isCompleted): ?>
+                        <!-- Completion status badge (visas inte på infosidor) -->
+                        <?php if ($isCompleted && ($lesson['lesson_type'] ?? 'lesson') !== 'info_page'): ?>
                         <div class="text-end mb-3">
                             <span class="badge bg-success"><i class="bi bi-check-circle-fill me-1"></i> Avklarad</span>
                         </div>
@@ -851,6 +928,18 @@ function convertYoutubeUrl($url) {
                 </div>
                 <?php endif; ?>
                 
+                <?php if (($lesson['lesson_type'] ?? 'lesson') === 'info_page'): ?>
+                <!-- Informationssida: "Fortsätt"-knapp istället för quiz -->
+                <div class="card">
+                    <div class="card-body text-center">
+                        <p class="text-muted mb-3"><i class="bi bi-info-circle me-1 text-info"></i>Detta är en informationssida. När du har läst klart — klicka för att fortsätta.</p>
+                        <button type="button" class="btn btn-primary" id="infoPageContinueBtn">
+                            <i class="bi bi-arrow-right-circle me-1"></i>Fortsätt
+                        </button>
+                        <div id="infoPageContinueResult" class="mt-3" style="display: none;"></div>
+                    </div>
+                </div>
+                <?php else: ?>
                 <!-- Quiz-sektion (flera frågor per lektion) -->
                 <?php
                 $lessonQuestions = getQuizQuestionsForLesson($lessonId);
@@ -883,28 +972,28 @@ function convertYoutubeUrl($url) {
                         <?php endif; ?>
                     </div>
                 </div>
+                <?php endif; ?>
 
                 <!-- Interaktions-JS för drag-drop, hotspot etc -->
                 <script src="include/js/quiz-client.js" defer></script>
                 
                 <!-- Progress bar for course completion -->
                 <?php
-                // Get all lessons in this course
+                // Räkna bara riktiga lektioner — infosidor är informativa steg
+                // men ingår inte i "antal klara lektioner"-mätaren.
                 $allLessons = query("
-                    SELECT id FROM " . DB_DATABASE . ".lessons 
-                    WHERE course_id = ? 
-                    ORDER BY sort_order", 
+                    SELECT id FROM " . DB_DATABASE . ".lessons
+                    WHERE course_id = ? AND lesson_type = 'lesson'
+                    ORDER BY sort_order",
                     [$lesson['course_id']]);
-                
-                // Count total lessons in the course
+
                 $totalLessons = count($allLessons);
-                
-                // Count completed lessons
+
                 $completedLessons = 0;
                 foreach ($allLessons as $courseLesson) {
                     $lessonProgress = queryOne("
-                        SELECT status FROM " . DB_DATABASE . ".progress 
-                        WHERE user_id = ? AND lesson_id = ?", 
+                        SELECT status FROM " . DB_DATABASE . ".progress
+                        WHERE user_id = ? AND lesson_id = ?",
                         [$userId, $courseLesson['id']]);
                     if ($lessonProgress && $lessonProgress['status'] === 'completed') {
                         $completedLessons++;
@@ -1196,6 +1285,44 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 quizSection.insertBefore(errorDiv, quizSection.querySelector('.quiz-question'));
             });
+        });
+    }
+
+    // Informationssida: Fortsätt-knapp markerar sidan som visad och
+    // navigerar till nästa sida i sort_order.
+    var infoBtn = document.getElementById('infoPageContinueBtn');
+    if (infoBtn) {
+        infoBtn.addEventListener('click', function() {
+            var result = document.getElementById('infoPageContinueResult');
+            infoBtn.disabled = true;
+            infoBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sparar...';
+            var fd = new FormData();
+            fd.append('mark_info_page_complete', '1');
+            fd.append('csrf_token', '<?= generateCsrfToken() ?>');
+            fetch('lesson.php?id=<?= (int)$lessonId ?>', { method: 'POST', body: fd })
+                .then(function(r){ return r.json(); })
+                .then(function(data){
+                    if (data && data.success) {
+                        window.location.href = data.nextPageUrl || 'course.php?id=<?= (int)$lesson['course_id'] ?>';
+                    } else {
+                        if (result) {
+                            result.style.display = 'block';
+                            result.className = 'alert alert-danger mt-3';
+                            result.textContent = (data && data.message) ? data.message : 'Något gick fel. Försök igen.';
+                        }
+                        infoBtn.disabled = false;
+                        infoBtn.innerHTML = '<i class="bi bi-arrow-right-circle me-1"></i>Fortsätt';
+                    }
+                })
+                .catch(function(){
+                    if (result) {
+                        result.style.display = 'block';
+                        result.className = 'alert alert-danger mt-3';
+                        result.textContent = 'Nätverksfel. Försök igen.';
+                    }
+                    infoBtn.disabled = false;
+                    infoBtn.innerHTML = '<i class="bi bi-arrow-right-circle me-1"></i>Fortsätt';
+                });
         });
     }
 });
