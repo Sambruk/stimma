@@ -583,11 +583,15 @@ require_once 'include/header.php';
         </div>
     </div>
     <script>
-    // Sortera frågor via jquery-ui sortable (redan inkluderad i admin-footer)
-    (function() {
+    // Sortera frågor via jquery-ui sortable. jQuery + jQuery UI laddas i
+    // admin-footern (efter denna script-tag), så initieringen måste vänta
+    // tills dokumentet är färdigt — annars är jQuery.fn.sortable undefined.
+    function initQuestionListSortable() {
         if (typeof jQuery === 'undefined' || !jQuery.fn.sortable) return;
         var $ = jQuery;
-        $('#question-list').sortable({
+        var $list = $('#question-list');
+        if (!$list.length || $list.data('ui-sortable')) return;
+        $list.sortable({
             handle: '.handle',
             axis: 'y',
             cursor: 'grabbing',
@@ -598,7 +602,6 @@ require_once 'include/header.php';
                 $('#question-list li').each(function() {
                     ids.push($(this).data('qid'));
                 });
-                // Uppdatera nummerbadges
                 $('#question-list .question-order-badge').each(function(i) { $(this).text(i + 1); });
 
                 var fd = new FormData();
@@ -623,7 +626,22 @@ require_once 'include/header.php';
                     });
             }
         });
-    })();
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initQuestionListSortable);
+    } else {
+        initQuestionListSortable();
+    }
+    // Poll-fallback om footer-scripten ännu inte har hunnit köra
+    // (DOMContentLoaded kan racea mot sen script-execution på vissa browsrar)
+    var __sortableTries = 0;
+    var __sortableInterval = setInterval(function() {
+        if (typeof jQuery !== 'undefined' && jQuery.fn.sortable) {
+            initQuestionListSortable();
+            clearInterval(__sortableInterval);
+        }
+        if (++__sortableTries > 40) clearInterval(__sortableInterval);
+    }, 100);
     </script>
     <?php endif; ?>
     <?php endif; ?>
