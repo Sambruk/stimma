@@ -112,6 +112,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $title = trim($_POST['title'] ?? '');
     $description = trim($_POST['description'] ?? '');
+    $completionContentRaw = trim($_POST['completion_content'] ?? '');
+    // Behandla tomt / bara whitespace / tom <p>-tagg som NULL → default-text används.
+    $completionContent = $completionContentRaw;
+    if ($completionContent === '' || preg_match('/^\s*(<p[^>]*>\s*(&nbsp;)?\s*<\/p>\s*)+$/i', $completionContent)) {
+        $completionContent = null;
+    }
     $status = isset($_POST['status']) && $_POST['status'] === 'active' ? 'active' : 'inactive';
     $deadline = !empty($_POST['deadline']) ? $_POST['deadline'] : null;
     $sequentialMode = isset($_POST['sequential_mode']) ? 1 : 0;
@@ -190,6 +196,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 execute("UPDATE " . DB_DATABASE . ".courses SET
                         title = ?,
                         description = ?,
+                        completion_content = ?,
                         status = ?,
                         deadline = ?,
                         start_date = ?,
@@ -205,7 +212,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         image_url = ?,
                         updated_at = NOW()
                         WHERE id = ?",
-                        [$title, $description, $status, $deadline, $startDate, $sequentialMode, $sequentialIntervalDays, $sequentialReminderDelayDays, $seqNewLessonSubject, $seqNewLessonBody, $seqReminderSubject, $seqReminderBody, $sequentialStatus, $enrollmentType, $imageUrl, $_GET['id']]);
+                        [$title, $description, $completionContent, $status, $deadline, $startDate, $sequentialMode, $sequentialIntervalDays, $sequentialReminderDelayDays, $seqNewLessonSubject, $seqNewLessonBody, $seqReminderSubject, $seqReminderBody, $sequentialStatus, $enrollmentType, $imageUrl, $_GET['id']]);
 
                 // Uppdatera kursens taggar
                 // Ta bort befintliga taggar
@@ -270,9 +277,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // original_organization_domain sätts permanent till skaparens org
                 // och får aldrig skrivas över senare.
                 execute("INSERT INTO " . DB_DATABASE . ".courses
-                        (title, description, status, deadline, start_date, sequential_mode, sequential_interval_days, sequential_reminder_delay_days, seq_new_lesson_subject, seq_new_lesson_body, seq_reminder_subject, seq_reminder_body, sequential_status, enrollment_type, sort_order, image_url, author_id, organization_domain, original_organization_domain, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
-                        [$title, $description, $status, $deadline, $startDate, $sequentialMode, $sequentialIntervalDays, $sequentialReminderDelayDays, $seqNewLessonSubject, $seqNewLessonBody, $seqReminderSubject, $seqReminderBody, $sequentialStatus, $enrollmentType, $maxOrder + 1, $imageUrl, $authorId, $organizationDomain, $organizationDomain]);
+                        (title, description, completion_content, status, deadline, start_date, sequential_mode, sequential_interval_days, sequential_reminder_delay_days, seq_new_lesson_subject, seq_new_lesson_body, seq_reminder_subject, seq_reminder_body, sequential_status, enrollment_type, sort_order, image_url, author_id, organization_domain, original_organization_domain, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                        [$title, $description, $completionContent, $status, $deadline, $startDate, $sequentialMode, $sequentialIntervalDays, $sequentialReminderDelayDays, $seqNewLessonSubject, $seqNewLessonBody, $seqReminderSubject, $seqReminderBody, $sequentialStatus, $enrollmentType, $maxOrder + 1, $imageUrl, $authorId, $organizationDomain, $organizationDomain]);
 
                 // Hämta det nya kurs-ID:t
                 $newCourseId = getDb()->lastInsertId();
@@ -541,6 +548,15 @@ require_once 'include/header.php';
                         </div>
 
                         <div class="mb-3">
+                            <label for="completion_content" class="form-label">Avslutssida</label>
+                            <div class="alert alert-info py-2 mb-2 small">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Visas för kursdeltagaren när sista lektionen är avklarad — tillsammans med länk till diplomet. Lämna tomt för att använda standardtexten.
+                            </div>
+                            <?php require_once 'include/editor.php'; renderEditor($course['completion_content'] ?? '', 'completion_content', 'completionEditor', true); ?>
+                        </div>
+
+                        <div class="mb-3">
                             <label for="deadline" class="form-label">Slutdatum</label>
                             <input type="date" class="form-control" id="deadline" name="deadline"
                                    value="<?= htmlspecialchars($course['deadline'] ?? '') ?>">
@@ -697,15 +713,23 @@ require_once 'include/header.php';
                                     <?php endif; ?>
                                     </div>
 
-                                    <!-- Löpande registrering (rolling) -->
-                                    <div id="rollingEnrollSection" style="display: <?= ($course['enrollment_type'] ?? 'bulk_start') === 'rolling' ? 'block' : 'none' ?>;">
+                                    <!-- Manuell inskrivning (både bulk_start och rolling) -->
+                                    <div id="manualEnrollSection">
+                                    <?php
+                                    $currentEnrollmentType = $course['enrollment_type'] ?? 'bulk_start';
+                                    $courseStartDate = $course['start_date'] ?? '';
+                                    $bulkStartReachable = $courseStartDate && strtotime($courseStartDate) >= strtotime(date('Y-m-d'));
+                                    ?>
                                     <?php if (isset($_GET['id'])): ?>
                                     <div class="card mb-3 border-primary">
                                         <div class="card-header bg-primary bg-opacity-10">
                                             <h6 class="m-0"><i class="bi bi-person-plus me-2"></i>Skriv in användare</h6>
                                         </div>
                                         <div class="card-body">
-                                            <p class="text-muted small">Sök och välj användare att skriva in i kursen. Varje användare startar det valda datumet och får lektioner med det inställda intervallet.</p>
+                                            <p class="text-muted small mb-3">
+                                                <span id="enrollDescRolling" style="display: <?= $currentEnrollmentType === 'rolling' ? 'inline' : 'none' ?>;">Sök och välj användare att skriva in i kursen. Varje användare startar det valda datumet och får lektioner med det inställda intervallet.</span>
+                                                <span id="enrollDescBulk" style="display: <?= $currentEnrollmentType === 'rolling' ? 'none' : 'inline' ?>;">Sök och välj användare att skriva in i kursen. Användare skrivs in och startar tillsammans på kursens gemensamma startdatum.</span>
+                                            </p>
                                             <div class="row g-2 mb-3">
                                                 <div class="col-md-5">
                                                     <label class="form-label small">Användare</label>
@@ -714,10 +738,22 @@ require_once 'include/header.php';
                                                     <div id="rollingUserResults" class="list-group position-absolute mt-1" style="z-index: 1050; display: none;"></div>
                                                     <input type="hidden" id="rollingUserEmail" value="">
                                                 </div>
-                                                <div class="col-md-3">
+                                                <div class="col-md-3" id="rollingDateCol" style="display: <?= $currentEnrollmentType === 'rolling' ? 'block' : 'none' ?>;">
                                                     <label class="form-label small">Startdatum</label>
                                                     <input type="date" class="form-control" id="rollingStartDate"
                                                            value="<?= date('Y-m-d') ?>">
+                                                </div>
+                                                <div class="col-md-3" id="bulkDateInfoCol" style="display: <?= $currentEnrollmentType === 'rolling' ? 'none' : 'block' ?>;">
+                                                    <label class="form-label small">Startdatum</label>
+                                                    <div class="form-control-plaintext small py-1">
+                                                        <?php if ($bulkStartReachable): ?>
+                                                            <i class="bi bi-calendar-event me-1 text-primary"></i><strong><?= htmlspecialchars($courseStartDate) ?></strong>
+                                                            <div class="text-muted" style="font-size: 0.75rem;">tillsammans med övriga</div>
+                                                        <?php else: ?>
+                                                            <i class="bi bi-lightning-charge me-1 text-warning"></i><strong>Direkt</strong>
+                                                            <div class="text-muted" style="font-size: 0.75rem;"><?= $courseStartDate ? 'startdatum passerat' : 'inget startdatum satt' ?></div>
+                                                        <?php endif; ?>
+                                                    </div>
                                                 </div>
                                                 <?php if (!empty($availableOrgTags)): ?>
                                                 <div class="col-md-2">
@@ -807,10 +843,16 @@ require_once 'include/header.php';
                                 var isRolling = this.value === 'rolling';
                                 var bulkDateField = document.getElementById('bulkStartDateField');
                                 var bulkStartSection = document.getElementById('bulkStartSection');
-                                var rollingSection = document.getElementById('rollingEnrollSection');
+                                var rollingDateCol = document.getElementById('rollingDateCol');
+                                var bulkDateInfoCol = document.getElementById('bulkDateInfoCol');
+                                var descRolling = document.getElementById('enrollDescRolling');
+                                var descBulk = document.getElementById('enrollDescBulk');
                                 if (bulkDateField) bulkDateField.style.display = isRolling ? 'none' : 'block';
                                 if (bulkStartSection) bulkStartSection.style.display = isRolling ? 'none' : 'block';
-                                if (rollingSection) rollingSection.style.display = isRolling ? 'block' : 'none';
+                                if (rollingDateCol) rollingDateCol.style.display = isRolling ? 'block' : 'none';
+                                if (bulkDateInfoCol) bulkDateInfoCol.style.display = isRolling ? 'none' : 'block';
+                                if (descRolling) descRolling.style.display = isRolling ? 'inline' : 'none';
+                                if (descBulk) descBulk.style.display = isRolling ? 'none' : 'inline';
                             });
                         });
 

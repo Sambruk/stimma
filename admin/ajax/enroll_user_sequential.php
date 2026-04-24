@@ -48,13 +48,6 @@ if (!$courseId) {
     exit;
 }
 
-// Validera startdatum
-if ($startDate && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate)) {
-    echo json_encode(['success' => false, 'message' => 'Ogiltigt datumformat. Använd ÅÅÅÅ-MM-DD.']);
-    exit;
-}
-$startDateTime = $startDate ? $startDate . ' 08:00:00' : date('Y-m-d H:i:s');
-
 // Hämta kurs
 $course = queryOne("SELECT * FROM " . DB_DATABASE . ".courses WHERE id = ?", [$courseId]);
 if (!$course || !$course['sequential_mode']) {
@@ -62,9 +55,28 @@ if (!$course || !$course['sequential_mode']) {
     exit;
 }
 
-if (($course['enrollment_type'] ?? 'bulk_start') !== 'rolling') {
-    echo json_encode(['success' => false, 'message' => 'Kursen är inte inställd på löpande registrering.']);
-    exit;
+// Härled effektivt startdatum utifrån kursens registreringstyp.
+// rolling  → admin väljer datum per användare (inskickat start_date).
+// bulk_start → alla startar tillsammans på kursens start_date; om
+//   passerat/saknas startar användaren direkt.
+$enrollmentType = $course['enrollment_type'] ?? 'bulk_start';
+
+if ($enrollmentType === 'rolling') {
+    if ($startDate && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate)) {
+        echo json_encode(['success' => false, 'message' => 'Ogiltigt datumformat. Använd ÅÅÅÅ-MM-DD.']);
+        exit;
+    }
+    $startDateTime = $startDate ? $startDate . ' 08:00:00' : date('Y-m-d H:i:s');
+} else {
+    // bulk_start
+    $courseStart = $course['start_date'] ?? '';
+    if ($courseStart && strtotime($courseStart) >= strtotime(date('Y-m-d'))) {
+        $startDateTime = $courseStart . ' 08:00:00';
+        $startDate = $courseStart;
+    } else {
+        $startDateTime = date('Y-m-d H:i:s');
+        $startDate = date('Y-m-d');
+    }
 }
 
 // Redaktörskontroll
@@ -167,9 +179,10 @@ if (!empty($firstLessonPairs) && strtotime($startDateTime) <= time()) {
 }
 
 // Logga
-logActivity($_SESSION['user_email'], 'Löpande inskrivning i stegvis kurs', [
-    'action' => 'rolling_enrollment',
+logActivity($_SESSION['user_email'], 'Manuell inskrivning i stegvis kurs', [
+    'action' => 'manual_enrollment',
     'course_id' => $courseId,
+    'enrollment_type' => $enrollmentType,
     'enrolled' => $enrolledCount,
     'already_enrolled' => $alreadyEnrolled,
     'start_date' => $startDate,
