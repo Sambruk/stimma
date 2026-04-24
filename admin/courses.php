@@ -236,19 +236,40 @@ require_once 'include/header.php';
                             <small class="text-muted">Grundinställningar</small>
                         </div>
 
-                        <!-- Kursnamn -->
+                        <!-- Rå kursidé — användaren beskriver fritt, AI formulerar -->
+                        <div class="card mb-3 border-success">
+                            <div class="card-body">
+                                <label for="raw_idea" class="form-label fw-semibold mb-2">
+                                    <i class="bi bi-lightbulb-fill text-warning me-1"></i>
+                                    Beskriv din kursidé
+                                </label>
+                                <div class="form-text mb-2">
+                                    Vilken kurs vill du utveckla? Beskriv med dina egna ord — du behöver inte tänka på att formulera dig väl. Din text används bara för att skapa en beskrivning för kursen och ligga till grund för AI-genereringen.
+                                </div>
+                                <textarea class="form-control" id="raw_idea" rows="4"
+                                          placeholder="T.ex: Jag vill lära våra nyanställda om GDPR — framför allt vad de får och inte får göra med kunduppgifter, med några konkreta exempel från vår bransch..."></textarea>
+                                <div class="d-flex gap-2 align-items-center mt-2">
+                                    <button type="button" class="btn btn-success btn-sm" id="draftDescriptionBtn">
+                                        <i class="bi bi-magic me-1"></i>Skapa förslag på namn och beskrivning
+                                    </button>
+                                    <span id="draftDescriptionStatus" class="small text-muted"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Kursnamn (fylls i av AI-förslag eller manuellt) -->
                         <div class="mb-3">
                             <label for="course_name" class="form-label">Kursnamn <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="course_name" name="course_name" required maxlength="255"
-                                   placeholder="T.ex. Introduktion till projektledning">
+                                   placeholder="Fyll i manuellt eller tryck på knappen ovan">
                         </div>
 
                         <!-- Beskrivning -->
                         <div class="mb-3">
                             <label for="course_description" class="form-label">Beskrivning av kursen <span class="text-danger">*</span></label>
                             <textarea class="form-control" id="course_description" name="course_description" rows="4" required
-                                      placeholder="Beskriv vad kursen ska handla om, vilka ämnen som ska täckas, målgrupp etc."></textarea>
-                            <div class="form-text">Ju mer detaljerad beskrivning, desto bättre resultat från AI.</div>
+                                      placeholder="Fyll i manuellt eller tryck på knappen ovan"></textarea>
+                            <div class="form-text">Redigera fritt — AI använder den här beskrivningen som grund för genereringen.</div>
                         </div>
 
                         <div class="row">
@@ -534,6 +555,47 @@ $extra_scripts = '<script>
             console.error("Error checking status:", error);
         });
     }
+
+    // "Skapa förslag"-knappen: skickar fri idétext → AI returnerar
+    // kursnamn + beskrivning som fyller fälten.
+    document.addEventListener("click", function(ev) {
+        var btn = ev.target.closest("#draftDescriptionBtn");
+        if (!btn) return;
+        var rawIdea = document.getElementById("raw_idea").value.trim();
+        var status = document.getElementById("draftDescriptionStatus");
+        if (rawIdea.length < 10) {
+            status.innerHTML = "<span class=\"text-danger\"><i class=\"bi bi-exclamation-circle me-1\"></i>Skriv minst 10 tecken först.</span>";
+            return;
+        }
+        var originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = "<span class=\"spinner-border spinner-border-sm me-1\"></span>AI funderar...";
+        status.innerHTML = "";
+
+        var fd = new FormData();
+        fd.append("csrf_token", CSRF_TOKEN);
+        fd.append("action", "draft_description");
+        fd.append("raw_idea", rawIdea);
+
+        fetch("ajax/ai_generate_course.php", { method: "POST", body: fd })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById("course_name").value = data.name || "";
+                    document.getElementById("course_description").value = data.description || "";
+                    status.innerHTML = "<span class=\"text-success\"><i class=\"bi bi-check-circle-fill me-1\"></i>Förslag skapat — justera gärna texterna.</span>";
+                } else {
+                    status.innerHTML = "<span class=\"text-danger\"><i class=\"bi bi-exclamation-circle me-1\"></i>" + (data.message || "Något gick fel.") + "</span>";
+                }
+            })
+            .catch(function() {
+                status.innerHTML = "<span class=\"text-danger\"><i class=\"bi bi-exclamation-circle me-1\"></i>Nätverksfel.</span>";
+            })
+            .finally(function() {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            });
+    });
 
     // Store AI questions for step 2
     var aiGeneratedQuestions = [];

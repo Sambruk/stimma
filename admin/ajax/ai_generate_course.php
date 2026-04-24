@@ -42,6 +42,9 @@ $userDomain = substr(strrchr($currentUser['email'], "@"), 1);
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 switch ($action) {
+    case 'draft_description':
+        draftDescription();
+        break;
     case 'ask_questions':
         askQuestions();
         break;
@@ -59,6 +62,78 @@ switch ($action) {
         break;
     default:
         echo json_encode(['success' => false, 'message' => 'Ogiltig åtgärd.']);
+}
+
+/**
+ * Ta emot en fri text från användaren ("rå kursidé") och be AI föreslå
+ * ett strukturerat kursnamn + en välformulerad beskrivning. Används i
+ * AI-kursgeneratorn som första steg: användaren behöver inte formulera
+ * namn/beskrivning själv.
+ */
+function draftDescription() {
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        echo json_encode(['success' => false, 'message' => 'Ogiltig säkerhetstoken.']);
+        exit;
+    }
+
+    $rawIdea = trim($_POST['raw_idea'] ?? '');
+    if (mb_strlen($rawIdea) < 10) {
+        echo json_encode(['success' => false, 'message' => 'Beskriv din idé med minst 10 tecken.']);
+        exit;
+    }
+    if (mb_strlen($rawIdea) > 4000) {
+        echo json_encode(['success' => false, 'message' => 'Texten är för lång (max 4000 tecken).']);
+        exit;
+    }
+
+    $systemPrompt = 'Du är en expert på utbildningsdesign. Användaren har skrivit en fritt formulerad beskrivning av en kursidé. Din uppgift är att:
+
+1. Föreslå ett koncist, lockande kursnamn (max 80 tecken).
+2. Skriva en tydlig, välstrukturerad kursbeskrivning på 2-4 meningar som fångar kursens syfte, innehåll och målgrupp.
+
+Använd svenska. Behåll användarens sakliga innehåll — uppfinn inte nya ämnen. Om texten är otydlig, gör din bästa tolkning.
+
+Svara ENDAST med giltig JSON, ingen annan text:
+{
+  "name": "Kursnamn här",
+  "description": "Beskrivning här..."
+}';
+
+    $userPrompt = "Rå kursidé från användaren:\n\n{$rawIdea}";
+
+    try {
+        $response = callOpenAIMini($systemPrompt, $userPrompt);
+        if (!$response) {
+            echo json_encode(['success' => false, 'message' => 'AI svarade inte.']);
+            exit;
+        }
+
+        // Extrahera JSON från svaret
+        $parsed = json_decode($response, true);
+        if (!is_array($parsed) || !isset($parsed['name'], $parsed['description'])) {
+            if (preg_match('/\{[\s\S]*\}/', $response, $m)) {
+                $parsed = json_decode($m[0], true);
+            }
+        }
+        if (!is_array($parsed) || !isset($parsed['name'], $parsed['description'])) {
+            echo json_encode(['success' => false, 'message' => 'Kunde inte tolka AI-svaret.']);
+            exit;
+        }
+
+        $name = trim((string)$parsed['name']);
+        $description = trim((string)$parsed['description']);
+        // Säkerhetsbegränsningar — stoppa orimligt långa svar
+        if (mb_strlen($name) > 255) $name = mb_substr($name, 0, 255);
+        if (mb_strlen($description) > 2000) $description = mb_substr($description, 0, 2000);
+
+        echo json_encode([
+            'success' => true,
+            'name' => $name,
+            'description' => $description,
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Fel vid AI-kommunikation: ' . $e->getMessage()]);
+    }
 }
 
 /**
