@@ -15,10 +15,14 @@ Denna handbok beskriver hur du använder Stimma e-learning plattform. Stimma är
    - [Diplom](#diplom)
 4. [Guide för redaktörer](#guide-för-redaktörer)
    - [Ange slutdatum för en kurs](#ange-slutdatum-för-en-kurs)
+   - [Kursens avslutningsinnehåll](#kursens-avslutningsinnehåll)
    - [Stegvisa kurser](#stegvisa-kurser)
    - [E-postmallar för stegvisa kurser](#e-postmallar-för-stegvisa-kurser)
    - [Testmail för stegvisa kurser](#testmail-för-stegvisa-kurser)
    - [Starta stegvis kurs manuellt](#starta-stegvis-kurs-manuellt)
+   - [Skriv in enskilda användare i en stegvis kurs](#skriv-in-enskilda-användare-i-en-stegvis-kurs)
+   - [Informationssidor](#informationssidor)
+   - [Kursens startsida](#kursens-startsida)
    - [Förhandsgranska lektioner](#förhandsgranska-lektioner)
 5. [Guide för administratörer](#guide-för-administratörer)
    - [Dashboard - Översikt](#dashboard---översikt)
@@ -223,17 +227,31 @@ Du kan ange ett slutdatum för när en kurs ska vara genomförd:
 - Slutdatumet visas i påminnelsemail till användare som inte slutfört kursen
 - Användare ser hur många dagar som återstår
 
+### Kursens avslutningsinnehåll
+
+När en användare klarar sista lektionen skickas hen till en **kursavslutssida** som visar ett gratulationsmeddelande och länk till diplomet. Du kan anpassa innehållet per kurs:
+
+1. Öppna kursen för redigering
+2. Scrolla till fältet **"Avslutningsinnehåll"** (HTML-editor med full verktygsrad)
+3. Skriv t.ex. reflektionsfrågor, nästa steg eller länkar till fördjupning
+4. Klicka **"Spara"**
+
+Lämnar du fältet tomt används en standardtext med kursnamn + diplomlänk.
+
 ### Stegvisa kurser
 
 Stegvisa kurser levererar en lektion i taget med tidsstyrt intervall. Användare måste klara varje lektion innan nästa blir tillgänglig.
 
 1. Öppna kursen för redigering
 2. Kryssa i **"Stegvisa lektioner"**
-3. Konfigurera:
+3. Välj **registreringstyp**:
+   - **Gemensamt startdatum** — alla berörda användare startar tillsammans på kursens startdatum. Passar utbildningar där en grupp ska följa samma schema.
+   - **Löpande registrering** — admin skriver in användare en i taget med valfritt individuellt startdatum. Passar on-boarding-kurser där nya användare tillkommer löpande.
+4. Konfigurera:
    - **Dagar mellan lektioner** - Antal dagar innan nästa lektion blir tillgänglig efter avklarad lektion (standard: 7)
    - **Påminnelse efter (dagar)** - Antal dagar innan en påminnelse skickas om användaren inte slutfört sin aktuella lektion (standard: 3)
-   - **Startdatum** - Ange ett datum för automatisk kursstart. Alla berörda användare registreras automatiskt och får sin första lektion detta datum
-4. Klicka **"Spara"**
+   - **Startdatum** - (endast vid Gemensamt startdatum) datum för automatisk kursstart. Alla berörda användare registreras och får sin första lektion detta datum.
+5. Klicka **"Spara"**
 
 **Status för stegvisa kurser:**
 
@@ -289,10 +307,10 @@ Innan du startar en stegvis kurs bör du verifiera att e-postmallarna ser bra ut
 
 ### Starta stegvis kurs manuellt
 
-Du kan starta en stegvis kurs omedelbart utan att vänta på startdatumet:
+Du kan starta en **Gemensamt startdatum**-kurs omedelbart utan att vänta på startdatumet:
 
 1. Öppna kursen för redigering
-2. Scrolla ned till **"Starta utskick nu"**-knappen (visas bara om kursen inte redan startats)
+2. Scrolla ned till **"Starta utskick nu"**-knappen (visas bara om kursen inte redan startats och registreringstypen är Gemensamt startdatum)
 3. Klicka på knappen och bekräfta
 4. Systemet:
    - Registrerar alla berörda användare (baserat på organisationstaggar, eller alla i domänen)
@@ -301,7 +319,23 @@ Du kan starta en stegvis kurs omedelbart utan att vänta på startdatumet:
    - Återstående e-post skickas via det nattliga cron-jobbet
 5. Du ser en bekräftelse med antal registrerade användare och köade e-post
 
-**Obs:** När kursen väl startats kan den inte startas igen. Nya användare som tillkommer i organisationen måste registreras separat.
+**Obs:** När kursen väl startats kan den inte startas igen via knappen. Nya användare som tillkommer kan skrivas in manuellt (se nedan).
+
+### Skriv in enskilda användare i en stegvis kurs
+
+Oavsett registreringstyp kan admin skriva in enskilda användare för hand. Användbart när någon missas i org-taggarna eller tillkommer sent.
+
+1. Öppna kursen för redigering
+2. Scrolla ned till kortet **"Skriv in användare"**
+3. Sök fram användaren (namn eller e-post) eller välj en org-tagg
+4. Ange startdatum:
+   - **Löpande registrering** — välj valfritt datum (datumväljaren visas). Kan vara i framtiden — användaren låses då upp automatiskt det datumet.
+   - **Gemensamt startdatum** — startdatum är låst till kursens startdatum (visas som infotext). Om kursens startdatum är passerat eller inte satt får användaren första lektionen direkt.
+5. Klicka **"Skriv in"**
+6. Om startdatumet är idag/passerat: första lektionens e-post skickas direkt
+7. Om startdatumet ligger i framtiden: schemaläggs, cronen skickar vid rätt tidpunkt
+
+**Obs:** Användaren måste tillhöra en av organisationens domäner. Manuella inskrivningar skrivs aldrig över av det automatiska kurs-start-cron-jobbet (INSERT IGNORE-kontrakt).
 
 ### Skapa lektioner
 
@@ -333,6 +367,43 @@ Du kan starta en stegvis kurs omedelbart utan att vänta på startdatumet:
 1. Öppna en kurs
 2. Dra och släpp lektioner för att ändra ordningen
 3. Ändringen sparas automatiskt
+
+### Informationssidor
+
+Utöver lektioner kan kursen innehålla **informationssidor** — sidor som fungerar som lektioner (samma redigerare för text, bild, video, ljud och bakgrundsfärg) men som:
+
+- **Inte räknas som lektioner** i stegvisa kurser (ingår inte i "X av Y lektioner"-summan)
+- **Kräver inget quiz** — användaren klickar bara en "Fortsätt"-knapp för att gå vidare
+- Inte visar "Avklarad"-badgen när de lästs
+
+**Skapa en informationssida:**
+
+1. Klicka **"Ny lektion"** i kursens lektionslista
+2. Under **Typ** väljer du **Informationssida**
+3. När Informationssida är vald döljs AI-rutor och quiz-sektionen automatiskt, och spara-knappen ändras till **"Skapa sida"**
+4. Välj i dropdownen **"Tillhör lektion"**:
+   - En specifik lektion — sidan låses upp samtidigt som den lektionen i stegvisa kurser
+   - **Fristående** — sidan är alltid tillgänglig så snart kursen är tillgänglig (används för kursens startsida / välkomstsida)
+5. Skriv innehållet och klicka **"Skapa sida"**
+
+**Tillhör: föregående eller nästa lektion?**
+
+Placeringen av infosidan i sort_order bestämmer om den ligger *före* eller *efter* den lektion den tillhör:
+
+- **Intro-sida före en lektion** — placera infosidan precis före lektion B och sätt "Tillhör lektion = B". När lektion B blir tillgänglig blir även intro-sidan det, och mail-länken för "ny lektion" går till intro-sidan först.
+- **Outro-sida efter en lektion** — placera infosidan precis efter lektion A och sätt "Tillhör lektion = A". Användaren når outro-sidan via "Fortsätt" efter att ha klarat A.
+
+I lektionslistan i adminvyn visas infosidor med blå bakgrund och en **Tillhör**-kolumn. Pil-knappen bredvid tillhörigheten cyklar mellan **föregående lektion → nästa lektion → fristående** för snabb omkoppling utan att öppna redigeraren.
+
+### Kursens startsida
+
+En välkomst-/startsida är bara en **fristående informationssida** som ligger först i sort_order. När användaren klickar "Börja kursen" på kursens landningssida hamnar hen på startsidan, läser välkomsttexten och klickar **"Fortsätt"** för att komma till första riktiga lektionen.
+
+Skapa den precis som en vanlig informationssida:
+
+1. **Typ** = Informationssida
+2. **Tillhör lektion** = Fristående
+3. Dra sidan högst upp i lektionslistan (sort_order 0/1)
 
 ### Förhandsgranska lektioner
 
