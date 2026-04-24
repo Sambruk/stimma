@@ -103,15 +103,26 @@ function cleanupStuckJobs() {
 }
 
 /**
- * Get custom course generation prompt from settings or use default
+ * Hämta adminens egna kompletterande instruktioner som appenderas till
+ * kursgenereringspromptarna (både fas 1 och fas 2). Returnerar tom sträng om
+ * ingen komplettering finns.
  */
-function getCourseGenerationPrompt() {
+function getCourseGenerationSupplement() {
     $setting = queryOne(
         "SELECT setting_value FROM " . DB_DATABASE . ".ai_settings WHERE setting_key = 'course_generation_prompt'"
     );
+    return ($setting && !empty($setting['setting_value'])) ? trim($setting['setting_value']) : '';
+}
 
-    if ($setting && !empty($setting['setting_value'])) {
-        return $setting['setting_value'];
+/**
+ * Legacy default-prompt — används inte i generering (fas 1/2 har egna
+ * prompter hårdkodade i processJob). Finns kvar för fallback om någon
+ * integration förväntar sig en komplett prompt.
+ */
+function getCourseGenerationPrompt() {
+    $supplement = getCourseGenerationSupplement();
+    if ($supplement !== '') {
+        return $supplement;
     }
 
     // Default prompt with varied quiz types
@@ -374,6 +385,12 @@ JSON-strukturen ska vara:
 
 VIKTIGT: Du MÅSTE generera EXAKT {$lessonCount} lektioner i lessons-arrayen. Räkna noga!";
 
+    // Admin-angivna kompletterande instruktioner (om några)
+    $adminSupplement = getCourseGenerationSupplement();
+    if ($adminSupplement !== '') {
+        $structureSystemPrompt .= "\n\nEGNA INSTRUKTIONER FRÅN ADMINISTRATÖR (följ alltid dessa):\n" . $adminSupplement;
+    }
+
     $structureUserPrompt = "Skapa en kursstruktur med EXAKT {$lessonCount} lektioner för kursen \"{$job['course_name']}\" baserat på följande beskrivning:\n\n{$job['course_description']}{$qaContext}\n\nGENERERA EXAKT {$lessonCount} LEKTIONER.";
 
     $structureJson = callOpenAI($structureSystemPrompt, $structureUserPrompt);
@@ -470,6 +487,11 @@ KRAV på varje lektion:
 4. Minst ett lesson-example
 5. Avsluta med lesson-summary
 6. Använd <strong> för nyckelord, <ul>/<li> för listor';
+
+    // Appendera adminens kompletterande instruktioner även till fas 2.
+    if ($adminSupplement !== '') {
+        $contentSystemPrompt .= "\n\nEGNA INSTRUKTIONER FRÅN ADMINISTRATÖR (följ alltid dessa):\n" . $adminSupplement;
+    }
 
     $totalLessons = count($courseData['lessons']);
     $progressStart = 20;
