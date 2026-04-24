@@ -34,20 +34,14 @@ $orgScopeDomains = getOrgScopeDomains($_SESSION['user_email']);
 $courseDomClause = buildDomainInClause($orgScopeDomains, 'c.organization_domain');
 $coDomClause = buildDomainInClause($orgScopeDomains, 'co.organization_domain');
 
-// Hämta kurser med diplominfo - filtrerade på organisation
-if ($isSuperAdmin) {
-    $courses = query("SELECT c.*,
-                             (SELECT COUNT(*) FROM " . DB_DATABASE . ".certificates WHERE course_id = c.id) as cert_count
-                      FROM " . DB_DATABASE . ".courses c
-                      WHERE c.status = 'active'
-                      ORDER BY c.title");
-} else {
-    $courses = query("SELECT c.*,
-                             (SELECT COUNT(*) FROM " . DB_DATABASE . ".certificates WHERE course_id = c.id) as cert_count
-                      FROM " . DB_DATABASE . ".courses c
-                      WHERE c.status = 'active' AND {$courseDomClause['fragment']}
-                      ORDER BY c.title", $courseDomClause['params']);
-}
+// Hämta kurser med diplominfo — filtrerade på adminens egen organisation.
+// Super admin använder samma filter: sidan handlar om adminens egen orgs
+// diplom, inte cross-org-översikt.
+$courses = query("SELECT c.*,
+                         (SELECT COUNT(*) FROM " . DB_DATABASE . ".certificates WHERE course_id = c.id) as cert_count
+                  FROM " . DB_DATABASE . ".courses c
+                  WHERE c.status = 'active' AND {$courseDomClause['fragment']}
+                  ORDER BY c.title", $courseDomClause['params']);
 
 // Hantera bilduppladdning
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
@@ -107,8 +101,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 // Hämta vald kurs för förhandsvisning
 $previewCourseId = (int)($_GET['preview'] ?? 0);
 $previewCourse = null;
+$previewOrgIcon = null;
 if ($previewCourseId) {
     $previewCourse = queryOne("SELECT * FROM " . DB_DATABASE . ".courses WHERE id = ?", [$previewCourseId]);
+    // Slå upp kursens orgikon för toppen av förhandsvisningen (matchar certificate.php-logiken).
+    if ($previewCourse && !empty($previewCourse['organization_domain'])) {
+        $courseOrg = getOrganizationByDomain($previewCourse['organization_domain']);
+        if ($courseOrg && !empty($courseOrg['icon_url'])) {
+            $previewOrgIcon = ['url' => $courseOrg['icon_url'], 'name' => $courseOrg['name'] ?? ''];
+        }
+    }
 }
 
 // Inkludera header
@@ -141,6 +143,9 @@ require_once 'include/header.php';
                                         <div class="flex-grow-1">
                                             <h6 class="mb-1 <?= $previewCourseId == $course['id'] ? 'text-white' : '' ?>">
                                                 <?= htmlspecialchars($course['title']) ?>
+                                                <span class="<?= $previewCourseId == $course['id'] ? 'text-white-50' : 'text-muted' ?>" style="font-weight: normal; font-size: 0.85em;">
+                                                    #<?= (int)$course['id'] ?>
+                                                </span>
                                             </h6>
                                             <small class="<?= $previewCourseId == $course['id'] ? 'text-white-50' : 'text-muted' ?>">
                                                 <?= $course['cert_count'] ?> diplom utfärdade
@@ -251,9 +256,9 @@ require_once 'include/header.php';
                                 <div class="certificate-content">
                                     <div class="certificate-header">
                                         <div class="logo-container">
-                                            <?php if ($previewCourse['certificate_image_url']): ?>
-                                            <img src="../upload/<?= htmlspecialchars($previewCourse['certificate_image_url']) ?>"
-                                                 alt="Kurslogotyp" class="course-logo">
+                                            <?php if ($previewOrgIcon && !empty($previewOrgIcon['url'])): ?>
+                                            <img src="../upload/org_icons/<?= htmlspecialchars($previewOrgIcon['url']) ?>"
+                                                 alt="<?= htmlspecialchars($previewOrgIcon['name']) ?>" class="course-logo">
                                             <?php else: ?>
                                             <img src="../images/stimma-logo.png" alt="Stimma" class="logo">
                                             <?php endif; ?>
@@ -275,13 +280,13 @@ require_once 'include/header.php';
                                             Diplomnummer:<br>
                                             STIMMA-<?= date('Y') ?>-0001-<?= str_pad($previewCourse['id'], 4, '0', STR_PAD_LEFT) ?>-ABCDEF
                                         </div>
-                                        <div class="seal">
-                                            <span>STIMMA</span>
+                                        <?php if (!empty($previewCourse['certificate_image_url'])): ?>
+                                        <div class="cert-footer-image">
+                                            <img src="../upload/<?= htmlspecialchars($previewCourse['certificate_image_url']) ?>" alt="Kursbild">
                                         </div>
-                                        <div class="verification-text">
-                                            Verifiera på:<br>
-                                            <strong>stimma.sambruk.se</strong>
-                                        </div>
+                                        <?php else: ?>
+                                        <div class="cert-footer-image"></div>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                             </div>
@@ -291,8 +296,8 @@ require_once 'include/header.php';
                                 <ul class="mb-0 small text-muted">
                                     <li>Diplomet är i <strong>A4-format (stående)</strong> - optimerat för utskrift och att sätta upp på väggen.</li>
                                     <li>Diplomet genereras automatiskt när en användare slutför alla lektioner i kursen.</li>
-                                    <li>Om du laddar upp en kursbild visas den istället för Stimma-logotypen.</li>
-                                    <li>Rekommenderad bildstorlek: 200x100 px (liggande) för bästa resultat.</li>
+                                    <li>Längst upp visas organisationens logotyp (eller Stimma-logotypen om ingen organisationslogotyp är satt).</li>
+                                    <li>Den uppladdade kursbilden visas längst ned på diplomet. Lämna tomt om inget ska visas där.</li>
                                     <li>Användare kan skriva ut diplomet som PDF via webbläsarens utskriftsfunktion (välj "Stående" orientering).</li>
                                 </ul>
                             </div>
@@ -313,32 +318,23 @@ require_once 'include/header.php';
                         </div>
                         <div class="card-body">
                             <?php
-                            if ($isSuperAdmin) {
-                                $totalCerts = queryOne("SELECT COUNT(*) as count FROM " . DB_DATABASE . ".certificates");
-                                $recentCerts = query("SELECT c.*, co.title as course_title, u.email
-                                                      FROM " . DB_DATABASE . ".certificates c
-                                                      JOIN " . DB_DATABASE . ".courses co ON c.course_id = co.id
-                                                      JOIN " . DB_DATABASE . ".users u ON c.user_id = u.id
-                                                      ORDER BY c.issued_at DESC
-                                                      LIMIT 5");
-                            } else {
-                                $totalCerts = queryOne(
-                                    "SELECT COUNT(*) as count FROM " . DB_DATABASE . ".certificates c
-                                     JOIN " . DB_DATABASE . ".courses co ON c.course_id = co.id
-                                     WHERE {$coDomClause['fragment']}",
-                                    $coDomClause['params']
-                                );
-                                $recentCerts = query(
-                                    "SELECT c.*, co.title as course_title, u.email
-                                     FROM " . DB_DATABASE . ".certificates c
-                                     JOIN " . DB_DATABASE . ".courses co ON c.course_id = co.id
-                                     JOIN " . DB_DATABASE . ".users u ON c.user_id = u.id
-                                     WHERE {$coDomClause['fragment']}
-                                     ORDER BY c.issued_at DESC
-                                     LIMIT 5",
-                                    $coDomClause['params']
-                                );
-                            }
+                            // Statistik och senaste diplom — samma org-filter som kurslistan.
+                            $totalCerts = queryOne(
+                                "SELECT COUNT(*) as count FROM " . DB_DATABASE . ".certificates c
+                                 JOIN " . DB_DATABASE . ".courses co ON c.course_id = co.id
+                                 WHERE {$coDomClause['fragment']}",
+                                $coDomClause['params']
+                            );
+                            $recentCerts = query(
+                                "SELECT c.*, co.title as course_title, u.email
+                                 FROM " . DB_DATABASE . ".certificates c
+                                 JOIN " . DB_DATABASE . ".courses co ON c.course_id = co.id
+                                 JOIN " . DB_DATABASE . ".users u ON c.user_id = u.id
+                                 WHERE {$coDomClause['fragment']}
+                                 ORDER BY c.issued_at DESC
+                                 LIMIT 5",
+                                $coDomClause['params']
+                            );
                             ?>
                             <div class="row mb-3">
                                 <div class="col-md-4">
@@ -372,6 +368,7 @@ require_once 'include/header.php';
                                         <tr>
                                             <th>Datum</th>
                                             <th>Användare</th>
+                                            <th>Kurs-ID</th>
                                             <th>Kurs</th>
                                             <th></th>
                                         </tr>
@@ -381,6 +378,7 @@ require_once 'include/header.php';
                                         <tr>
                                             <td><?= date('Y-m-d', strtotime($cert['issued_at'])) ?></td>
                                             <td><?= htmlspecialchars($cert['email']) ?></td>
+                                            <td class="text-muted">#<?= (int)$cert['course_id'] ?></td>
                                             <td><?= htmlspecialchars($cert['course_title']) ?></td>
                                             <td>
                                                 <a href="../certificate.php?id=<?= urlencode($cert['certificate_number']) ?>"
@@ -577,6 +575,7 @@ require_once 'include/header.php';
     justify-content: space-between;
     align-items: flex-end;
     padding-top: 2%;
+    position: relative;
 }
 
 .certificate-preview .certificate-number {
@@ -587,27 +586,22 @@ require_once 'include/header.php';
     line-height: 1.3;
 }
 
-.certificate-preview .verification-text {
-    font-size: 0.4rem;
-    color: #888;
-    text-align: right;
-    line-height: 1.3;
-}
-
-.certificate-preview .seal {
+.certificate-preview .cert-footer-image {
     width: 40px;
     height: 40px;
-    background: linear-gradient(135deg, #c9a227 0%, #f4d03f 50%, #c9a227 100%);
-    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #1a365d;
-    font-weight: bold;
-    font-size: 0.45rem;
-    text-transform: uppercase;
-    box-shadow: 0 2px 8px rgba(201, 162, 39, 0.4);
-    letter-spacing: 0.5px;
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
+}
+
+.certificate-preview .cert-footer-image img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
 }
 </style>
 

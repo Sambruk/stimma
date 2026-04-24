@@ -125,11 +125,14 @@ while ($xpInLevel >= $xpForNext) {
 }
 $xpPercent = $xpForNext > 0 ? round(($xpInLevel / $xpForNext) * 100) : 0;
 
-// Diplom
+// Diplom — visa bara de där användaren fortfarande har tillgång till kursen
 $certificates = query(
     "SELECT * FROM " . DB_DATABASE . ".certificates WHERE user_id = ? ORDER BY completion_date DESC",
     [$userId]
 );
+$certificates = array_values(array_filter($certificates, function ($c) use ($userId) {
+    return userCanAccessCourse((int)$userId, (int)$c['course_id']);
+}));
 
 // Datum idag (svensk formatering)
 $monthNames = ['januari','februari','mars','april','maj','juni','juli','augusti','september','oktober','november','december'];
@@ -328,7 +331,10 @@ $maxLessonsInDay = max(array_column($activityHistory, 'lessons') + [0]);
                     <?php foreach (array_slice($certificates, 0, 5) as $cert): ?>
                     <div class="cert-row">
                         <i class="bi bi-award"></i>
-                        <div class="flex-grow-1 text-truncate"><?= htmlspecialchars($cert['course_title']) ?></div>
+                        <div class="flex-grow-1 text-truncate">
+                            <?= htmlspecialchars($cert['course_title']) ?>
+                            <span class="text-muted small ms-1">#<?= (int)$cert['course_id'] ?></span>
+                        </div>
                         <a href="certificate.php?id=<?= urlencode($cert['certificate_number']) ?>" class="btn btn-sm btn-outline-secondary py-0 px-2" target="_blank" title="Visa diplom">
                             <i class="bi bi-eye"></i>
                         </a>

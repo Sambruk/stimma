@@ -24,6 +24,11 @@ if (empty($certNumber)) {
     $user = queryOne("SELECT * FROM " . DB_DATABASE . ".users WHERE email = ?", [$_SESSION['user_email']]);
     $certificates = getUserCertificates($user['id']);
 
+    // Filtrera bort diplom för kurser användaren inte längre har rätt att se.
+    $certificates = array_values(array_filter($certificates, function ($c) use ($user) {
+        return userCanAccessCourse((int)$user['id'], (int)$c['course_id']);
+    }));
+
     // Visa lista över diplom
     ?>
     <!DOCTYPE html>
@@ -59,6 +64,9 @@ if (empty($certNumber)) {
                                 <i class="bi bi-award text-warning" style="font-size: 3rem;"></i>
                             </div>
                             <h5 class="card-title"><?= htmlspecialchars($cert['course_title']) ?></h5>
+                            <p class="text-muted small mb-1">
+                                Kurs-ID: <strong>#<?= (int)$cert['course_id'] ?></strong>
+                            </p>
                             <p class="text-muted small mb-2">
                                 Utfärdat: <?= date('Y-m-d', strtotime($cert['issued_at'])) ?>
                             </p>
@@ -84,6 +92,12 @@ if (empty($certNumber)) {
 
 // Hämta diplom
 $certificate = getCertificateByNumber($certNumber);
+
+// Hämta organisationens ikon för diplomet (fallback om kursen saknar egen diplombild).
+$certOrgIcon = null;
+if ($certificate && !empty($certificate['user_id'])) {
+    $certOrgIcon = getHeaderOrganizationIcon((int)$certificate['user_id']);
+}
 
 if (!$certificate) {
     http_response_code(404);
@@ -324,6 +338,7 @@ if (!$certificate) {
             justify-content: space-between;
             align-items: flex-end;
             padding-top: 5mm;
+            position: relative;
         }
 
         .certificate-number {
@@ -333,27 +348,22 @@ if (!$certificate) {
             text-align: left;
         }
 
-        .verification-text {
-            font-size: 9pt;
-            color: #888;
-            text-align: right;
-            line-height: 1.4;
-        }
-
-        .seal {
+        .cert-footer-image {
             width: 30mm;
             height: 30mm;
-            background: linear-gradient(135deg, #c9a227 0%, #f4d03f 50%, #c9a227 100%);
-            border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #1a365d;
-            font-weight: bold;
-            font-size: 11pt;
-            text-transform: uppercase;
-            box-shadow: 0 3px 15px rgba(201, 162, 39, 0.5);
-            letter-spacing: 1px;
+            position: absolute;
+            left: 50%;
+            bottom: 0;
+            transform: translateX(-50%);
+        }
+
+        .cert-footer-image img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
         }
 
         /* Dekorativa hörndetaljer */
@@ -471,10 +481,9 @@ if (!$certificate) {
                 max-height: 18mm;
             }
 
-            .seal {
+            .cert-footer-image {
                 width: 20mm;
                 height: 20mm;
-                font-size: 8pt;
             }
         }
     </style>
@@ -518,14 +527,8 @@ if (!$certificate) {
         <div class="certificate-content">
             <div class="certificate-header">
                 <div class="logo-container">
-                    <?php if (!empty($certificate['certificate_image_url'])):
-                        // Check if it's a full URL or just a filename
-                        $certImageUrl = $certificate['certificate_image_url'];
-                        if (!preg_match('/^https?:\/\//', $certImageUrl)) {
-                            $certImageUrl = 'upload/' . $certImageUrl;
-                        }
-                    ?>
-                    <img src="<?= htmlspecialchars($certImageUrl) ?>" alt="<?= htmlspecialchars($certificate['course_title']) ?>" class="course-logo" onerror="this.parentNode.innerHTML='<img src=\'images/stimma-logo.png\' alt=\'Stimma\' class=\'logo\'>'">
+                    <?php if ($certOrgIcon && !empty($certOrgIcon['url'])): ?>
+                    <img src="upload/org_icons/<?= htmlspecialchars($certOrgIcon['url']) ?>" alt="<?= htmlspecialchars($certOrgIcon['name']) ?>" class="course-logo">
                     <?php else: ?>
                     <img src="images/stimma-logo.png" alt="Stimma" class="logo">
                     <?php endif; ?>
@@ -552,13 +555,22 @@ if (!$certificate) {
                     Diplomnummer:<br>
                     <?= htmlspecialchars($certificate['certificate_number']) ?>
                 </div>
-                <div class="seal">
-                    <span>STIMMA</span>
+                <?php
+                    $certFooterImage = null;
+                    if (!empty($certificate['certificate_image_url'])) {
+                        $certFooterImage = $certificate['certificate_image_url'];
+                        if (!preg_match('/^https?:\/\//', $certFooterImage)) {
+                            $certFooterImage = 'upload/' . $certFooterImage;
+                        }
+                    }
+                ?>
+                <?php if ($certFooterImage): ?>
+                <div class="cert-footer-image">
+                    <img src="<?= htmlspecialchars($certFooterImage) ?>" alt="<?= htmlspecialchars($certificate['course_title']) ?>">
                 </div>
-                <div class="verification-text">
-                    Verifiera diplomet på:<br>
-                    <strong>stimma.sambruk.se</strong>
-                </div>
+                <?php else: ?>
+                <div class="cert-footer-image"></div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
