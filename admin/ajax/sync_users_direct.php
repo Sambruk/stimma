@@ -2,8 +2,12 @@
 /**
  * Stimma - Admin AJAX: Direkt användarsynkronisering
  *
- * Utför samma synklogik som api/sync_users.php men med sessionsautentisering
- * istället för API-nyckel. Används av det integrerade synkverktyget.
+ * En admin som tillhör organisationens PRIMÄRDOMÄN kan synka användare till
+ * alla domäner i organisationen i ett enda anrop. Varje inkommande e-post
+ * filtreras mot orgens domänlista — rader vars domän inte tillhör orgen
+ * hoppas över och rapporteras som "skipped".
+ *
+ * Superadmin får synka fritt utan primärdomän-check.
  */
 
 require_once __DIR__ . '/../include/ajax_auth_check.php';
@@ -11,7 +15,6 @@ require_once __DIR__ . '/../../include/functions.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
-// Kräv admin eller super_admin
 $user = queryOne("SELECT id, email, is_admin, role FROM " . DB_DATABASE . ".users WHERE email = ?", [$_SESSION['user_email']]);
 if (!$user || (!$user['is_admin'] && $user['role'] !== 'super_admin')) {
     http_response_code(403);
@@ -19,17 +22,14 @@ if (!$user || (!$user['is_admin'] && $user['role'] !== 'super_admin')) {
     exit;
 }
 
-// Kräv POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['success' => false, 'error' => 'Använd POST.']);
     exit;
 }
 
-// Läs request body
 $rawBody = file_get_contents('php://input');
 $body = json_decode($rawBody, true);
-
 if (json_last_error() !== JSON_ERROR_NONE) {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'Ogiltig JSON.']);
@@ -44,66 +44,139 @@ if (!isset($body['users']) || !is_array($body['users']) || count($body['users'])
 
 $users = $body['users'];
 $deactivateMissing = $body['deactivate_missing'] ?? false;
-$domain = $body['domain'] ?? null;
-
-// Bestäm domän
-$userDomain = getUserDomain($_SESSION['user_email']);
 $isSuperAdmin = ($user['role'] === 'super_admin');
 
-if ($isSuperAdmin && !empty($domain)) {
-    // Super_admin kan välja domän
-    $targetDomain = $domain;
+// Bestäm vilka domäner admin får synka till
+$userEmail = $_SESSION['user_email'];
+$userDomain = getUserDomain($userEmail);
+$allowedDomains = [];
+$orgName = '';
+
+if ($isSuperAdmin) {
+    // Superadmin: ange allt. Filtrera fortfarande varje e-post mot någon känd
+    // organisation-domän (från organization_domains) eller domain_settings —
+    // annars kan vilken godtycklig domän som helst skapas. Vi använder bara
+    // allt i organization_domains.
+    $rows = query("SELECT DISTINCT domain FROM " . DB_DATABASE . ".organization_domains");
+    $allowedDomains = array_column($rows ?: [], 'domain');
+    $orgName = 'Superadmin (alla organisationer)';
 } else {
-    // Admin synkar till sin egen domän
-    $targetDomain = $userDomain;
+    // Vanlig admin: hämta orgen, kräv primärdomän
+    $org = getOrganizationByDomain($userDomain);
+    if (!$org) {
+        http_response_code(403);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Din domän (' . $userDomain . ') är inte grupperad i någon organisation. Kontakta superadmin.',
+        ]);
+        exit;
+    }
+
+    // Kolla att användarens domän är primärdomän
+    $primaryRow = queryOne(
+        "SELECT domain FROM " . DB_DATABASE . ".organization_domains
+         WHERE organization_id = ? AND is_primary = 1 LIMIT 1",
+        [$org['id']]
+    );
+    $primaryDomain = $primaryRow ? $primaryRow['domain'] : null;
+
+    if (!$primaryDomain || strtolower($userDomain) !== strtolower($primaryDomain)) {
+        http_response_code(403);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Synkverktyget får endast användas av en admin på organisationens primärdomän' . ($primaryDomain ? " ({$primaryDomain})" : '') . '.',
+        ]);
+        exit;
+    }
+
+    $allowedDomains = getOrganizationDomains($org['id']);
+    $orgName = $org['name'] ?? '';
 }
 
-if (empty($targetDomain)) {
-    http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Kunde inte bestämma måldomän.']);
-    exit;
-}
+$allowedDomainsLower = array_map('strtolower', $allowedDomains);
 
-// Validera e-postdomäner
+// Gruppera användare per domän, räkna skippade (domän utanför orgen)
+$grouped = [];
 $errors = [];
+$skipped = [];
 $emailsSeen = [];
+
 foreach ($users as $i => $u) {
     $email = strtolower(trim($u['email'] ?? ''));
-    if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $errors[] = "Rad " . ($i + 1) . ": Ogiltig e-post '{$email}'.";
+    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $errors[] = 'Rad ' . ($i + 1) . ': ogiltig e-post "' . ($u['email'] ?? '') . '"';
         continue;
     }
-    $emailDomain = substr($email, strrpos($email, '@') + 1);
-    if ($emailDomain !== $targetDomain) {
-        $errors[] = "Rad " . ($i + 1) . ": E-post '{$email}' matchar inte domänen '{$targetDomain}'.";
-    }
     if (isset($emailsSeen[$email])) {
-        $errors[] = "Rad " . ($i + 1) . ": Dubblettadress '{$email}'.";
+        $errors[] = 'Rad ' . ($i + 1) . ': dubblett "' . $email . '"';
+        continue;
     }
     $emailsSeen[$email] = true;
+
+    $emailDomain = strtolower(substr($email, strrpos($email, '@') + 1));
+    if (!in_array($emailDomain, $allowedDomainsLower, true)) {
+        $skipped[] = $email;
+        continue;
+    }
+    $u['email'] = $email; // normalisera
+    $grouped[$emailDomain][] = $u;
 }
 
 if (!empty($errors)) {
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Valideringsfel.', 'validation_errors' => array_slice($errors, 0, 10)]);
+    echo json_encode(['success' => false, 'error' => 'Valideringsfel.', 'validation_errors' => array_slice($errors, 0, 20)]);
     exit;
 }
 
-// Utför synk
-$ipAddress = $_SERVER['REMOTE_ADDR'] ?? 'admin';
-$result = performUserSync($users, $targetDomain, $deactivateMissing, null, $ipAddress);
-
-if ($result['success']) {
-    logActivity($_SESSION['user_email'], 'Admin-synk genomförd', [
-        'action' => 'admin_sync',
-        'domain' => $targetDomain,
-        'sync_id' => $result['sync_id'],
-        'users_in_payload' => $result['summary']['total_in_payload'],
-        'created' => $result['summary']['created'],
-        'updated' => $result['summary']['updated'],
-        'deactivated' => $result['summary']['deactivated'],
-        'reactivated' => $result['summary']['reactivated']
+if (empty($grouped)) {
+    echo json_encode([
+        'success' => false,
+        'error' => 'Inga användare kunde synkas — ingen av e-postadresserna tillhör organisationens domäner.',
+        'skipped_count' => count($skipped),
+        'skipped_emails' => array_slice($skipped, 0, 50),
     ]);
+    exit;
 }
 
-echo json_encode($result);
+// Kör performUserSync per domän
+$ipAddress = $_SERVER['REMOTE_ADDR'] ?? 'admin';
+$totalSummary = ['total_in_payload' => 0, 'created' => 0, 'updated' => 0, 'deactivated' => 0, 'reactivated' => 0];
+$syncIds = [];
+$perDomainResults = [];
+
+foreach ($grouped as $domain => $usersInDomain) {
+    $result = performUserSync($usersInDomain, $domain, (bool)$deactivateMissing, null, $ipAddress);
+    $perDomainResults[$domain] = $result;
+    if (!empty($result['success']) && isset($result['summary'])) {
+        foreach ($totalSummary as $k => $_v) {
+            $totalSummary[$k] += (int)($result['summary'][$k] ?? 0);
+        }
+        if (!empty($result['sync_id'])) $syncIds[] = $result['sync_id'];
+    }
+}
+
+logActivity($userEmail, 'Admin-synk (multi-domän)', [
+    'action' => 'admin_sync',
+    'organization' => $orgName,
+    'domains_synced' => array_keys($grouped),
+    'skipped_count' => count($skipped),
+    'summary' => $totalSummary,
+    'sync_ids' => $syncIds,
+]);
+
+echo json_encode([
+    'success' => true,
+    'organization' => $orgName,
+    'domains' => array_keys($grouped),
+    'summary' => $totalSummary,
+    'sync_ids' => $syncIds,
+    'skipped_count' => count($skipped),
+    'skipped_emails' => array_slice($skipped, 0, 50),
+    'per_domain' => array_map(function($r) {
+        return [
+            'success' => $r['success'] ?? false,
+            'summary' => $r['summary'] ?? null,
+            'error' => $r['error'] ?? null,
+        ];
+    }, $perDomainResults),
+]);

@@ -29,6 +29,20 @@ if (!$isAdmin && !$isSuperAdmin) {
 }
 
 $userDomain = getUserDomain($_SESSION['user_email']);
+
+// Bestäm organisationens domäner + primärdomän
+$userOrg = getOrganizationByDomain($userDomain);
+$orgDomains = $userOrg ? getOrganizationDomains($userOrg['id']) : [$userDomain];
+$primaryDomain = null;
+if ($userOrg) {
+    $primRow = queryOne(
+        "SELECT domain FROM " . DB_DATABASE . ".organization_domains WHERE organization_id = ? AND is_primary = 1 LIMIT 1",
+        [$userOrg['id']]
+    );
+    $primaryDomain = $primRow ? $primRow['domain'] : null;
+}
+$isOnPrimaryDomain = $primaryDomain && strtolower($userDomain) === strtolower($primaryDomain);
+$canSync = $isSuperAdmin || $isOnPrimaryDomain;
 ?>
 
 <style>
@@ -83,15 +97,44 @@ $userDomain = getUserDomain($_SESSION['user_email']);
 .btn-action { padding: 2px 6px; font-size: 0.78rem; }
 </style>
 
+<?php if (!$canSync && !$isSuperAdmin): ?>
+<div class="alert alert-warning">
+    <strong><i class="bi bi-shield-lock me-1"></i>Du kan inte synka från denna domän.</strong>
+    Synkverktyget får endast användas av en admin som tillhör organisationens primärdomän
+    <?php if ($primaryDomain): ?>(<strong><?= htmlspecialchars($primaryDomain) ?></strong>)<?php endif; ?>.
+    Din inloggning: <code><?= htmlspecialchars($userDomain) ?></code>.
+    <?php if (!$userOrg): ?>
+    <br>Din domän är inte heller grupperad i en organisation — kontakta superadmin.
+    <?php endif; ?>
+</div>
+<?php elseif ($userOrg): ?>
+<div class="alert alert-info">
+    <i class="bi bi-info-circle me-1"></i>
+    Du synkar till alla <strong><?= count($orgDomains) ?></strong> domäner i organisationen
+    <strong><?= htmlspecialchars($userOrg['name']) ?></strong>:
+    <code><?= htmlspecialchars(implode(', ', $orgDomains)) ?></code>.
+    Användare vars e-postdomän inte finns med kommer att hoppas över.
+</div>
+<?php endif; ?>
+
 <div class="row">
     <!-- Vänster: Användarlista -->
     <div class="col-lg-8 mb-4">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div class="d-flex align-items-center gap-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
                     <h6 class="m-0"><i class="bi bi-people me-2"></i>Användare att synka</h6>
                     <span class="badge bg-secondary" id="userCount">0</span>
-                    <span class="badge bg-primary" id="domainBadge"><?= htmlspecialchars($userDomain) ?></span>
+                    <?php if ($userOrg): ?>
+                    <span class="badge bg-primary" title="Organisation">
+                        <i class="bi bi-diagram-3 me-1"></i><?= htmlspecialchars($userOrg['name']) ?>
+                    </span>
+                    <span class="small text-muted" title="Domäner som synkas mot">
+                        <?= htmlspecialchars(implode(', ', $orgDomains)) ?>
+                    </span>
+                    <?php else: ?>
+                    <span class="badge bg-secondary"><?= htmlspecialchars($userDomain) ?></span>
+                    <?php endif; ?>
                 </div>
                 <div class="d-flex gap-2 flex-wrap">
                     <div class="input-group input-group-sm" style="width: 220px;">
@@ -142,19 +185,11 @@ $userDomain = getUserDomain($_SESSION['user_email']);
                     </button>
                 </div>
                 <div class="d-flex align-items-center gap-3">
-                    <?php if ($isSuperAdmin): ?>
-                    <div class="input-group input-group-sm" style="width: 200px;">
-                        <span class="input-group-text">Domän</span>
-                        <input type="text" id="targetDomain" class="form-control" value="<?= htmlspecialchars($userDomain) ?>">
-                    </div>
-                    <?php else: ?>
-                    <input type="hidden" id="targetDomain" value="<?= htmlspecialchars($userDomain) ?>">
-                    <?php endif; ?>
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" id="deactivateToggle">
                         <label class="form-check-label small" for="deactivateToggle">Inaktivera saknade</label>
                     </div>
-                    <button class="btn btn-success" id="pushSyncBtn">
+                    <button class="btn btn-success" id="pushSyncBtn" <?= $canSync ? '' : 'disabled' ?>>
                         <i class="bi bi-arrow-repeat me-2"></i>Synka nu
                     </button>
                 </div>
@@ -287,7 +322,7 @@ $userDomain = getUserDomain($_SESSION['user_email']);
                     <strong>Säkert läge:</strong> Inaktivering av saknade användare är <strong>avstängt</strong>.
                     Bara nya/uppdaterade användare berörs.
                 </div>
-                <p>Du synkar <strong id="pushCount">0</strong> användare till domänen <strong id="pushDomain"></strong>.</p>
+                <p>Du synkar <strong id="pushCount">0</strong> användare till organisationens domäner. Varje användares e-post måste tillhöra en av domänerna — övriga hoppas över.</p>
                 <p class="text-muted small mb-0">Synkroniseringen sker direkt mot databasen (ingen API-nyckel behövs).</p>
             </div>
             <div class="modal-footer">
@@ -597,15 +632,8 @@ $userDomain = getUserDomain($_SESSION['user_email']);
             return;
         }
 
-        const domain = $('#targetDomain').value.trim();
-        if (!domain) {
-            alert('Måldomän saknas.');
-            return;
-        }
-
         const deactivate = $('#deactivateToggle').checked;
         $('#pushCount').textContent = users.length;
-        $('#pushDomain').textContent = domain;
 
         if (deactivate) {
             $('#pushDeactivateWarning').classList.remove('d-none');
@@ -619,29 +647,21 @@ $userDomain = getUserDomain($_SESSION['user_email']);
     }
 
     async function executePush() {
-        const domain = $('#targetDomain').value.trim();
         const btn = $('#confirmPushBtn');
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Synkar...';
 
         const deactivate = $('#deactivateToggle').checked;
 
-        // Skriv om e-postdomäner till måldomänen
-        const mappedUsers = users.map(u => {
-            let email = u.email;
-            const atIdx = email.lastIndexOf('@');
-            if (atIdx !== -1 && domain) {
-                email = email.substring(0, atIdx + 1) + domain;
-            }
-            return {
-                email: email,
-                name: u.name,
-                role: u.role || 'student',
-                organization: u.organization || ''
-            };
-        });
+        // Skicka e-postadresserna som de är — servern validerar domän mot orgen
+        const mappedUsers = users.map(u => ({
+            email: u.email,
+            name: u.name,
+            role: u.role || 'student',
+            organization: u.organization || ''
+        }));
 
-        addLogEntry('info', `Synkar ${mappedUsers.length} användare till domänen ${domain}...`);
+        addLogEntry('info', `Synkar ${mappedUsers.length} användare till organisationen...`);
 
         try {
             const resp = await fetch('ajax/sync_users_direct.php', {
@@ -652,8 +672,7 @@ $userDomain = getUserDomain($_SESSION['user_email']);
                 },
                 body: JSON.stringify({
                     users: mappedUsers,
-                    deactivate_missing: deactivate,
-                    domain: domain
+                    deactivate_missing: deactivate
                 })
             });
 
@@ -662,14 +681,22 @@ $userDomain = getUserDomain($_SESSION['user_email']);
             if (data.success) {
                 const s = data.summary;
                 addLogEntry('success',
-                    `Synk klar! Skapade: ${s.created}, Uppdaterade: ${s.updated}, ` +
-                    `Inaktiverade: ${s.deactivated}, Reaktiverade: ${s.reactivated} ` +
-                    `(sync_id: ${data.sync_id})`
+                    `Synk klar mot ${data.domains.length} domän(er)! Skapade: ${s.created}, Uppdaterade: ${s.updated}, ` +
+                    `Inaktiverade: ${s.deactivated}, Reaktiverade: ${s.reactivated}`
                 );
+                if (data.skipped_count > 0) {
+                    addLogEntry('error',
+                        `⚠ ${data.skipped_count} användare hoppades över — deras e-postdomän tillhör inte organisationen. ` +
+                        `Först 10: ${data.skipped_emails.slice(0, 10).join(', ')}`
+                    );
+                }
             } else {
                 let msg = `Fel: ${data.error || 'Okänt fel'}`;
                 if (data.validation_errors) {
                     msg += '\n' + data.validation_errors.slice(0, 5).join('\n');
+                }
+                if (data.skipped_count) {
+                    msg += `\n${data.skipped_count} användare skippade (fel domän).`;
                 }
                 addLogEntry('error', msg);
             }
