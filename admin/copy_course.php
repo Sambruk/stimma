@@ -71,13 +71,14 @@ function copyCourse($sourceCourseId, $targetDomain, $newAuthorId, $orgScopeDomai
     // Infoga ny kurs
     $result = execute(
         "INSERT INTO " . DB_DATABASE . ".courses
-        (category_id, title, description, difficulty_level, duration_minutes, prerequisites, tags,
+        (category_id, title, description, completion_content, difficulty_level, duration_minutes, prerequisites, tags,
          image_url, status, sort_order, featured, author_id, organization_domain, original_organization_domain, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'inactive', ?, 0, ?, ?, ?, NOW())",
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'inactive', ?, 0, ?, ?, ?, NOW())",
         [
             $sourceCourse['category_id'],
             $newTitle,
             $sourceCourse['description'],
+            $sourceCourse['completion_content'] ?? null,
             $sourceCourse['difficulty_level'],
             $sourceCourse['duration_minutes'],
             $sourceCourse['prerequisites'],
@@ -254,21 +255,13 @@ $domains = query("SELECT DISTINCT organization_domain FROM " . DB_DATABASE . ".c
                   WHERE organization_domain IS NOT NULL AND organization_domain != ''
                   ORDER BY organization_domain ASC");
 
-// Egen orgs domäner — dessa får kopieras även om de är inaktiva (admins kan
-// kopiera arbetsutkast). Alla andra organisationer får bara visa aktiva kurser.
-$ownOrgDomains = getOrgScopeDomains($_SESSION['user_email']);
-$ownPlaceholders = implode(',', array_fill(0, count($ownOrgDomains), '?'));
-
-// Bygg SQL för att hämta kurser
+// Visa endast aktiva kurser i listan — även för egen organisation.
 $sql = "SELECT c.*, u.email as author_email,
         (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons l WHERE l.course_id = c.id) as lesson_count
         FROM " . DB_DATABASE . ".courses c
         LEFT JOIN " . DB_DATABASE . ".users u ON c.author_id = u.id
-        WHERE (
-            c.organization_domain IN ($ownPlaceholders)
-            OR c.status = 'active'
-        )";
-$params = array_values($ownOrgDomains);
+        WHERE c.status = 'active'";
+$params = [];
 
 if ($filterDomain) {
     $sql .= " AND c.organization_domain = ?";
