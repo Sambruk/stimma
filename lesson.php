@@ -26,6 +26,7 @@ require_once 'include/config.php';
 require_once 'include/database.php';
 require_once 'include/functions.php';
 require_once 'include/auth.php';
+require_once 'include/gamification.php';
 
 // Get system name from environment variable with fallback
 $systemName = trim(getenv('SYSTEM_NAME'), '"\'') ?: 'AI-kurser';
@@ -319,6 +320,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['answer_question_id'])
                     $available = isLessonAvailableForUser($userId, $nextRow['id'], $lesson['course_id']);
                 }
                 $result['nextLesson'] = ['id' => (int)$nextRow['id'], 'title' => $nextRow['title'], 'available' => $available];
+            } else {
+                // Ingen nästa lektion — kolla om hela kursen nu är klar
+                $completion = checkAndCompleteCourse($userId, $lesson['course_id']);
+                if (!empty($completion['is_complete'])) {
+                    $result['courseComplete'] = true;
+                    $result['completeUrl'] = $completion['complete_url'];
+                }
             }
             // Nollställ session-state för lektionen så omgång kan göras om senare om admin återställer
             unset($_SESSION['lesson_quiz_state'][$lessonId]);
@@ -432,6 +440,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasQuizAnswer($_POST) && !$isPrevie
             LIMIT 1
         ", [$lesson['course_id'], $lesson['sort_order']]);
         
+        // Kolla kursavslutning om ingen nästa lektion
+        $courseCompletion = null;
+        if (!$nextLesson) {
+            $courseCompletion = checkAndCompleteCourse($userId, $lesson['course_id']);
+        }
+
         // Handle AJAX response
         if (isAjaxRequest()) {
             header('Content-Type: application/json');
@@ -452,10 +466,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasQuizAnswer($_POST) && !$isPrevie
                     }
                 }
             }
-            echo json_encode([
+            $response = [
                 'success' => true,
                 'nextLesson' => $nextLessonData
-            ]);
+            ];
+            if (!empty($courseCompletion['is_complete'])) {
+                $response['courseComplete'] = true;
+                $response['completeUrl'] = $courseCompletion['complete_url'];
+            }
+            echo json_encode($response);
+            exit;
+        }
+
+        // Non-AJAX: om kursen är klar, skicka till avslutssidan istället för samma lektion
+        if (!empty($courseCompletion['is_complete'])) {
+            redirect($courseCompletion['complete_url']);
             exit;
         }
         
@@ -619,9 +644,64 @@ function convertYoutubeUrl($url) {
 <!-- Main content container -->
 <div class="container-sm py-4">
     <div class="row">
-        <!-- Left sidebar (empty on desktop) -->
-        <div class="col-lg-2 d-none d-lg-block"></div>
-        
+        <!-- Left sidebar: lektionsmeny -->
+        <div class="col-lg-2 d-none d-lg-block">
+            <?php
+            $navLessons = query(
+                "SELECT id, title, sort_order FROM " . DB_DATABASE . ".lessons
+                 WHERE course_id = ? AND status = 'active' ORDER BY sort_order ASC, id ASC",
+                [$lesson['course_id']]
+            );
+            $navProgressRows = query(
+                "SELECT p.lesson_id, p.status FROM " . DB_DATABASE . ".progress p
+                 JOIN " . DB_DATABASE . ".lessons l ON l.id = p.lesson_id
+                 WHERE p.user_id = ? AND l.course_id = ?",
+                [$userId, $lesson['course_id']]
+            );
+            $navCompletedIds = [];
+            foreach ($navProgressRows as $pr) {
+                if ($pr['status'] === 'completed') $navCompletedIds[(int)$pr['lesson_id']] = true;
+            }
+            ?>
+            <div class="card shadow-sm lesson-nav" style="position: sticky; top: 1rem;">
+                <div class="card-header py-2 px-3 small">
+                    <i class="bi bi-list-ol me-1 text-primary"></i><strong>Lektioner</strong>
+                </div>
+                <ol class="list-group list-group-flush m-0" style="list-style: none; padding-left: 0;">
+                    <?php foreach ($navLessons as $idx => $nl):
+                        $isCurrent = (int)$nl['id'] === (int)$lessonId;
+                        $isDone = isset($navCompletedIds[(int)$nl['id']]);
+                        // Regel: klickbar om lektionen är genomförd ELLER om det är
+                        // nuvarande lektion (redirect till sig själv är no-op). Lekt-
+                        // ioner som inte är genomförda och inte är aktuell = låsta.
+                        $isClickable = $isDone && !$isCurrent;
+                    ?>
+                    <li class="list-group-item py-2 px-2 small <?= $isCurrent ? 'bg-primary bg-opacity-10 border-start border-primary border-3' : '' ?>">
+                        <?php if ($isClickable): ?>
+                            <a href="lesson.php?id=<?= (int)$nl['id'] ?>" class="text-decoration-none d-flex align-items-start gap-1 text-dark">
+                                <i class="bi bi-check-circle-fill text-success flex-shrink-0" style="line-height: 1.3;"></i>
+                                <span><?= ($idx + 1) ?>. <?= htmlspecialchars($nl['title']) ?></span>
+                            </a>
+                        <?php elseif ($isCurrent): ?>
+                            <div class="d-flex align-items-start gap-1 fw-semibold">
+                                <i class="bi bi-play-circle-fill text-primary flex-shrink-0" style="line-height: 1.3;"></i>
+                                <span><?= ($idx + 1) ?>. <?= htmlspecialchars($nl['title']) ?></span>
+                            </div>
+                        <?php else: ?>
+                            <div class="d-flex align-items-start gap-1 text-muted" title="Låst — klarar du föregående lektion låses den upp">
+                                <i class="bi bi-lock-fill flex-shrink-0" style="line-height: 1.3;"></i>
+                                <span><?= ($idx + 1) ?>. <?= htmlspecialchars($nl['title']) ?></span>
+                            </div>
+                        <?php endif; ?>
+                    </li>
+                    <?php endforeach; ?>
+                </ol>
+                <div class="card-footer py-2 px-3 small text-muted text-center">
+                    <?= count($navCompletedIds) ?> av <?= count($navLessons) ?> klara
+                </div>
+            </div>
+        </div>
+
         <!-- Main content area -->
         <div class="col-12 col-lg-8">
             <main>
@@ -1022,6 +1102,10 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </a>
                             </div>
                         `;
+                    } else if (data.courseComplete && data.completeUrl) {
+                        // Kursen är slutförd — skicka till avslutssidan
+                        window.location.href = data.completeUrl;
+                        return;
                     } else {
                         let nextLessonHtml = '';
                         if (data.nextLesson) {
