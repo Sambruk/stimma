@@ -258,6 +258,12 @@
 
         // Alla frågor besvarade?
         if (data.all_done) {
+          // Hela kursen klar? Skicka direkt till avslutssidan.
+          if (data.courseComplete && data.completeUrl) {
+            window.location.href = data.completeUrl;
+            return;
+          }
+
           var total = data.total || 0;
           var correctN = data.correct_count || 0;
           var wrongN = data.wrong_count || 0;

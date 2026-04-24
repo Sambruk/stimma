@@ -18,9 +18,10 @@
  * @param string $name Namnet på input-fältet
  * @param string $id ID för editorn (default: 'editor')
  */
-function renderEditor($content, $name = 'content', $id = 'editor') {
+function renderEditor($content, $name = 'content', $id = 'editor', $fullToolbar = false) {
+    $cls = 'stimma-editor' . ($fullToolbar ? ' stimma-editor-full' : '');
     ?>
-    <textarea id="<?= $id ?>" name="<?= $name ?>" class="stimma-editor"><?= htmlspecialchars($content ?? '') ?></textarea>
+    <textarea id="<?= $id ?>" name="<?= $name ?>" class="<?= $cls ?>"><?= htmlspecialchars($content ?? '') ?></textarea>
     <?php
 }
 ?>
@@ -35,9 +36,10 @@ document.addEventListener('DOMContentLoaded', function() {
     editorTextareas.forEach(function(ta) {
         if (tinymce.get(ta.id)) return;
 
-        // Innehållseditorn (contentEditor) får fullständig toolbar
-        // Övriga får en enklare variant
-        var isMainEditor = (ta.id === 'contentEditor');
+        // Innehållseditorn får fullständig toolbar. Standard är id "contentEditor",
+        // men även textareas med klassen "stimma-editor-full" triggar full toolbar
+        // (används bl.a. för kursens avslutssida).
+        var isMainEditor = (ta.id === 'contentEditor' || ta.classList.contains('stimma-editor-full'));
         initStimmaEditor('#' + ta.id, isMainEditor);
     });
 });

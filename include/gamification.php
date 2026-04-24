@@ -238,6 +238,56 @@ function recordCourseCompletion($userId, $courseId) {
 }
 
 /**
+ * Kolla om användaren slutfört alla aktiva lektioner i kursen och utfärda
+ * diplom + returnera info för att skicka hen till avslutssidan.
+ *
+ * Returnerar array med:
+ *   - is_complete (bool) — är alla aktiva lektioner klara?
+ *   - certificate_number (string|null) — nummer för ev. (ny eller befintligt) diplom
+ *   - complete_url (string) — URL till kursavslutssidan (endast om is_complete)
+ */
+function checkAndCompleteCourse($userId, $courseId) {
+    $total = (int)queryOne(
+        "SELECT COUNT(*) AS n FROM " . DB_DATABASE . ".lessons
+         WHERE course_id = ? AND status = 'active'",
+        [$courseId]
+    )['n'];
+
+    if ($total === 0) {
+        return ['is_complete' => false];
+    }
+
+    $done = (int)queryOne(
+        "SELECT COUNT(*) AS n FROM " . DB_DATABASE . ".lessons l
+         JOIN " . DB_DATABASE . ".progress p ON p.lesson_id = l.id
+         WHERE l.course_id = ? AND l.status = 'active'
+           AND p.user_id = ? AND p.status = 'completed'",
+        [$courseId, $userId]
+    )['n'];
+
+    if ($done < $total) {
+        return ['is_complete' => false];
+    }
+
+    $res = recordCourseCompletion($userId, $courseId);
+    $certNumber = $res['certificate_number'] ?? null;
+    if (!$certNumber) {
+        $existing = queryOne(
+            "SELECT certificate_number FROM " . DB_DATABASE . ".certificates
+             WHERE user_id = ? AND course_id = ? LIMIT 1",
+            [$userId, $courseId]
+        );
+        $certNumber = $existing['certificate_number'] ?? null;
+    }
+
+    return [
+        'is_complete' => true,
+        'certificate_number' => $certNumber,
+        'complete_url' => 'course_complete.php?id=' . (int)$courseId
+    ];
+}
+
+/**
  * Kontrollera och dela ut badges baserat på krav
  */
 function checkAndAwardBadges($userId, $requirementType, $currentValue) {
