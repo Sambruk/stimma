@@ -87,6 +87,14 @@ function initStimmaEditor(selector, fullToolbar) {
         object_resizing: true,
         image_dimensions: true,
 
+        // Säkerhet: TinyMCE 6 kräver explicita flaggor för att neutralisera
+        // de XSS-klasser som blev v7:s default. Stimma:s valid_elements-
+        // whitelist filtrerar visserligen iframe/object/embed på spara, men
+        // payloads kan triggas redan vid paste/insert. Båda flaggorna är
+        // default i TinyMCE 7 — slå på dem manuellt under v6.
+        sandbox_iframes: true,
+        convert_unsafe_embeds: true,
+
         // Bilduppladdning via befintligt upload_image.php
         images_upload_handler: function(blobInfo, progress) {
             return new Promise(function(resolve, reject) {
