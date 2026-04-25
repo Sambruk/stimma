@@ -157,7 +157,7 @@ $headerText = getHeaderText($userId);
     <div class="row g-4">
         <div class="col-lg-8">
             <div class="completion-card">
-                <div class="lesson-content"><?= $completionHtml ?></div>
+                <div class="lesson-content"><?= cleanHtml($completionHtml) ?></div>
             </div>
         </div>
         <div class="col-lg-4">
