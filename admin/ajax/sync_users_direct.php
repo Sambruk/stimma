@@ -10,8 +10,11 @@
  * Superadmin får synka fritt utan primärdomän-check.
  */
 
-require_once __DIR__ . '/../include/ajax_auth_check.php';
+require_once __DIR__ . '/../../include/config.php';
+require_once __DIR__ . '/../../include/database.php';
 require_once __DIR__ . '/../../include/functions.php';
+require_once __DIR__ . '/../../include/auth.php';
+require_once __DIR__ . '/../include/ajax_auth_check.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -28,11 +31,22 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+// CSRF-skydd: klienten (admin/sync_tool.php) skickar token i X-CSRF-Token-
+// headern, som faller tillbaka på en csrf_token-rad i JSON-bodyn om någon
+// framtida klient föredrar det. Båda jämförs timing-safe via hash_equals i
+// validateCsrfToken().
 $rawBody = file_get_contents('php://input');
 $body = json_decode($rawBody, true);
 if (json_last_error() !== JSON_ERROR_NONE) {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'Ogiltig JSON.']);
+    exit;
+}
+
+$providedCsrf = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? (is_array($body) ? ($body['csrf_token'] ?? '') : '');
+if (!validateCsrfToken($providedCsrf)) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Ogiltig CSRF-token.']);
     exit;
 }
 
