@@ -63,8 +63,10 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css">
     
-    <!-- Chart.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.min.js"></script>
+    <!-- Chart.js (v4 — config-API ändrad jämfört med v2; se admin/index.php) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js"
+            integrity="sha384-XcdcwHqIPULERb2yDEM4R0XaQKU3YnDsrTmjACBZyfdVVqjh6xQ4/DCMd7XLcA6Y"
+            crossorigin="anonymous"></script>
     
     <!-- TinyMCE Editor -->
     <script src="include/js/tinymce/tinymce.min.js"></script>

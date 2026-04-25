@@ -20,8 +20,7 @@ require_once 'include/auth_check.php';
 // Sätt sidtitel
 $page_title = 'Admin';
 
-// Extra CSS för Chart.js
-$extra_head = '<script src="../include/js/chart.min.js"></script>';
+// Chart.js laddas via admin-headern (cdnjs); ingen extra script-tag behövs här.
 
 // Hämta aktuell användares domän och roll
 $currentUser = queryOne("SELECT email, role, is_admin FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
@@ -601,35 +600,30 @@ $extra_scripts = <<<EOT
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
-                    yAxes: [{
-                        ticks: {
-                            beginAtZero: true,
-                            precision: 0
-                        }
-                    }],
-                    xAxes: [{
-                        gridLines: {
-                            display: false
-                        }
-                    }]
+                    y: {
+                        beginAtZero: true,
+                        ticks: { precision: 0 }
+                    },
+                    x: {
+                        grid: { display: false }
+                    }
                 },
-                legend: {
-                    display: false
-                },
-                tooltips: {
-                    backgroundColor: 'rgb(255, 255, 255)',
-                    bodyFontColor: '#858796',
-                    titleMarginBottom: 10,
-                    titleFontColor: '#6e707e',
-                    titleFontSize: 14,
-                    borderColor: '#dddfeb',
-                    borderWidth: 1,
-                    xPadding: 15,
-                    yPadding: 15,
-                    displayColors: false,
-                    intersect: false,
-                    mode: 'index',
-                    caretPadding: 10
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgb(255, 255, 255)',
+                        bodyColor: '#858796',
+                        titleMarginBottom: 10,
+                        titleColor: '#6e707e',
+                        titleFont: { size: 14 },
+                        borderColor: '#dddfeb',
+                        borderWidth: 1,
+                        padding: 15,
+                        displayColors: false,
+                        intersect: false,
+                        mode: 'index',
+                        caretPadding: 10
+                    }
                 }
             }
         });
@@ -652,35 +646,30 @@ $extra_scripts = <<<EOT
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
-                    yAxes: [{
-                        ticks: {
-                            beginAtZero: true,
-                            precision: 0
-                        }
-                    }],
-                    xAxes: [{
-                        gridLines: {
-                            display: false
-                        }
-                    }]
+                    y: {
+                        beginAtZero: true,
+                        ticks: { precision: 0 }
+                    },
+                    x: {
+                        grid: { display: false }
+                    }
                 },
-                legend: {
-                    display: false
-                },
-                tooltips: {
-                    backgroundColor: 'rgb(255, 255, 255)',
-                    bodyFontColor: '#858796',
-                    titleMarginBottom: 10,
-                    titleFontColor: '#6e707e',
-                    titleFontSize: 14,
-                    borderColor: '#dddfeb',
-                    borderWidth: 1,
-                    xPadding: 15,
-                    yPadding: 15,
-                    displayColors: false,
-                    intersect: false,
-                    mode: 'index',
-                    caretPadding: 10
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgb(255, 255, 255)',
+                        bodyColor: '#858796',
+                        titleMarginBottom: 10,
+                        titleColor: '#6e707e',
+                        titleFont: { size: 14 },
+                        borderColor: '#dddfeb',
+                        borderWidth: 1,
+                        padding: 15,
+                        displayColors: false,
+                        intersect: false,
+                        mode: 'index',
+                        caretPadding: 10
+                    }
                 }
             }
         });
