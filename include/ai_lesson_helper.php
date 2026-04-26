@@ -103,6 +103,61 @@ function aiLessonGetAdminSupplement(): string {
 }
 
 /**
+ * Deduplicera "answers"-listor i single_choice / multiple_choice så identiska
+ * alternativ inte sparas dubbelt (AI har observerats returnera svarslistor med
+ * upprepningar). Behåller första förekomst, mappar om correct-indexen så de
+ * fortfarande pekar på rätt svar.
+ *
+ * Måste köras INNAN aiLessonRandomizeAnswers() — annars är correct-indexen
+ * shufflade och svårare att mappa.
+ */
+function aiLessonDedupeAnswers(array &$questions): void {
+    foreach ($questions as &$q) {
+        $type = $q['question_type'] ?? '';
+        $data = $q['quiz_data']     ?? [];
+        if (!is_array($data)) continue;
+        if (!in_array($type, ['single_choice', 'multiple_choice'], true)) continue;
+        if (empty($data['answers']) || !is_array($data['answers'])) continue;
+
+        $seen      = [];
+        $newAns    = [];
+        $oldToNew  = [];
+        foreach ($data['answers'] as $oldIdx => $ans) {
+            $key = trim((string)$ans);
+            if ($key === '') continue;
+            if (isset($seen[$key])) {
+                $oldToNew[$oldIdx] = $seen[$key];
+            } else {
+                $seen[$key]        = count($newAns);
+                $oldToNew[$oldIdx] = count($newAns);
+                $newAns[]          = $ans;
+            }
+        }
+        // Bara skriv tillbaka om något faktiskt deduperades (annars påverkar
+        // vi inte fält som är OK)
+        if (count($newAns) === count($data['answers'])) continue;
+        $data['answers'] = $newAns;
+
+        if ($type === 'single_choice' && isset($data['correct'])) {
+            $oldC = (int)$data['correct'];
+            $data['correct'] = $oldToNew[$oldC] ?? 0;
+        } elseif ($type === 'multiple_choice' && !empty($data['correct'])) {
+            $newC = [];
+            foreach ((array)$data['correct'] as $oldC) {
+                $oldC = (int)$oldC;
+                if (isset($oldToNew[$oldC])) {
+                    $mapped = $oldToNew[$oldC];
+                    if (!in_array($mapped, $newC, true)) $newC[] = $mapped;
+                }
+            }
+            sort($newC);
+            $data['correct'] = $newC;
+        }
+        $q['quiz_data'] = $data;
+    }
+}
+
+/**
  * Slumpa svarspositioner för single_choice / multiple_choice så facit inte
  * alltid hamnar i samma slot. Identisk logik som process_ai_jobs.php
  * (rad 545-580).
@@ -242,7 +297,8 @@ function aiLessonGenerateContent(array $opts): array {
         $sys .= "\nQUIZ-FRÅGOR (2-4 st):\n\n";
         $sys .= "Tillåtna question_type: single_choice, multiple_choice, true_false, fill_blank,\n";
         $sys .= "order, match_pairs, categorize, numeric, short_text. (Använd INTE image_choice eller hotspot.)\n";
-        $sys .= "Variera typerna efter innehåll. Sprid korrekta svar jämnt.\n\n";
+        $sys .= "Variera typerna efter innehåll. Sprid korrekta svar jämnt.\n";
+        $sys .= "VIKTIGT: Upprepa ALDRIG samma svarsalternativ flera gånger i en fråga — varje alternativ måste vara unikt. Använd inte heller 'Alla ovanstående' / 'Inget av ovanstående' i multiple_choice (välj då hellre flera korrekta alternativ direkt).\n\n";
         $sys .= "quiz_data-SCHEMA per typ:\n";
         $sys .= "single_choice:   { \"answers\": [\"A\",\"B\",\"C\"], \"correct\": 1 }\n";
         $sys .= "multiple_choice: { \"answers\": [\"A\",\"B\",\"C\",\"D\"], \"correct\": [0,2] }\n";
@@ -285,6 +341,7 @@ function aiLessonGenerateContent(array $opts): array {
     $parsed['content'] = trim(preg_replace('/^```(?:html)?\s*|\s*```$/', '', $parsed['content']));
 
     if ($includeQuiz && !empty($parsed['questions']) && is_array($parsed['questions'])) {
+        aiLessonDedupeAnswers($parsed['questions']);
         aiLessonRandomizeAnswers($parsed['questions']);
     } else {
         $parsed['questions'] = [];
