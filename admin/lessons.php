@@ -317,10 +317,10 @@ $parentCandidates = query(
 
                     <div class="mb-3">
                         <label for="aiLessonIdea" class="form-label fw-semibold">Vad ska lektionen handla om?</label>
-                        <textarea class="form-control" id="aiLessonIdea" name="lesson_idea" rows="4"
-                                  minlength="20" maxlength="2000" required
+                        <textarea class="form-control" id="aiLessonIdea" name="lesson_idea" rows="6"
+                                  minlength="20" maxlength="10000" required
                                   placeholder="T.ex.: Förklara skillnaden mellan vokaler och konsonanter med två exempel-quizfrågor om svenska bokstäver."></textarea>
-                        <div class="form-text">Minst 20, max 2000 tecken. Ju tydligare beskrivning, desto bättre lektion.</div>
+                        <div class="form-text">Minst 20, max 10000 tecken. Ju tydligare beskrivning, desto bättre lektion.</div>
                     </div>
 
                     <div class="row g-3">

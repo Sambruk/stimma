@@ -165,8 +165,8 @@ function aiLessonGenerateContent(array $opts): array {
     if (mb_strlen($lessonIdea) < 20) {
         throw new Exception('Beskriv lektionens ämne med minst 20 tecken.');
     }
-    if (mb_strlen($lessonIdea) > 2000) {
-        throw new Exception('Lektionsbeskrivningen är för lång (max 2000 tecken).');
+    if (mb_strlen($lessonIdea) > 10000) {
+        throw new Exception('Lektionsbeskrivningen är för lång (max 10000 tecken).');
     }
 
     $toneText = [
