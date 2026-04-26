@@ -121,9 +121,14 @@ require_once 'include/header.php';
 <div class="card shadow mb-4">
     <div class="card-header py-3 d-flex justify-content-between align-items-center">
         <h6 class="m-0 font-weight-bold text-muted">Lektioner</h6>
-        <a href="edit_lesson.php?course_id=<?= $courseId ?>" class="btn btn-sm btn-primary">
-            <i class="bi bi-plus-lg"></i> Ny lektion
-        </a>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#aiLessonModal">
+                <i class="bi bi-stars"></i> AI-generera lektion
+            </button>
+            <a href="edit_lesson.php?course_id=<?= $courseId ?>" class="btn btn-sm btn-primary">
+                <i class="bi bi-plus-lg"></i> Ny lektion
+            </a>
+        </div>
     </div>
     <div class="card-body">
         <?php if (count($lessons) > 0): ?>
@@ -282,6 +287,169 @@ function deleteLesson(id) {
     document.body.appendChild(form);
     form.submit();
 }
+</script>
+
+<?php
+// Befintliga lektioner i denna kurs — används som "Tillhör"-dropdown vid
+// AI-generering av en informationssida.
+$parentCandidates = query(
+    "SELECT id, title FROM " . DB_DATABASE . ".lessons
+     WHERE course_id = ? AND lesson_type = 'lesson'
+     ORDER BY sort_order ASC, title ASC",
+    [$courseId]
+);
+?>
+
+<!-- AI-generera-lektion-modal -->
+<div class="modal fade" id="aiLessonModal" tabindex="-1" aria-labelledby="aiLessonModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="aiLessonModalLabel">
+                    <i class="bi bi-stars text-info me-1"></i>AI-generera lektion
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Stäng"></button>
+            </div>
+            <div class="modal-body">
+                <form id="aiLessonForm">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
+                    <input type="hidden" name="course_id" value="<?= (int)$courseId ?>">
+
+                    <div class="mb-3">
+                        <label for="aiLessonIdea" class="form-label fw-semibold">Vad ska lektionen handla om?</label>
+                        <textarea class="form-control" id="aiLessonIdea" name="lesson_idea" rows="4"
+                                  minlength="20" maxlength="2000" required
+                                  placeholder="T.ex.: Förklara skillnaden mellan vokaler och konsonanter med två exempel-quizfrågor om svenska bokstäver."></textarea>
+                        <div class="form-text">Minst 20, max 2000 tecken. Ju tydligare beskrivning, desto bättre lektion.</div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold d-block">Typ</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="lesson_type" id="aiTypeLesson" value="lesson" checked>
+                                <label class="form-check-label" for="aiTypeLesson">
+                                    <i class="bi bi-journal-text me-1 text-primary"></i>Lektion (kan ha quiz)
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="lesson_type" id="aiTypeInfo" value="info_page">
+                                <label class="form-check-label" for="aiTypeInfo">
+                                    <i class="bi bi-info-circle me-1 text-info"></i>Informationssida (utan quiz)
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6" id="aiBelongsToWrapper" style="display:none;">
+                            <label for="aiBelongsTo" class="form-label fw-semibold">Tillhör lektion</label>
+                            <select class="form-select" id="aiBelongsTo" name="belongs_to_lesson_id">
+                                <option value="">— Fristående —</option>
+                                <?php foreach ($parentCandidates as $pc): ?>
+                                <option value="<?= (int)$pc['id'] ?>"><?= htmlspecialchars($pc['title']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <div class="form-text">Styr när infosidan låses upp i stegvisa kurser.</div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mt-1">
+                        <div class="col-md-6">
+                            <label for="aiTextLength" class="form-label fw-semibold">Textlängd</label>
+                            <select class="form-select" id="aiTextLength" name="text_length">
+                                <option value="short">Kort (~150-250 ord)</option>
+                                <option value="medium" selected>Medium (~400-600 ord)</option>
+                                <option value="long">Lång (~800-1200 ord)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="aiTone" class="form-label fw-semibold">Ton</label>
+                            <select class="form-select" id="aiTone" name="tone">
+                                <option value="pedagogical" selected>Pedagogisk</option>
+                                <option value="formal">Formell</option>
+                                <option value="casual">Avslappnad</option>
+                                <option value="inspiring">Inspirerande</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-check mt-3" id="aiQuizWrapper">
+                        <input class="form-check-input" type="checkbox" name="include_quiz" id="aiIncludeQuiz" value="1" checked>
+                        <label class="form-check-label" for="aiIncludeQuiz">
+                            Inkludera 2-4 quizfrågor
+                        </label>
+                    </div>
+
+                    <div id="aiLessonStatus" class="mt-3" style="display:none;"></div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
+                <button type="button" class="btn btn-primary" id="aiLessonSubmitBtn">
+                    <i class="bi bi-stars me-1"></i>Generera
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function(){
+    var typeRadios   = document.querySelectorAll('input[name="lesson_type"]');
+    var belongsWrap  = document.getElementById('aiBelongsToWrapper');
+    var quizWrap     = document.getElementById('aiQuizWrapper');
+    var quizCheckbox = document.getElementById('aiIncludeQuiz');
+    var submitBtn    = document.getElementById('aiLessonSubmitBtn');
+    var statusDiv    = document.getElementById('aiLessonStatus');
+    var form         = document.getElementById('aiLessonForm');
+
+    function applyType() {
+        var t = document.querySelector('input[name="lesson_type"]:checked').value;
+        var isInfo = (t === 'info_page');
+        belongsWrap.style.display = isInfo ? 'block' : 'none';
+        quizWrap.style.display    = isInfo ? 'none'  : 'block';
+        if (isInfo) quizCheckbox.checked = false;
+    }
+    typeRadios.forEach(function(r){ r.addEventListener('change', applyType); });
+    applyType();
+
+    submitBtn.addEventListener('click', function(){
+        var idea = document.getElementById('aiLessonIdea').value.trim();
+        if (idea.length < 20) {
+            statusDiv.style.display = 'block';
+            statusDiv.className = 'mt-3 alert alert-warning';
+            statusDiv.textContent = 'Beskriv lektionens ämne med minst 20 tecken.';
+            return;
+        }
+
+        statusDiv.style.display = 'block';
+        statusDiv.className = 'mt-3 alert alert-info';
+        statusDiv.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Genererar lektion... det här tar ca 30-60 sekunder.';
+        submitBtn.disabled = true;
+
+        var fd = new FormData(form);
+
+        fetch('ajax/ai_generate_lesson.php', { method: 'POST', body: fd })
+            .then(function(r){ return r.json().catch(function(){ throw new Error('Servern returnerade ogiltig data.'); }); })
+            .then(function(data){
+                if (data && data.success) {
+                    statusDiv.className = 'mt-3 alert alert-success';
+                    statusDiv.innerHTML = '<i class="bi bi-check-circle me-1"></i>Lektion skapad: <strong>'
+                        + (data.title || '?').replace(/[<>&]/g, function(c){return ({"<":"&lt;",">":"&gt;","&":"&amp;"})[c];})
+                        + '</strong>. Laddar om...';
+                    setTimeout(function(){ window.location.reload(); }, 1200);
+                } else {
+                    statusDiv.className = 'mt-3 alert alert-danger';
+                    statusDiv.textContent = (data && data.error) ? data.error : 'Ett okänt fel uppstod.';
+                    submitBtn.disabled = false;
+                }
+            })
+            .catch(function(err){
+                statusDiv.className = 'mt-3 alert alert-danger';
+                statusDiv.textContent = 'Nätverksfel eller AI-tidsgräns: ' + err.message;
+                submitBtn.disabled = false;
+            });
+    });
+})();
 </script>
 
 <?php
