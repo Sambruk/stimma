@@ -381,6 +381,22 @@ require_once 'include/header.php';
             }
         });
 
+        // Vid submit: disable formfält i dolda type-specific-divar så de inte
+        // skickas med. Båda single_choice och multiple_choice renderar t.ex.
+        // <input name="answers[]"> — utan denna fix slås listorna ihop till
+        // dubbletter när admin sparar och öppnar igen.
+        if (typeSel) {
+            var quizForm = typeSel.closest('form');
+            if (quizForm) quizForm.addEventListener('submit', function() {
+                var current = typeSel.value;
+                document.querySelectorAll('.type-specific').forEach(function(el) {
+                    if (el.dataset.type !== current) {
+                        el.querySelectorAll('input, select, textarea').forEach(function(f) { f.disabled = true; });
+                    }
+                });
+            });
+        }
+
         // Gemensam "ta bort rad"-hanterare (event delegation)
         document.addEventListener('click', function(ev) {
             var btn = ev.target.closest('.btn-remove-row');
