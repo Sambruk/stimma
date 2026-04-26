@@ -81,8 +81,8 @@ function draftDescription() {
         echo json_encode(['success' => false, 'message' => 'Beskriv din idé med minst 10 tecken.']);
         exit;
     }
-    if (mb_strlen($rawIdea) > 4000) {
-        echo json_encode(['success' => false, 'message' => 'Texten är för lång (max 4000 tecken).']);
+    if (mb_strlen($rawIdea) > 15000) {
+        echo json_encode(['success' => false, 'message' => 'Texten är för lång (max 15000 tecken).']);
         exit;
     }
 

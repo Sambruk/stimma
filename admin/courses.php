@@ -246,7 +246,7 @@ require_once 'include/header.php';
                                 <div class="form-text mb-2">
                                     Vilken kurs vill du utveckla? Beskriv med dina egna ord — du behöver inte tänka på att formulera dig väl. Din text används bara för att skapa en beskrivning för kursen och ligga till grund för AI-genereringen.
                                 </div>
-                                <textarea class="form-control" id="raw_idea" rows="4"
+                                <textarea class="form-control" id="raw_idea" rows="8"
                                           placeholder="T.ex: Jag vill lära våra nyanställda om GDPR — framför allt vad de får och inte får göra med kunduppgifter, med några konkreta exempel från vår bransch..."></textarea>
                                 <div class="d-flex gap-2 align-items-center mt-2">
                                     <button type="button" class="btn btn-success btn-sm" id="draftDescriptionBtn">
