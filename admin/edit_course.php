@@ -404,7 +404,7 @@ require_once 'include/header.php';
                         <!-- Flikrad — fyra logiska sektioner -->
                         <ul class="nav nav-tabs mb-3" id="editCourseTabs" role="tablist">
                             <li class="nav-item" role="presentation">
-                                <button type="button" class="nav-link active" data-course-tab="content"><i class="bi bi-journal-text me-1"></i>Innehåll</button>
+                                <button type="button" class="nav-link active" data-course-tab="content"><i class="bi bi-journal-text me-1"></i>Allmänt</button>
                             </li>
                             <li class="nav-item" role="presentation">
                                 <button type="button" class="nav-link" data-course-tab="sequential"><i class="bi bi-list-ol me-1"></i>Stegvisa lektioner</button>
@@ -1552,6 +1552,9 @@ require_once 'include/header.php';
 </div>
 
 <?php if (isset($course['id'])): ?>
+<!-- Kursredaktörer hör till "Allmänt"-fliken (data-tab-section="content")
+     så den följer flikbytet som resten av sidan. -->
+<div class="course-tab-section" data-tab-section="content">
 <div class="row mt-4">
     <div class="col-12">
         <div class="card shadow mb-4">
@@ -1855,6 +1858,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
+</div><!-- /.tab-section content (Kursredaktörer) -->
 <?php endif; ?>
 
 <?php
