@@ -196,6 +196,10 @@ require_once 'include/header.php';
                                         data-course-id="<?= (int)$course['id'] ?>">
                                     <i class="bi bi-link-45deg"></i>
                                 </button>
+                                <button type="button" class="btn btn-sm btn-outline-success" title="Kopiera kursen till min organisation"
+                                        onclick="copyCourseInOrg(<?= (int)$course['id'] ?>, <?= json_encode($course['title']) ?>)">
+                                    <i class="bi bi-files"></i>
+                                </button>
                                 <a href="export.php?id=<?= $course['id'] ?>" class="btn btn-sm btn-outline-secondary" title="Exportera kurs">
                                     <i class="bi bi-box-arrow-up"></i>
                                 </a>
@@ -870,6 +874,25 @@ function deleteCourse(id) {
     idInput.type = "hidden"; idInput.name = "id"; idInput.value = id;
     var csrfInput = document.createElement("input");
     csrfInput.type = "hidden"; csrfInput.name = "csrf_token"; csrfInput.value = CSRF_TOKEN;
+    form.appendChild(idInput);
+    form.appendChild(csrfInput);
+    document.body.appendChild(form);
+    form.submit();
+}
+
+// Kopiera kursen till den egna organisationen
+function copyCourseInOrg(id, title) {
+    if (!confirm("Vill du kopiera \"" + title + "\" till din organisation? En ny kopia skapas som inaktiv så du kan justera innan publicering.")) return;
+    var form = document.createElement("form");
+    form.method = "POST";
+    form.action = "copy_course.php";
+    var actionInput = document.createElement("input");
+    actionInput.type = "hidden"; actionInput.name = "action"; actionInput.value = "copy_course";
+    var idInput = document.createElement("input");
+    idInput.type = "hidden"; idInput.name = "course_id"; idInput.value = id;
+    var csrfInput = document.createElement("input");
+    csrfInput.type = "hidden"; csrfInput.name = "csrf_token"; csrfInput.value = CSRF_TOKEN;
+    form.appendChild(actionInput);
     form.appendChild(idInput);
     form.appendChild(csrfInput);
     document.body.appendChild(form);
