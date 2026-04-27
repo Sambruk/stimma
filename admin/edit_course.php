@@ -379,6 +379,28 @@ require_once 'include/header.php';
                         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                         <input type="hidden" name="id" value="<?= $course['id'] ?? '' ?>">
 
+                        <!-- Override: adminens globala .nav-link-styling är vit (för
+                             den mörka sidopanelen). Här behöver vi mörk text på ljus
+                             flikbakgrund. -->
+                        <style>
+                            #editCourseTabs .nav-link {
+                                color: #495057 !important;
+                                border-left: none !important;
+                                background: transparent;
+                                font-weight: 500;
+                            }
+                            #editCourseTabs .nav-link:hover {
+                                color: #0d6efd !important;
+                                background: rgba(13,110,253,.05);
+                                border-left-color: transparent !important;
+                            }
+                            #editCourseTabs .nav-link.active {
+                                color: #0d6efd !important;
+                                background: #fff;
+                                border-bottom-color: #fff !important;
+                            }
+                        </style>
+
                         <!-- Flikrad — fyra logiska sektioner -->
                         <ul class="nav nav-tabs mb-3" id="editCourseTabs" role="tablist">
                             <li class="nav-item" role="presentation">
