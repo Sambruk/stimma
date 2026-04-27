@@ -233,8 +233,8 @@ require_once 'include/header.php';
         <div>
             <h4 class="mb-1"><i class="bi bi-patch-question me-2 text-primary"></i>Quizfrågor</h4>
             <div class="text-muted">
-                <a href="edit_lesson.php?id=<?= $lessonId ?>" class="text-decoration-none"><i class="bi bi-arrow-left"></i> <?= htmlspecialchars($lesson['title']) ?></a>
-                — <?= htmlspecialchars($lesson['course_title']) ?>
+                <a href="lessons.php?course_id=<?= (int)$lesson['course_id'] ?>" class="text-decoration-none"><i class="bi bi-arrow-left"></i> Lektioner i <?= htmlspecialchars($lesson['course_title']) ?></a>
+                — <?= htmlspecialchars($lesson['title']) ?>
             </div>
         </div>
         <?php if (!$editQ): ?>
