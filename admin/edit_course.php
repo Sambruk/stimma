@@ -378,7 +378,26 @@ require_once 'include/header.php';
                     <form method="post" action="" enctype="multipart/form-data">
                         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                         <input type="hidden" name="id" value="<?= $course['id'] ?? '' ?>">
-                        
+
+                        <!-- Flikrad — fyra logiska sektioner -->
+                        <ul class="nav nav-tabs mb-3" id="editCourseTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button type="button" class="nav-link active" data-course-tab="content"><i class="bi bi-journal-text me-1"></i>Innehåll</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button type="button" class="nav-link" data-course-tab="sequential"><i class="bi bi-list-ol me-1"></i>Stegvisa lektioner</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button type="button" class="nav-link" data-course-tab="assignment"><i class="bi bi-people me-1"></i>Tilldelning &amp; synlighet</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button type="button" class="nav-link" data-course-tab="publishing"><i class="bi bi-broadcast me-1"></i>Publicering</button>
+                            </li>
+                        </ul>
+
+                        <!-- Tab: Publicering (Status + Publik kurs) -->
+                        <div class="course-tab-section" data-tab-section="publishing" style="display:none;">
+
                         <div class="card mb-3 <?= ($course['status'] ?? '') === 'active' ? 'border-success' : 'border-warning' ?>" id="statusCard">
                             <div class="card-body py-2 d-flex align-items-center justify-content-between">
                                 <div class="d-flex align-items-center">
@@ -502,9 +521,10 @@ require_once 'include/header.php';
                         </script>
                         <?php endif; ?>
 
-                        <!-- Två-kolumn-layout: vänster = innehåll/stegvis, höger = synlighet/taggar -->
-                        <div class="row g-3">
-                            <div class="col-lg-8">
+                        </div><!-- /.tab-section publishing -->
+
+                        <!-- Tab: Innehåll -->
+                        <div class="course-tab-section" data-tab-section="content">
 
                         <div class="card mb-3">
                             <div class="card-header py-2"><h6 class="m-0 fw-semibold"><i class="bi bi-journal-text me-1 text-primary"></i>Kursens innehåll</h6></div>
@@ -574,6 +594,11 @@ require_once 'include/header.php';
                         </div>
                             </div><!-- /.card-body Kursens innehåll -->
                         </div><!-- /.card Kursens innehåll -->
+
+                        </div><!-- /.tab-section content -->
+
+                        <!-- Tab: Stegvisa lektioner -->
+                        <div class="course-tab-section" data-tab-section="sequential" style="display:none;">
 
                         <div class="card mb-3">
                             <div class="card-header py-2"><h6 class="m-0 fw-semibold"><i class="bi bi-list-ol me-1 text-primary"></i>Stegvisa lektioner</h6></div>
@@ -1067,8 +1092,10 @@ require_once 'include/header.php';
                         }
                         </script>
 
-                            </div><!-- /.col-lg-8 -->
-                            <div class="col-lg-4">
+                        </div><!-- /.tab-section sequential -->
+
+                        <!-- Tab: Tilldelning & synlighet -->
+                        <div class="course-tab-section" data-tab-section="assignment" style="display:none;">
 
                         <?php if (!empty($availableTags)): ?>
                         <div class="mb-3">
@@ -1445,8 +1472,34 @@ require_once 'include/header.php';
                         </div>
                         <?php endif; ?>
 
-                            </div><!-- /.col-lg-4 -->
-                        </div><!-- /.row -->
+                        </div><!-- /.tab-section assignment -->
+
+                        <script>
+                        (function(){
+                            var tabBtns = document.querySelectorAll('#editCourseTabs [data-course-tab]');
+                            var sections = document.querySelectorAll('[data-tab-section]');
+                            function showTab(name) {
+                                tabBtns.forEach(function(b){ b.classList.toggle('active', b.dataset.courseTab === name); });
+                                sections.forEach(function(s){ s.style.display = (s.dataset.tabSection === name) ? '' : 'none'; });
+                                try { history.replaceState(null, '', '#tab=' + name); } catch (e) {}
+                            }
+                            tabBtns.forEach(function(b){
+                                b.addEventListener('click', function(e){ e.preventDefault(); showTab(this.dataset.courseTab); });
+                            });
+                            // Hoppa till rätt flik vid invalid required-fält så browsern kan
+                            // visa felmeddelande på fältet (annars är fältet dolt → tom no-op).
+                            var form = document.querySelector('#editCourseTabs').closest('form');
+                            if (form) form.addEventListener('invalid', function(e){
+                                var section = e.target.closest('[data-tab-section]');
+                                if (section) showTab(section.dataset.tabSection);
+                            }, true);
+                            // Initial fliktillstånd från URL-hash om satt (t.ex. #tab=sequential)
+                            var match = (location.hash || '').match(/tab=([a-z]+)/i);
+                            if (match && document.querySelector('[data-tab-section="' + match[1] + '"]')) {
+                                showTab(match[1]);
+                            }
+                        })();
+                        </script>
 
                         <div class="d-flex justify-content-between">
                             <button type="submit" class="btn btn-primary">Spara</button>
