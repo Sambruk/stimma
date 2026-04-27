@@ -570,7 +570,8 @@ require_once 'include/header.php';
 
                             <div class="col-lg-4 col-md-8">
                                 <label for="image" class="form-label small mb-1">Bild
-                                    <span class="text-muted small ms-1" title="Max 5 MB. JPG/PNG/GIF. Rekommenderad storlek 1200×630 px.">
+                                    <span class="text-muted ms-1" data-bs-toggle="tooltip"
+                                          data-bs-title="Max 5 MB. JPG/PNG/GIF. Rekommenderad storlek 1200×630 px.">
                                         <i class="bi bi-info-circle"></i>
                                     </span>
                                 </label>
@@ -594,7 +595,8 @@ require_once 'include/header.php';
 
                             <div class="col-lg-2 col-md-4">
                                 <label for="deadline" class="form-label small mb-1">Slutdatum
-                                    <span class="text-muted small ms-1" title="Datum då kursen ska vara genomförd. Lämna tomt om inget slutdatum.">
+                                    <span class="text-muted ms-1" data-bs-toggle="tooltip"
+                                          data-bs-title="Datum då kursen ska vara genomförd. Lämna tomt om inget slutdatum.">
                                         <i class="bi bi-info-circle"></i>
                                     </span>
                                 </label>
@@ -1517,6 +1519,23 @@ require_once 'include/header.php';
                             var match = (location.hash || '').match(/tab=([a-z]+)/i);
                             if (match && document.querySelector('[data-tab-section="' + match[1] + '"]')) {
                                 showTab(match[1]);
+                            }
+
+                            // Bootstrap tooltips (info-ikonerna i Innehåll-fliken). Init görs
+                            // när bootstrap-bundle har laddats; använd kort polling som
+                            // fallback om scripten ännu inte är klar vid DOM-parse.
+                            function initTooltips() {
+                                if (typeof bootstrap === 'undefined' || !bootstrap.Tooltip) return false;
+                                document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+                                    if (!bootstrap.Tooltip.getInstance(el)) new bootstrap.Tooltip(el);
+                                });
+                                return true;
+                            }
+                            if (!initTooltips()) {
+                                var tries = 0;
+                                var iv = setInterval(function() {
+                                    if (initTooltips() || ++tries > 30) clearInterval(iv);
+                                }, 100);
                             }
                         })();
                         </script>
