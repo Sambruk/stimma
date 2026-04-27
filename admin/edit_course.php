@@ -551,48 +551,55 @@ require_once 'include/header.php';
                         <div class="card mb-3">
                             <div class="card-header py-2"><h6 class="m-0 fw-semibold"><i class="bi bi-journal-text me-1 text-primary"></i>Kursens innehåll</h6></div>
                             <div class="card-body">
-                        <div class="form-floating mb-3">
-                            <input type="text" class="form-control" id="title" name="title"
-                                   value="<?= htmlspecialchars($course['title'] ?? '') ?>" required>
-                            <label for="title">Titel</label>
-                        </div>
-
-                        <div class="form-floating mb-3">
-                            <textarea class="form-control" id="description" name="description" 
-                                      style="height: 100px"><?= htmlspecialchars($course['description'] ?? '') ?></textarea>
-                            <label for="description">Beskrivning</label>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="image" class="form-label">Bild</label>
-                            <div id="current-image-container" class="mb-2" <?= empty($course['image_url']) ? 'style="display:none;"' : '' ?>>
-                                <p class="text-muted">Nuvarande bild:</p>
-                                <img id="current-image" src="<?= !empty($course['image_url']) ? '../upload/' . htmlspecialchars($course['image_url']) : '' ?>" alt="Kursbild" class="img-thumbnail" style="max-width: 200px;">
-                                <input type="hidden" name="image_url" id="image_url" value="<?= htmlspecialchars($course['image_url'] ?? '') ?>">
-                                <div class="form-text" id="image-path">Sökväg: <?= htmlspecialchars($course['image_url'] ?? '') ?></div>
-                            </div>
-                            <?php if (!empty($course['image_url'])): ?>
-                                <p class="text-muted">Ladda upp ny bild för att ersätta den nuvarande:</p>
-                            <?php endif; ?>
-                            <div class="alert alert-info py-2 mb-2 small">
-                                <i class="bi bi-info-circle me-1"></i>
-                                <strong>Max 5 MB.</strong> Tillåtna format: <strong>JPG, PNG, GIF</strong>. Rekommenderad storlek: ca <strong>1200 × 630 px</strong>.
-                            </div>
-                            <div class="d-flex gap-2 align-items-start">
-                                <div class="flex-grow-1">
-                                    <input type="file" class="form-control" id="image" name="image" accept="image/jpeg,image/png,image/gif">
+                        <div class="row g-3 mb-3">
+                            <div class="col-lg-3 col-md-6">
+                                <div class="form-floating h-100">
+                                    <input type="text" class="form-control" id="title" name="title"
+                                           value="<?= htmlspecialchars($course['title'] ?? '') ?>" required>
+                                    <label for="title">Titel</label>
                                 </div>
-                                <?php if (isset($course['id'])): ?>
-                                <button type="button" id="generate-ai-image-btn" class="btn btn-outline-primary" title="Generera AI-bild">
-                                    <i class="bi bi-stars"></i> Generera AI-bild
-                                </button>
-                                <?php endif; ?>
                             </div>
-                            <div id="ai-image-status" class="mt-2" style="display: none;">
-                                <div class="spinner-border spinner-border-sm text-primary" role="status">
-                                    <span class="visually-hidden">Genererar...</span>
+
+                            <div class="col-lg-3 col-md-6">
+                                <div class="form-floating h-100">
+                                    <textarea class="form-control" id="description" name="description"
+                                              style="height: 100%; min-height: 58px;"><?= htmlspecialchars($course['description'] ?? '') ?></textarea>
+                                    <label for="description">Beskrivning</label>
                                 </div>
-                                <span class="ms-2 text-muted">Genererar AI-bild, detta kan ta upp till 60 sekunder...</span>
+                            </div>
+
+                            <div class="col-lg-4 col-md-8">
+                                <label for="image" class="form-label small mb-1">Bild
+                                    <span class="text-muted small ms-1" title="Max 5 MB. JPG/PNG/GIF. Rekommenderad storlek 1200×630 px.">
+                                        <i class="bi bi-info-circle"></i>
+                                    </span>
+                                </label>
+                                <div id="current-image-container" class="mb-1" <?= empty($course['image_url']) ? 'style="display:none;"' : '' ?>>
+                                    <img id="current-image" src="<?= !empty($course['image_url']) ? '../upload/' . htmlspecialchars($course['image_url']) : '' ?>" alt="Kursbild" class="img-thumbnail" style="max-height: 50px;">
+                                    <input type="hidden" name="image_url" id="image_url" value="<?= htmlspecialchars($course['image_url'] ?? '') ?>">
+                                </div>
+                                <div class="d-flex gap-2 align-items-start">
+                                    <input type="file" class="form-control form-control-sm flex-grow-1" id="image" name="image" accept="image/jpeg,image/png,image/gif">
+                                    <?php if (isset($course['id'])): ?>
+                                    <button type="button" id="generate-ai-image-btn" class="btn btn-sm btn-outline-primary" title="Generera AI-bild">
+                                        <i class="bi bi-stars"></i> AI
+                                    </button>
+                                    <?php endif; ?>
+                                </div>
+                                <div id="ai-image-status" class="mt-1 small" style="display: none;">
+                                    <span class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">…</span></span>
+                                    <span class="ms-1 text-muted">Genererar AI-bild (~60 s)...</span>
+                                </div>
+                            </div>
+
+                            <div class="col-lg-2 col-md-4">
+                                <label for="deadline" class="form-label small mb-1">Slutdatum
+                                    <span class="text-muted small ms-1" title="Datum då kursen ska vara genomförd. Lämna tomt om inget slutdatum.">
+                                        <i class="bi bi-info-circle"></i>
+                                    </span>
+                                </label>
+                                <input type="date" class="form-control" id="deadline" name="deadline"
+                                       value="<?= htmlspecialchars($course['deadline'] ?? '') ?>">
                             </div>
                         </div>
 
@@ -605,15 +612,6 @@ require_once 'include/header.php';
                             <?php require_once 'include/editor.php'; renderEditor($course['completion_content'] ?? '', 'completion_content', 'completionEditor', true); ?>
                         </div>
 
-                        <div class="mb-0">
-                            <label for="deadline" class="form-label">Slutdatum</label>
-                            <input type="date" class="form-control" id="deadline" name="deadline"
-                                   value="<?= htmlspecialchars($course['deadline'] ?? '') ?>">
-                            <div class="form-text">
-                                Ange ett datum om kursen ska vara genomförd senast ett visst datum.
-                                Lämna tomt om inget slutdatum finns.
-                            </div>
-                        </div>
                             </div><!-- /.card-body Kursens innehåll -->
                         </div><!-- /.card Kursens innehåll -->
 
