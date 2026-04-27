@@ -722,10 +722,15 @@ require_once 'include/header.php';
                                     ?>
                                     <?php if (isset($_GET['id'])): ?>
                                     <div class="card mb-3 border-primary">
-                                        <div class="card-header bg-primary bg-opacity-10">
-                                            <h6 class="m-0"><i class="bi bi-person-plus me-2"></i>Skriv in användare</h6>
+                                        <div class="card-header bg-primary bg-opacity-10 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                            <h6 class="m-0"><i class="bi bi-person-plus me-2"></i>Aktiv inskrivning av användare</h6>
+                                            <span class="badge bg-primary"><i class="bi bi-envelope-fill me-1"></i>Skickar e-post + påminnelser</span>
                                         </div>
                                         <div class="card-body">
+                                            <div class="alert alert-primary py-2 small mb-3">
+                                                <i class="bi bi-arrow-down-circle me-1"></i><strong>Push-tilldelning.</strong>
+                                                Användaren får ett mail om att kursen finns och påminnelser enligt schema. Detta är aktiv tilldelning — inte att förväxla med synligheten i kurskatalogen som sätts längre ned (<em>"Vem ska se kursen?"</em>).
+                                            </div>
                                             <p class="text-muted small mb-3">
                                                 <span id="enrollDescRolling" style="display: <?= $currentEnrollmentType === 'rolling' ? 'inline' : 'none' ?>;">Sök och välj användare att skriva in i kursen. Varje användare startar det valda datumet och får lektioner med det inställda intervallet.</span>
                                                 <span id="enrollDescBulk" style="display: <?= $currentEnrollmentType === 'rolling' ? 'none' : 'inline' ?>;">Sök och välj användare att skriva in i kursen. Användare skrivs in och startar tillsammans på kursens gemensamma startdatum.</span>
@@ -1125,7 +1130,15 @@ require_once 'include/header.php';
                         $shareMode = empty($courseSharedDomains) ? 'whole_org' : 'specific_domains';
                         ?>
                         <div class="mb-4 p-3 border rounded bg-light">
-                            <label class="form-label fw-semibold mb-2"><i class="bi bi-share me-1 text-primary"></i>Vem ska se kursen?</label>
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                <label class="form-label fw-semibold mb-0"><i class="bi bi-eye me-1 text-secondary"></i>Synlighet — vem ska se kursen i sin kurskatalog?</label>
+                                <span class="badge bg-secondary"><i class="bi bi-eye-fill me-1"></i>Passiv — inga mail</span>
+                            </div>
+                            <div class="alert alert-secondary py-2 small mb-3">
+                                <i class="bi bi-info-circle me-1"></i><strong>Synlighetsinställning.</strong>
+                                Styr vilka användare som <em>ser</em> kursen i sin kurskatalog och kan välja att starta den själva. <strong>Inga mail skickas automatiskt.</strong>
+                                Om du istället vill aktivt tilldela kursen till specifika användare (med mail + påminnelser) — använd <em>"Aktiv inskrivning av användare"</em> i sektionen för stegvisa kurser ovan.
+                            </div>
 
                             <div class="form-check">
                                 <input class="form-check-input" type="radio" name="share_mode" id="share_mode_org" value="whole_org" <?= $shareMode === 'whole_org' ? 'checked' : '' ?>>
