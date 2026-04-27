@@ -202,13 +202,13 @@ require_once 'include/header.php';
                                     <?php if ($isInfo): ?>
                                         <span class="text-muted small">—</span>
                                     <?php elseif (!empty($lesson['quiz_question'])): ?>
-                                        <span class="badge bg-primary">
+                                        <a href="edit_quiz.php?lesson_id=<?= $lesson['id'] ?>" class="badge bg-primary text-decoration-none" title="Hantera quizfrågor">
                                             <i class="bi bi-check-circle-fill"></i> Quiz
-                                        </span>
+                                        </a>
                                     <?php else: ?>
-                                        <span class="badge bg-secondary">
-                                            <i class="bi bi-dash-circle"></i> Inget quiz
-                                        </span>
+                                        <a href="edit_quiz.php?lesson_id=<?= $lesson['id'] ?>" class="badge bg-secondary text-decoration-none" title="Lägg till quizfrågor">
+                                            <i class="bi bi-plus-circle"></i> Lägg till quiz
+                                        </a>
                                     <?php endif; ?>
                                 </td>
                                 <td>
@@ -228,11 +228,16 @@ require_once 'include/header.php';
                                        class="btn btn-sm btn-outline-info" title="Förhandsgranska">
                                         <i class="bi bi-eye"></i>
                                     </a>
-                                    <a href="edit_lesson.php?id=<?= $lesson['id'] ?>" class="btn btn-sm btn-primary">
+                                    <a href="edit_lesson.php?id=<?= $lesson['id'] ?>" class="btn btn-sm btn-primary" title="Redigera lektion">
                                         <i class="bi bi-pencil"></i>
                                     </a>
+                                    <?php if (!$isInfo): ?>
+                                    <a href="edit_quiz.php?lesson_id=<?= $lesson['id'] ?>" class="btn btn-sm btn-outline-success" title="Hantera quizfrågor">
+                                        <i class="bi bi-patch-question"></i>
+                                    </a>
+                                    <?php endif; ?>
                                     <button type="button" onclick="deleteLesson(<?= $lesson['id'] ?>)"
-                                       class="btn btn-sm btn-outline-danger">
+                                       class="btn btn-sm btn-outline-danger" title="Radera lektion">
                                         <i class="bi bi-trash"></i>
                                     </button>
                                 </td>
