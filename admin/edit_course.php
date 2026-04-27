@@ -502,6 +502,13 @@ require_once 'include/header.php';
                         </script>
                         <?php endif; ?>
 
+                        <!-- Två-kolumn-layout: vänster = innehåll/stegvis, höger = synlighet/taggar -->
+                        <div class="row g-3">
+                            <div class="col-lg-8">
+
+                        <div class="card mb-3">
+                            <div class="card-header py-2"><h6 class="m-0 fw-semibold"><i class="bi bi-journal-text me-1 text-primary"></i>Kursens innehåll</h6></div>
+                            <div class="card-body">
                         <div class="form-floating mb-3">
                             <input type="text" class="form-control" id="title" name="title"
                                    value="<?= htmlspecialchars($course['title'] ?? '') ?>" required>
@@ -556,7 +563,7 @@ require_once 'include/header.php';
                             <?php require_once 'include/editor.php'; renderEditor($course['completion_content'] ?? '', 'completion_content', 'completionEditor', true); ?>
                         </div>
 
-                        <div class="mb-3">
+                        <div class="mb-0">
                             <label for="deadline" class="form-label">Slutdatum</label>
                             <input type="date" class="form-control" id="deadline" name="deadline"
                                    value="<?= htmlspecialchars($course['deadline'] ?? '') ?>">
@@ -565,8 +572,11 @@ require_once 'include/header.php';
                                 Lämna tomt om inget slutdatum finns.
                             </div>
                         </div>
+                            </div><!-- /.card-body Kursens innehåll -->
+                        </div><!-- /.card Kursens innehåll -->
 
                         <div class="card mb-3">
+                            <div class="card-header py-2"><h6 class="m-0 fw-semibold"><i class="bi bi-list-ol me-1 text-primary"></i>Stegvisa lektioner</h6></div>
                             <div class="card-body">
                                 <div class="form-check form-switch mb-2">
                                     <input class="form-check-input" type="checkbox" id="sequential_mode" name="sequential_mode"
@@ -630,55 +640,56 @@ require_once 'include/header.php';
                                         </div>
                                     </div>
 
-                                    <!-- E-postmall: Ny lektion -->
-                                    <div class="card mb-3 border-success">
-                                        <div class="card-header bg-success bg-opacity-10">
-                                            <h6 class="m-0"><i class="bi bi-envelope-plus me-2"></i>E-postmall: Ny lektion</h6>
-                                        </div>
-                                        <div class="card-body">
-                                            <div class="mb-2">
-                                                <label for="seq_new_lesson_subject" class="form-label">Ämnesrad</label>
-                                                <input type="text" class="form-control" id="seq_new_lesson_subject" name="seq_new_lesson_subject"
-                                                       value="<?= htmlspecialchars($course['seq_new_lesson_subject'] ?? '') ?>"
-                                                       placeholder="Ny lektion tillgänglig: {{lesson_title}}">
+                                    <!-- E-postmallar: hopvikta i details för kompakthet — anpassas sällan -->
+                                    <details class="mb-3">
+                                        <summary class="fw-semibold py-2 px-3 bg-light border rounded" style="cursor:pointer;">
+                                            <i class="bi bi-envelope-paper me-1 text-success"></i>E-postmallar (anpassa rubrik och text)
+                                            <span class="text-muted small ms-1">— klicka för att öppna</span>
+                                        </summary>
+                                        <div class="border-start border-end border-bottom rounded-bottom p-3">
+                                            <!-- E-postmall: Ny lektion -->
+                                            <div class="mb-3 pb-3 border-bottom">
+                                                <h6 class="text-success mb-2"><i class="bi bi-envelope-plus me-1"></i>Ny lektion</h6>
+                                                <div class="mb-2">
+                                                    <label for="seq_new_lesson_subject" class="form-label small">Ämnesrad</label>
+                                                    <input type="text" class="form-control" id="seq_new_lesson_subject" name="seq_new_lesson_subject"
+                                                           value="<?= htmlspecialchars($course['seq_new_lesson_subject'] ?? '') ?>"
+                                                           placeholder="Ny lektion tillgänglig: {{lesson_title}}">
+                                                </div>
+                                                <div class="mb-0">
+                                                    <label for="seq_new_lesson_body" class="form-label small">Brödtext</label>
+                                                    <textarea class="form-control" id="seq_new_lesson_body" name="seq_new_lesson_body" rows="4"
+                                                              placeholder="Hej {{user_name}}!&#10;&#10;En ny lektion i kursen {{course_title}} är tillgänglig:&#10;{{lesson_title}}&#10;&#10;Gå till lektionen: {{lesson_url}}"><?= htmlspecialchars($course['seq_new_lesson_body'] ?? '') ?></textarea>
+                                                </div>
                                             </div>
-                                            <div class="mb-0">
-                                                <label for="seq_new_lesson_body" class="form-label">Brödtext</label>
-                                                <textarea class="form-control" id="seq_new_lesson_body" name="seq_new_lesson_body" rows="5"
-                                                          placeholder="Hej {{user_name}}!&#10;&#10;En ny lektion i kursen {{course_title}} är tillgänglig:&#10;{{lesson_title}}&#10;&#10;Gå till lektionen: {{lesson_url}}"><?= htmlspecialchars($course['seq_new_lesson_body'] ?? '') ?></textarea>
-                                            </div>
-                                        </div>
-                                    </div>
 
-                                    <!-- E-postmall: Påminnelse -->
-                                    <div class="card mb-3 border-warning">
-                                        <div class="card-header bg-warning bg-opacity-10">
-                                            <h6 class="m-0"><i class="bi bi-bell me-2"></i>E-postmall: Påminnelse</h6>
-                                        </div>
-                                        <div class="card-body">
-                                            <div class="mb-2">
-                                                <label for="seq_reminder_subject" class="form-label">Ämnesrad</label>
-                                                <input type="text" class="form-control" id="seq_reminder_subject" name="seq_reminder_subject"
-                                                       value="<?= htmlspecialchars($course['seq_reminder_subject'] ?? '') ?>"
-                                                       placeholder="Påminnelse: {{lesson_title}} väntar på dig">
+                                            <!-- E-postmall: Påminnelse -->
+                                            <div class="mb-3 pb-3 border-bottom">
+                                                <h6 class="text-warning mb-2"><i class="bi bi-bell me-1"></i>Påminnelse</h6>
+                                                <div class="mb-2">
+                                                    <label for="seq_reminder_subject" class="form-label small">Ämnesrad</label>
+                                                    <input type="text" class="form-control" id="seq_reminder_subject" name="seq_reminder_subject"
+                                                           value="<?= htmlspecialchars($course['seq_reminder_subject'] ?? '') ?>"
+                                                           placeholder="Påminnelse: {{lesson_title}} väntar på dig">
+                                                </div>
+                                                <div class="mb-0">
+                                                    <label for="seq_reminder_body" class="form-label small">Brödtext</label>
+                                                    <textarea class="form-control" id="seq_reminder_body" name="seq_reminder_body" rows="4"
+                                                              placeholder="Hej {{user_name}}!&#10;&#10;Du har en lektion som väntar: {{lesson_title}}&#10;i kursen {{course_title}}.&#10;&#10;Gå till lektionen: {{lesson_url}}"><?= htmlspecialchars($course['seq_reminder_body'] ?? '') ?></textarea>
+                                                </div>
                                             </div>
-                                            <div class="mb-0">
-                                                <label for="seq_reminder_body" class="form-label">Brödtext</label>
-                                                <textarea class="form-control" id="seq_reminder_body" name="seq_reminder_body" rows="5"
-                                                          placeholder="Hej {{user_name}}!&#10;&#10;Du har en lektion som väntar: {{lesson_title}}&#10;i kursen {{course_title}}.&#10;&#10;Gå till lektionen: {{lesson_url}}"><?= htmlspecialchars($course['seq_reminder_body'] ?? '') ?></textarea>
-                                            </div>
-                                        </div>
-                                    </div>
 
-                                    <!-- Variabellista -->
-                                    <div class="alert alert-info mb-3">
-                                        <i class="bi bi-braces me-2"></i><strong>Tillgängliga variabler:</strong><br>
-                                        <code>{{user_name}}</code> <code>{{user_email}}</code> <code>{{course_title}}</code>
-                                        <code>{{lesson_title}}</code> <code>{{lesson_url}}</code> <code>{{lesson_number}}</code>
-                                        <code>{{total_lessons}}</code> <code>{{course_url}}</code> <code>{{deadline}}</code>
-                                        <code>{{days_remaining}}</code> <code>{{system_name}}</code>
-                                        <br><small class="text-muted">Lämna mallarna tomma för att använda standardmallen.</small>
-                                    </div>
+                                            <!-- Variabellista -->
+                                            <div class="small text-muted">
+                                                <i class="bi bi-braces me-1"></i><strong>Tillgängliga variabler:</strong>
+                                                <code>{{user_name}}</code> <code>{{user_email}}</code> <code>{{course_title}}</code>
+                                                <code>{{lesson_title}}</code> <code>{{lesson_url}}</code> <code>{{lesson_number}}</code>
+                                                <code>{{total_lessons}}</code> <code>{{course_url}}</code> <code>{{deadline}}</code>
+                                                <code>{{days_remaining}}</code> <code>{{system_name}}</code>.
+                                                Lämna tomt för standardmallen.
+                                            </div>
+                                        </div>
+                                    </details>
 
                                     <?php if (isset($_GET['id'])): ?>
                                     <!-- Testmail -->
@@ -1056,6 +1067,9 @@ require_once 'include/header.php';
                         }
                         </script>
 
+                            </div><!-- /.col-lg-8 -->
+                            <div class="col-lg-4">
+
                         <?php if (!empty($availableTags)): ?>
                         <div class="mb-3">
                             <label class="form-label">Taggar</label>
@@ -1430,6 +1444,9 @@ require_once 'include/header.php';
                             </div>
                         </div>
                         <?php endif; ?>
+
+                            </div><!-- /.col-lg-4 -->
+                        </div><!-- /.row -->
 
                         <div class="d-flex justify-content-between">
                             <button type="submit" class="btn btn-primary">Spara</button>
