@@ -14,6 +14,7 @@ Denna handbok beskriver hur du använder Stimma e-learning plattform. Stimma är
    - [Gamification - XP och nivåer](#gamification---xp-och-nivåer)
    - [Diplom](#diplom)
 4. [Guide för redaktörer](#guide-för-redaktörer)
+   - [Skapa en ny kurs](#skapa-en-ny-kurs) (flikbaserad redigerare)
    - [Ange slutdatum för en kurs](#ange-slutdatum-för-en-kurs)
    - [Kursens avslutningsinnehåll](#kursens-avslutningsinnehåll)
    - [Stegvisa kurser](#stegvisa-kurser)
@@ -21,8 +22,13 @@ Denna handbok beskriver hur du använder Stimma e-learning plattform. Stimma är
    - [Testmail för stegvisa kurser](#testmail-för-stegvisa-kurser)
    - [Starta stegvis kurs manuellt](#starta-stegvis-kurs-manuellt)
    - [Skriv in enskilda användare i en stegvis kurs](#skriv-in-enskilda-användare-i-en-stegvis-kurs)
+   - [Skapa lektioner](#skapa-lektioner)
    - [Informationssidor](#informationssidor)
    - [Kursens startsida](#kursens-startsida)
+   - [Skapa AI-genererad kurs](#skapa-ai-genererad-kurs)
+   - [AI-generera en lektion till befintlig kurs](#ai-generera-en-lektion-till-befintlig-kurs)
+   - [Importera PowerPoint till kurs](#importera-powerpoint-till-kurs)
+   - [Kopiera en befintlig kurs](#kopiera-en-befintlig-kurs)
    - [Förhandsgranska lektioner](#förhandsgranska-lektioner)
 5. [Guide för administratörer](#guide-för-administratörer)
    - [Dashboard - Översikt](#dashboard---översikt)
@@ -200,18 +206,32 @@ Som redaktör kan du skapa och hantera utbildningsinnehåll.
 
 ### Skapa en ny kurs
 
+Redigera-kurs-sidan är organiserad i fyra flikar som motsvarar olika
+arbetsmoment:
+
+- **Allmänt** — titel, beskrivning, bild, slutdatum, avslutssida och kursredaktörer
+- **Stegvisa lektioner** — toggle, registreringstyp, intervall, e-postmallar och aktiv inskrivning av användare
+- **Tilldelning & synlighet** — vem ska se kursen i sin kurskatalog (synlighetsinställning) plus taggar och organisationstaggar
+- **Publicering** — aktiv/inaktiv-toggle och publik kurs (registreringslänk för externa)
+
+Steg för att skapa en ny kurs:
+
 1. Gå till **Kurser** i adminmenyn
 2. Klicka på **"Ny kurs"**
-3. Fyll i:
+3. På fliken **Allmänt** fyll i:
    - **Titel** - Kursens namn
    - **Beskrivning** - Vad kursen handlar om
-   - **Svårighetsgrad** - Nybörjare, Medel eller Avancerad
-   - **Längd** - Uppskattad tid i minuter
-   - **Förkunskaper** - Vad deltagaren bör kunna innan
-   - **Taggar** - Välj relevanta taggar
+   - **Bild** - Ladda upp en kursbild eller klicka **"Generera AI-bild"**
    - **Slutdatum** - Ange ett datum om kursen ska vara genomförd senast ett visst datum (valfritt)
-4. Ladda upp en kursbild eller klicka **"Generera AI-bild"**
-5. Klicka **"Spara"**
+   - **Avslutssida** - HTML-innehåll som visas när deltagaren slutfört kursen
+4. Klicka **"Spara"**
+5. Justera Tilldelning & synlighet och Publicering på respektive flik när du är redo
+
+> Aktiv inskrivning (med e-post + påminnelser) konfigureras under **Stegvisa
+> lektioner**-fliken. Synlighet i kurskatalogen (utan mail) sätts under
+> **Tilldelning & synlighet**. Skillnaden är tydligt markerad i UI:t —
+> aktiv inskrivning *pushar* kursen till valda användare, synlighet
+> *visar* kursen i deras katalog så de kan välja att starta själva.
 
 ### Ange slutdatum för en kurs
 
@@ -339,20 +359,32 @@ Oavsett registreringstyp kan admin skriva in enskilda användare för hand. Anv�
 
 ### Skapa lektioner
 
+Lektionslistan har tre sätt att lägga till en ny lektion:
+- **Ny lektion** — manuell skapelse
+- **AI-generera lektion** — beskriv ämnet i fri text, AI bygger
+  innehåll + quiz (se egen sektion nedan)
+- Lektioner skapas också automatiskt vid AI-kursgenerering eller
+  PowerPoint-import
+
+Steg för manuell skapelse:
+
 1. Öppna kursen du vill lägga till lektioner i
 2. Klicka på **"Ny lektion"**
 3. Fyll i:
    - **Titel** - Lektionens namn
+   - **Typ** - Lektion (med quiz) eller Informationssida (utan quiz)
    - **Innehåll** - Lektionstexten (stödjer HTML-formatering)
    - **Längd** - Uppskattad tid i minuter
    - **Video-URL** - Länk till video (valfritt)
    - **Resurslänkar** - Externa länkar för fördjupning
 4. Ladda upp en lektionsbild eller klicka **"Generera AI-bild"**
-5. Lägg till quiz (valfritt):
-   - Skriv en fråga
-   - Ange tre svarsalternativ
-   - Markera rätt svar
-6. Klicka **"Spara"**
+5. Klicka **"Spara"**
+
+Quizfrågor hanteras i en separat vy. **Klicka direkt på Quiz-badgen
+i lektionslistan** (eller på frågetecken-knappen i åtgärder-kolumnen)
+för att gå direkt dit utan att öppna lektionsredigeraren först. När
+du är klar tar tillbaka-länken dig till lektionslistan så du kan
+fortsätta jobba med fler lektioner i kursen.
 
 ### Generera AI-bild för kurs eller lektion
 
@@ -425,23 +457,84 @@ Innan du publicerar kan du förhandsgranska hur en lektion ser ut för studenter
 ### Skapa AI-genererad kurs
 
 1. Gå till **Kurser**
-2. Klicka på **"Skapa AI-kurs"**
-3. Fyll i:
-   - Kursnamn och beskrivning
+2. Klicka på **"AI Generera kurs"**
+3. Skriv en fri "råidé" (upp till 15000 tecken) — beskriv målgrupp,
+   ämne och vad deltagaren ska lära sig. AI putsar fram ett kursnamn
+   och en strukturerad beskrivning du kan justera
+4. Välj inställningar:
    - Antal lektioner (1-20)
-   - Svårighetsgrad
+   - Svårighetsgrad, ton, språkstil, textlängd
    - Om quiz ska inkluderas
    - Om AI-tutor ska aktiveras
-4. Klicka **"Generera"**
-5. Kursen skapas i bakgrunden - följ statusen på kurslistan
+   - Bildalternativ (inga, sökta från internet, AI-genererade via DALL-E)
+5. Klicka **"Generera"**
+6. Kursen skapas i bakgrunden — följ statusen i kurslistan
+7. Resulterande kurs skapas som **inaktiv** så du kan granska och
+   justera innan publicering
+
+### AI-generera en lektion till befintlig kurs
+
+För att lägga till en enskild AI-genererad lektion till en befintlig kurs:
+
+1. Öppna kursens lektionslista
+2. Klicka **"AI-generera lektion"**
+3. I fritext-fältet beskriv vad lektionen ska handla om (20–10000 tecken)
+4. Välj:
+   - **Typ** — Lektion eller Informationssida
+   - **Textlängd** — Kort, Medium, eller Lång
+   - **Ton** — Pedagogisk, Formell, Avslappnad eller Inspirerande
+   - **Inkludera quiz** — kryssruta (döljs för informationssida)
+5. Klicka **"Generera"** — anropet är synkront och tar ~30–60 sekunder
+6. Den nya lektionen läggs sist i kursens sort_order. Använd
+   drag-and-drop för att flytta den till önskad position
+
+> AI-genererat innehåll bör alltid granskas före publicering. AI kan
+> hitta på funktioner eller fakta som inte stämmer. Lägg särskilt
+> märke till "Visste du att…"-rutor och tekniska påståenden.
+
+### Importera PowerPoint till kurs
+
+För att konvertera en befintlig PowerPoint-presentation till en
+Stimma-kurs:
+
+1. Gå till **Kurser**
+2. Klicka **"Importera PowerPoint"**
+3. Välj en `.pptx`-fil (max 50 MB)
+4. Välj inställningar (ton, textlängd, svårighet, språkstil, quiz,
+   AI-tutor, videolänkar) — samma som AI-kursgenereringen
+5. Klicka **"Ladda upp och bearbeta"**
+6. Kursen genereras i bakgrunden (typiskt 1-3 minuter)
+
+**Det här följer med automatiskt:**
+- Slide-titel → lektionstitel
+- Slide-text + talar-notes → AI-utvecklat lektionsinnehåll
+- Inbäddade PNG/JPG/GIF/WebP-bilder → första bilden per slide blir
+  lektionens hero-bild
+- 1 slide = 1 lektion, ordning bevarad
+- Quizfrågor + AI-tutor + videolänkar (om valt)
+
+**Begränsningar att vara medveten om:**
+- Max **25 slides** per import (cap)
+- Max **50 MB** filstorlek
+- **Vektorgrafik, diagram, SmartArt och dekorerade textrutor**
+  rasteras inte till bilder — texten extraheras men visuell layout
+  försvinner. Kräver LibreOffice headless som inte är installerat på
+  servern.
+- **Tabeller** blir radvis text — visuell tabellstruktur förloras
+- **Animations & transitioner** ignoreras
+
+Den genererade kursen skapas **inaktiv** så du kan granska och justera
+innan publicering.
 
 ### Kopiera en befintlig kurs
 
-1. Gå till **Kopiera kurs**
-2. Välj en kurs från listan
-3. Klicka **"Kopiera"**
-4. En kopia skapas i din organisation (inaktiv som standard)
-5. Redigera och aktivera kursen
+I kurslistan finns en kopia-knapp (📁-ikon, grön outline) per kursrad.
+Klicka den och bekräfta i dialogrutan — en kopia skapas i din
+organisation som inaktiv så du kan justera innan publicering.
+
+Kopian inkluderar alla lektioner, quiz, avslutningsinnehåll och
+inställningar. Du blir automatiskt redaktör på kopian (om du inte
+redan är admin).
 
 ### Exportera/Importera kurser
 
