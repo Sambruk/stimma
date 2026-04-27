@@ -385,6 +385,17 @@ JSON-strukturen ska vara:
 
 VIKTIGT: Du MÅSTE generera EXAKT {$lessonCount} lektioner i lessons-arrayen. Räkna noga!";
 
+    // PPTX-import: course_description är formaterad som "SLIDE N: titel\n[body]\n[notes]\nBILDFIL: namn\n\n..."
+    // Vi instruerar AI att behålla strukturen 1 slide = 1 lektion och låta
+    // bildreferenserna passera oförändrade så cron-koden kan mappa dem efteråt.
+    if (strpos((string)$job['course_description'], 'SLIDE 1:') === 0) {
+        $structureSystemPrompt .= "\n\nKURSBESKRIVNINGEN ÄR EXTRAHERAD FRÅN EN POWERPOINT (SLIDE-MARKÖRER):\n"
+            . "- Behåll strukturen — varje SLIDE motsvarar exakt en lektion (i samma ordning).\n"
+            . "- Använd slide-titeln som lektionstitel om den är meningsfull, annars sammanfatta innehållet.\n"
+            . "- Behåll referenserna 'BILDFIL: <namn>' EXAKT i lektionens beskrivning så systemet kan mappa rätt bild till rätt lektion. Skriv 'BILDFIL: <namn>' i description-fältet om bilden finns för slide:n.\n"
+            . "- NOTES: <text> är talar-anteckningar — använd dem för att utveckla lektionsinnehållet.\n";
+    }
+
     // Admin-angivna kompletterande instruktioner (om några)
     $adminSupplement = getCourseGenerationSupplement();
     if ($adminSupplement !== '') {
@@ -603,6 +614,38 @@ Skriv ett komplett, informativt och engagerande lektionsinnehåll i HTML.";
     }
 
     updateJobStatus($jobId, 'processing', 80, 'Kursen importerad.');
+
+    // PPTX-import: parse:a course_description efter "BILDFIL: <namn>"-rader
+    // per slide och uppdatera respektive lektions image_url. Slide-ordning
+    // matchar lessons.sort_order eftersom Phase 1 fick instruktion att
+    // behålla 1:1-mappningen.
+    if (strpos((string)$job['course_description'], 'SLIDE 1:') === 0) {
+        $blocks = preg_split('/\nSLIDE \d+:/', "\n" . $job['course_description']);
+        // Första blocket är tomt pga splitten; resten är slides i ordning.
+        $slideImages = [];
+        foreach ($blocks as $idx => $block) {
+            if ($idx === 0 || trim($block) === '') continue;
+            if (preg_match('/BILDFIL:\s*([^\s\n]+)/', $block, $m)) {
+                $slideImages[$idx - 1] = trim($m[1]);
+            }
+        }
+        if (!empty($slideImages)) {
+            $createdLessons = query(
+                "SELECT id, sort_order FROM " . DB_DATABASE . ".lessons
+                 WHERE course_id = ? ORDER BY sort_order ASC, id ASC",
+                [$courseId]
+            );
+            foreach ($createdLessons as $i => $row) {
+                if (isset($slideImages[$i])) {
+                    execute(
+                        "UPDATE " . DB_DATABASE . ".lessons SET image_url = ? WHERE id = ?",
+                        [$slideImages[$i], $row['id']]
+                    );
+                }
+            }
+            echo "  - Mappade " . count($slideImages) . " PPTX-bilder till lektioner.\n";
+        }
+    }
 
     // Generate images if enabled
     $generateImages = isset($job['generate_images']) ? (int)$job['generate_images'] : 0;

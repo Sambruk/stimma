@@ -98,6 +98,9 @@ require_once 'include/header.php';
             <button type="button" class="btn btn-sm btn-success" id="aiGenerateBtn" data-bs-toggle="modal" data-bs-target="#aiGenerateModal">
                 <i class="bi bi-robot"></i> AI Generera kurs
             </button>
+            <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#pptxImportModal">
+                <i class="bi bi-file-earmark-ppt"></i> Importera PowerPoint
+            </button>
             <a href="import.php" class="btn btn-sm btn-secondary">
                 <i class="bi bi-upload"></i> Importera kurs
             </a>
@@ -430,6 +433,95 @@ require_once 'include/header.php';
                     </div>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- PPTX Import Modal -->
+<div class="modal fade" id="pptxImportModal" tabindex="-1" aria-labelledby="pptxImportLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="pptxImportLabel">
+                    <i class="bi bi-file-earmark-ppt me-1 text-info"></i>Importera PowerPoint till kurs
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Stäng"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info py-2 small mb-3">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Ladda upp en <strong>.pptx</strong>-fil. Varje slide blir en lektion (max 25). AI utvecklar
+                    text + talar-notes till lektionsinnehåll och kan skapa quiz. Inbäddade PNG/JPG-bilder
+                    följer med och kopplas till respektive lektion.
+                </div>
+                <form id="pptxImportForm">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
+
+                    <div class="mb-3">
+                        <label for="pptxFile" class="form-label fw-semibold">PowerPoint-fil</label>
+                        <input type="file" class="form-control" id="pptxFile" name="pptx_file" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" required>
+                        <div class="form-text">Max 50 MB.</div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="pptxTone" class="form-label">Ton</label>
+                            <select class="form-select" id="pptxTone" name="tone">
+                                <option value="pedagogical" selected>Pedagogisk</option>
+                                <option value="formal">Formell</option>
+                                <option value="casual">Avslappnad</option>
+                                <option value="inspiring">Inspirerande</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="pptxTextLength" class="form-label">Textlängd per lektion</label>
+                            <select class="form-select" id="pptxTextLength" name="text_length">
+                                <option value="short">Kort</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="long">Lång</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="pptxDifficulty" class="form-label">Svårighetsgrad</label>
+                            <select class="form-select" id="pptxDifficulty" name="difficulty_level">
+                                <option value="beginner" selected>Nybörjare</option>
+                                <option value="intermediate">Mellan</option>
+                                <option value="advanced">Avancerad</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="pptxLanguageStyle" class="form-label">Språkstil</label>
+                            <select class="form-select" id="pptxLanguageStyle" name="language_style">
+                                <option value="formal" selected>Formell</option>
+                                <option value="informal">Informell</option>
+                                <option value="academic">Akademisk</option>
+                                <option value="conversational">Vardaglig</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-check mt-3">
+                        <input class="form-check-input" type="checkbox" name="include_quiz" id="pptxIncludeQuiz" value="1" checked>
+                        <label class="form-check-label" for="pptxIncludeQuiz">Inkludera quizfrågor per lektion</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="include_ai_tutor" id="pptxIncludeTutor" value="1">
+                        <label class="form-check-label" for="pptxIncludeTutor">Aktivera AI-tutor på lektionerna</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="include_video_links" id="pptxIncludeVideo" value="1">
+                        <label class="form-check-label" for="pptxIncludeVideo">Sök efter relevanta YouTube-länkar</label>
+                    </div>
+
+                    <div id="pptxStatus" class="mt-3" style="display:none;"></div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
+                <button type="button" class="btn btn-info" id="pptxImportBtn">
+                    <i class="bi bi-cloud-upload me-1"></i>Ladda upp och bearbeta
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -920,6 +1012,66 @@ document.addEventListener("click", function(ev) {
     } else {
         prompt("Kopiera länken:", url);
     }
+});
+
+// PPTX-import: skicka filen till import_pptx.php och starta sedan samma
+// jobb-polling som AI-kursgenereringen använder.
+document.getElementById("pptxImportBtn") && document.getElementById("pptxImportBtn").addEventListener("click", function() {
+    var fileInput = document.getElementById("pptxFile");
+    var status = document.getElementById("pptxStatus");
+    var btn = this;
+    if (!fileInput.files || fileInput.files.length === 0) {
+        status.style.display = "block";
+        status.className = "mt-3 alert alert-warning";
+        status.textContent = "Välj en .pptx-fil först.";
+        return;
+    }
+    var fd = new FormData(document.getElementById("pptxImportForm"));
+    btn.disabled = true;
+    btn.innerHTML = "<span class=\"spinner-border spinner-border-sm me-1\"></span>Bearbetar...";
+    status.style.display = "block";
+    status.className = "mt-3 alert alert-info";
+    status.textContent = "Laddar upp och extraherar slides...";
+
+    fetch("ajax/import_pptx.php", { method: "POST", body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data && data.success) {
+                status.className = "mt-3 alert alert-success";
+                var msg = "Importerar " + data.slide_count + " slides";
+                if (data.image_count) msg += " (" + data.image_count + " bilder)";
+                if (data.capped) msg += " — cap till 25";
+                msg += ". AI-jobb startat.";
+                status.textContent = msg;
+                currentJobId = data.job_id;
+                try { localStorage.setItem("stimma_ai_job_id", data.job_id); } catch (e) {}
+                setTimeout(function() {
+                    var modalEl = document.getElementById("pptxImportModal");
+                    var m = bootstrap.Modal.getInstance(modalEl);
+                    if (m) m.hide();
+                    if (typeof showProgressIndicator === "function") showProgressIndicator();
+                    if (typeof startBackgroundProcess === "function") startBackgroundProcess();
+                    if (typeof checkJobStatus === "function") {
+                        checkJobStatus();
+                        if (typeof statusCheckInterval !== "undefined" && statusCheckInterval) clearInterval(statusCheckInterval);
+                        window.statusCheckInterval = setInterval(checkJobStatus, 2000);
+                    }
+                    btn.disabled = false;
+                    btn.innerHTML = "<i class=\"bi bi-cloud-upload me-1\"></i>Ladda upp och bearbeta";
+                }, 800);
+            } else {
+                status.className = "mt-3 alert alert-danger";
+                status.textContent = (data && data.error) ? data.error : "Okänt fel.";
+                btn.disabled = false;
+                btn.innerHTML = "<i class=\"bi bi-cloud-upload me-1\"></i>Ladda upp och bearbeta";
+            }
+        })
+        .catch(function() {
+            status.className = "mt-3 alert alert-danger";
+            status.textContent = "Nätverksfel.";
+            btn.disabled = false;
+            btn.innerHTML = "<i class=\"bi bi-cloud-upload me-1\"></i>Ladda upp och bearbeta";
+        });
 });
 </script>';
 
