@@ -1499,10 +1499,14 @@ require_once 'include/header.php';
                         <script>
                         (function(){
                             var tabBtns = document.querySelectorAll('#editCourseTabs [data-course-tab]');
-                            var sections = document.querySelectorAll('[data-tab-section]');
+                            // Sektionerna re-queryas vid varje flikbyte eftersom Kurs-
+                            // redaktörer-blocket ligger UTANFÖR formuläret och därför
+                            // inte är parsat när scriptet kör inline.
                             function showTab(name) {
                                 tabBtns.forEach(function(b){ b.classList.toggle('active', b.dataset.courseTab === name); });
-                                sections.forEach(function(s){ s.style.display = (s.dataset.tabSection === name) ? '' : 'none'; });
+                                document.querySelectorAll('[data-tab-section]').forEach(function(s){
+                                    s.style.display = (s.dataset.tabSection === name) ? '' : 'none';
+                                });
                                 try { history.replaceState(null, '', '#tab=' + name); } catch (e) {}
                             }
                             tabBtns.forEach(function(b){
@@ -1515,10 +1519,18 @@ require_once 'include/header.php';
                                 var section = e.target.closest('[data-tab-section]');
                                 if (section) showTab(section.dataset.tabSection);
                             }, true);
-                            // Initial fliktillstånd från URL-hash om satt (t.ex. #tab=sequential)
-                            var match = (location.hash || '').match(/tab=([a-z]+)/i);
-                            if (match && document.querySelector('[data-tab-section="' + match[1] + '"]')) {
-                                showTab(match[1]);
+                            // Initial-state. Måste köras efter DOMContentLoaded så att
+                            // Kursredaktörer-blocket utanför formet hinner parseras.
+                            function applyInitial() {
+                                var match = (location.hash || '').match(/tab=([a-z]+)/i);
+                                var initialTab = (match && document.querySelector('[data-tab-section="' + match[1] + '"]'))
+                                    ? match[1] : 'content';
+                                showTab(initialTab);
+                            }
+                            if (document.readyState === 'loading') {
+                                document.addEventListener('DOMContentLoaded', applyInitial);
+                            } else {
+                                applyInitial();
                             }
 
                             // Bootstrap tooltips (info-ikonerna i Innehåll-fliken). Init görs
