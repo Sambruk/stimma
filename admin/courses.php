@@ -448,11 +448,36 @@ require_once 'include/header.php';
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Stäng"></button>
             </div>
             <div class="modal-body">
-                <div class="alert alert-info py-2 small mb-3">
-                    <i class="bi bi-info-circle me-1"></i>
-                    Ladda upp en <strong>.pptx</strong>-fil. Varje slide blir en lektion (max 25). AI utvecklar
-                    text + talar-notes till lektionsinnehåll och kan skapa quiz. Inbäddade PNG/JPG-bilder
-                    följer med och kopplas till respektive lektion.
+                <div class="alert alert-info small mb-3">
+                    <strong><i class="bi bi-info-circle me-1"></i>Så fungerar PowerPoint-importen</strong>
+                    <hr class="my-2">
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <strong class="text-success"><i class="bi bi-check-circle me-1"></i>Det här följer med</strong>
+                            <ul class="mb-0 ps-3">
+                                <li>Slide-titel → lektionstitel</li>
+                                <li>Slide-text + talar-notes → AI-utvecklat lektionsinnehåll</li>
+                                <li>Inbäddade PNG/JPG/GIF/WebP-bilder → första bilden per slide blir lektionens hero-bild</li>
+                                <li>1 slide = 1 lektion, ordning bevarad</li>
+                                <li>Quizfrågor + AI-tutor + videolänkar (om valt nedan)</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <strong class="text-warning"><i class="bi bi-exclamation-triangle me-1"></i>Det här fungerar sämre</strong>
+                            <ul class="mb-0 ps-3">
+                                <li><strong>Former, diagram, SmartArt, dekorerade textrutor</strong> — texten extraheras men visuell layout försvinner (kräver LibreOffice headless som inte finns på servern)</li>
+                                <li><strong>Tabeller</strong> blir radvis text — visuell struktur förloras</li>
+                                <li><strong>Animations &amp; transitioner</strong> — ignoreras</li>
+                                <li><strong>Max 25 slides</strong>, max <strong>50 MB</strong> filstorlek</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <hr class="my-2">
+                    <div class="text-muted">
+                        <i class="bi bi-shield-check me-1"></i>Den genererade kursen skapas <strong>inaktiv</strong>
+                        — du kan granska och justera innan publicering. Genereringen sker i bakgrunden
+                        (typiskt 1-3 minuter beroende på antal slides).
+                    </div>
                 </div>
                 <form id="pptxImportForm">
                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
