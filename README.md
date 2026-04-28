@@ -5,22 +5,34 @@ Stimma är en e-learning plattform för mikroutbildning, utvecklad för svenska 
 ## Funktioner
 
 ### Kärnfunktioner
-- **AI-genererade kurser** - Skapa kurser automatiskt med hjälp av AI
+- **AI-genererade kurser** - Skapa kurser från en fri idé eller stegvis med AI (stöd för OpenAI, Anthropic, Google, Azure och OpenRouter)
 - **AI-bildgenerering** - Generera kurs- och lektionsbilder med DALL-E 3
-- **Kurs- och lektionshantering** - Drag-and-drop sortering, import/export
-- **Quiz-funktionalitet** - Lägg till frågor i lektioner
 - **AI-tutor** - Integrerad chattfunktion för stöd under lektioner
+- **Kurs- och lektionshantering** - Flikbaserad redigerare, drag-and-drop-sortering, ZIP-baserad export/import med bilder
+- **Quiz-funktionalitet** - 9 frågetyper inkl. hotspot, per-lektion quiz-läge med live tally och per-fråga-bedömning
+- **Gamification** - XP-poäng, nivåer och achievements
+- **Diplom** - Automatisk diplomgenerering med Sambruks kontrasignering
+- **Dashboard** - Personlig översikt med framsteg och statistik
 - **Taggbaserad organisation** - Organisera kurser med taggar
 - **Rollbaserad åtkomstkontroll** - Admin, redaktör och användarroller
 - **Organisationsbaserad separation** - Multi-tenant arkitektur baserad på e-postdomän
+- **PUB-avtal** - Klickbara avtal med digital signering, SMS-verifiering och PDF-stämpling
 
-### Nya funktioner (v1.1)
-- **Gamification** - XP-poäng, nivåer och achievements för ökad motivation
-- **Diplom** - Automatisk diplomgenerering vid slutförd kurs
-- **Dashboard** - Personlig översikt med framsteg och statistik
-- **AI-leverantörsstöd** - Stöd för OpenAI, Anthropic, Google, Azure och OpenRouter
-- **Förhandsvisning** - Testa lektioner utan att spara data
-- **PUB-dokumentation** - Personuppgiftsbiträdesavtal och instruktioner
+### Nytt i v2.0
+- **PowerPoint-import** - Importera befintliga PPTX-filer och låt AI utveckla texten till en Stimma-kurs
+- **AI-genererad enstaka lektion** - Lägg till AI-skrivna lektioner till befintliga kurser
+- **Stegvisa kurser** - Schemalagd utrullning med e-postmallar, kö, autostart och logg (publik eller riktad)
+- **Domänbaserad kursdelning** - Publicera kurser publikt eller rikta till specifika domäner i organisationen
+- **Kursens landningssida** - Egen startsida per kurs med kopiera-länk, lektionsnavigering och kursavslutssida
+- **Hotspot-frågor** - Klickbara frågor med koordinater och uppladdade bilder
+- **Användarsynk via REST API** - Synka användare från HR-system, med domänutökning för admin på primärdomän
+- **Video- och ljuduppladdning** - YouTube + uppladdning upp till 100 MB; ljudstöd för tillgänglighet
+- **Bildinfogning i lektionsinnehåll** - Lägg in bilder direkt i texten
+- **Anpassningsbar headertext** per organisation/domän
+- **Ofelia-scheduler** - Docker-native cron för bakgrundsjobb
+- **Tillgänglighetsredogörelse** - Enligt DOS-lagen och WCAG 2.1 AA
+- **Versionshantering för AI-promptar**
+- **Säkerhetshärdning** - Åtgärdade kritiska, höga och medium fynd från säkerhetsaudit och beroendegranskning
 
 ## Installation
 
