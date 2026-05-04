@@ -164,7 +164,10 @@ try {
     ];
 
     // Skicka förfrågan till OpenAI
-    $response = sendOpenAIRequest($messages);
+    $response = sendOpenAIRequest($messages, [
+        'feature' => 'chat',
+        'course_id' => isset($lesson['course_id']) ? (int)$lesson['course_id'] : null,
+    ]);
 
 
     // Formatera svaret med vår egen markdown-parser

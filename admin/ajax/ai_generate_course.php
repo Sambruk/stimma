@@ -215,14 +215,18 @@ Svara ENDAST med giltig JSON, ingen annan text. Formatet ska vara en array med o
 /**
  * Call OpenAI API with GPT-4o-mini for quick tasks
  */
-function callOpenAIMini($systemPrompt, $userPrompt) {
+function callOpenAIMini($systemPrompt, $userPrompt, array $context = []) {
     $apiServer = defined('AI_SERVER') && AI_SERVER ? AI_SERVER : 'https://api.openai.com/v1/chat/completions';
     $apiKey = defined('AI_API_KEY') ? AI_API_KEY : '';
-    $model = 'gpt-4o-mini';
 
     if (empty($apiKey)) {
         throw new Exception('AI API-nyckel saknas i konfigurationen.');
     }
+
+    require_once __DIR__ . '/../../include/ai_quota.php';
+    enforceAiQuotaForCurrentSession();
+    if (empty($context['feature'])) $context['feature'] = 'course_gen';
+    $model = getModelForFeature($context['feature'], 'gpt-4o-mini');
 
     $data = [
         'model' => $model,
@@ -262,9 +266,11 @@ function callOpenAIMini($systemPrompt, $userPrompt) {
     $result = json_decode($response, true);
 
     if (isset($result['choices'][0]['message']['content'])) {
+        logAiUsage($context, $result['usage'] ?? [], $model, 'ok');
         return $result['choices'][0]['message']['content'];
     }
 
+    logAiUsage($context, [], $model, 'error');
     throw new Exception('Oväntat svar från AI API.');
 }
 

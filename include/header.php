@@ -89,9 +89,16 @@
     $userDomainForPub = getUserDomain($_SESSION['user_email']);
     $userHasPubAgreementForBanner = userHasPubAgreement($_SESSION['user_email']);
     $headerUserOrganization = getOrganizationByDomain($userDomainForPub);
-    $pubBannerUser = queryOne("SELECT is_admin, access_mode FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
+    $pubBannerUser = queryOne("SELECT is_admin, is_editor, access_mode FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
     $isPubAdmin = $pubBannerUser && $pubBannerUser['is_admin'] == 1;
+    $isPubEditor = $pubBannerUser && $pubBannerUser['is_editor'] == 1;
     $isHeaderPublicOnly = $pubBannerUser && ($pubBannerUser['access_mode'] ?? 'domain') === 'public_only';
+
+    // Informationsmeddelande från superadmin (modal-popup) — bara admin/redaktör.
+    if ($isPubAdmin || $isPubEditor) {
+        require_once __DIR__ . '/announcements.php';
+        renderAnnouncementModal((int)$_SESSION['user_id'], generateCsrfToken());
+    }
     ?>
     <?php if (!$userHasPubAgreementForBanner && !$isHeaderPublicOnly): ?>
     <!-- PUB-avtalsvarning -->

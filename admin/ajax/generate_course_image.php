@@ -57,8 +57,17 @@ if (empty($courseTitle)) {
     exit;
 }
 
+// Kvotkontroll
+require_once '../../include/ai_quota.php';
+try {
+    enforceAiQuotaForCurrentSession();
+} catch (Exception $e) {
+    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    exit;
+}
+
 // Generera AI-bild
-$result = generateAIImage($courseTitle, $courseDescription);
+$result = generateAIImage($courseTitle, $courseDescription, $courseId);
 
 if ($result['success']) {
     // Uppdatera kursen med bilden
@@ -79,7 +88,7 @@ if ($result['success']) {
 /**
  * Generate AI image using DALL-E
  */
-function generateAIImage($courseTitle, $courseDescription) {
+function generateAIImage($courseTitle, $courseDescription, $courseId = null) {
     $apiKey = defined('AI_API_KEY') ? AI_API_KEY : '';
     $imageApiServer = 'https://api.openai.com/v1/images/generations';
 
@@ -87,12 +96,15 @@ function generateAIImage($courseTitle, $courseDescription) {
         return ['success' => false, 'error' => 'API-nyckel saknas.'];
     }
 
+    $context = ['feature' => 'image', 'course_id' => $courseId, 'is_image' => true];
+    $imageModel = getModelForFeature('image', 'dall-e-3');
+
     $prompt = "Educational course cover illustration for a course called '{$courseTitle}'" .
               ($courseDescription ? ". Course description: '{$courseDescription}'" : "") .
               ". Clean, professional, modern style suitable for e-learning platform. No text in image. Abstract or conceptual visualization.";
 
     $data = [
-        'model' => 'dall-e-3',
+        'model' => $imageModel,
         'prompt' => $prompt,
         'n' => 1,
         'size' => '1024x1024',
@@ -153,5 +165,6 @@ function generateAIImage($courseTitle, $courseDescription) {
         return ['success' => false, 'error' => 'Kunde inte spara bildfilen.'];
     }
 
+    logAiUsage($context, [], $imageModel, 'ok');
     return ['success' => true, 'image_url' => $fileName];
 }

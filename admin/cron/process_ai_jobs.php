@@ -204,6 +204,23 @@ JSON-strukturen ska vara:
 function processJob($job) {
     $jobId = $job['id'];
 
+    // Slå upp e-post för kvotkontroll och loggning (cron har ingen $_SESSION)
+    require_once __DIR__ . '/../../include/ai_quota.php';
+    $jobUser = queryOne(
+        "SELECT email FROM " . DB_DATABASE . ".users WHERE id = ?",
+        [$job['user_id']]
+    );
+    $jobUserEmail = $jobUser['email'] ?? null;
+    $jobContext = [
+        'feature' => 'course_gen',
+        'user_email' => $jobUserEmail,
+        'course_id' => null,  // sätts efter importCourse()
+    ];
+
+    // Kvotkontroll redan vid jobbets start — annars slösas tid på generering
+    // som ändå inte kan slutföras.
+    enforceAiQuotaForEmail($jobUserEmail);
+
     // Mark as processing
     execute(
         "UPDATE " . DB_DATABASE . ".ai_course_jobs
@@ -404,7 +421,7 @@ VIKTIGT: Du MÅSTE generera EXAKT {$lessonCount} lektioner i lessons-arrayen. R�
 
     $structureUserPrompt = "Skapa en kursstruktur med EXAKT {$lessonCount} lektioner för kursen \"{$job['course_name']}\" baserat på följande beskrivning:\n\n{$job['course_description']}{$qaContext}\n\nGENERERA EXAKT {$lessonCount} LEKTIONER.";
 
-    $structureJson = callOpenAI($structureSystemPrompt, $structureUserPrompt);
+    $structureJson = callOpenAI($structureSystemPrompt, $structureUserPrompt, 16384, $jobContext);
 
     if (!$structureJson) {
         throw new Exception('Kunde inte generera kursstruktur från AI.');
@@ -527,7 +544,7 @@ Svårighetsgrad: {$difficultyText}
 
 Skriv ett komplett, informativt och engagerande lektionsinnehåll i HTML.";
 
-        $contentResponse = callOpenAI($contentSystemPrompt, $contentUserPrompt, 4096);
+        $contentResponse = callOpenAI($contentSystemPrompt, $contentUserPrompt, 4096, $jobContext);
 
         if ($contentResponse) {
             // Clean the response - remove any markdown wrapping
@@ -608,6 +625,9 @@ Skriv ett komplett, informativt och engagerande lektionsinnehåll i HTML.";
 
     // Import the course
     $courseId = importCourse($courseData, $job['user_id'], $job['organization_domain']);
+    $jobContext['course_id'] = $courseId;
+    $jobContext['feature'] = 'image';
+    $jobContext['is_image'] = true;
 
     if (!$courseId) {
         throw new Exception('Kunde inte importera kursen till databasen.');
@@ -661,7 +681,7 @@ Skriv ett komplett, informativt och engagerande lektionsinnehåll i HTML.";
         $courseImagePrompt = "Educational course cover illustration for '{$courseName}'. Theme: {$tone}. Color palette inspired by {$colorTheme}. " .
             (!empty($targetAudience) ? "Target audience: {$targetAudience}. " : "") .
             "Clean, modern, professional design suitable for e-learning. Abstract and conceptual. No text in image.";
-        $courseImage = generateAIImageWithPrompt($courseImagePrompt, '1792x1024');
+        $courseImage = generateAIImageWithPrompt($courseImagePrompt, '1792x1024', $jobContext);
         if ($courseImage) {
             execute(
                 "UPDATE " . DB_DATABASE . ".courses SET image_url = ? WHERE id = ?",
@@ -685,7 +705,7 @@ Skriv ett komplett, informativt och engagerande lektionsinnehåll i HTML.";
             $lessonImagePrompt = "Educational illustration for lesson '{$lessonRow['title']}' in course '{$courseName}'. " .
                 "Style: {$tone}, color accent: {$colorTheme}. " .
                 "Clean, suitable for e-learning. No text in image.";
-            $lessonImage = generateAIImageWithPrompt($lessonImagePrompt, '1024x1024');
+            $lessonImage = generateAIImageWithPrompt($lessonImagePrompt, '1024x1024', $jobContext);
             if ($lessonImage) {
                 execute(
                     "UPDATE " . DB_DATABASE . ".lessons SET image_url = ? WHERE id = ?",
@@ -700,7 +720,7 @@ Skriv ett komplett, informativt och engagerande lektionsinnehåll i HTML.";
         $diplomaImagePrompt = "Elegant certificate decoration for a course about '{$courseName}'. " .
             "Achievement theme, celebratory. Color accent: {$colorTheme}. " .
             "Abstract ornamental design, elegant borders and flourishes. No text in image.";
-        $diplomaImage = generateAIImageWithPrompt($diplomaImagePrompt, '1792x1024');
+        $diplomaImage = generateAIImageWithPrompt($diplomaImagePrompt, '1792x1024', $jobContext);
         if ($diplomaImage) {
             execute(
                 "UPDATE " . DB_DATABASE . ".courses SET certificate_image_url = ? WHERE id = ?",
@@ -786,16 +806,21 @@ function parseAIJson($responseText) {
 /**
  * Call OpenAI API
  */
-function callOpenAI($systemPrompt, $userPrompt, $maxTokens = 16384) {
+function callOpenAI($systemPrompt, $userPrompt, $maxTokens = 16384, array $context = []) {
     // Use defined constants from config.php
     $apiServer = defined('AI_SERVER') && AI_SERVER ? AI_SERVER : 'https://api.openai.com/v1/chat/completions';
     $apiKey = defined('AI_API_KEY') ? AI_API_KEY : '';
-    // Use gpt-4o for larger context window and output
-    $model = 'gpt-4o';
 
     if (empty($apiKey)) {
         throw new Exception('AI API-nyckel saknas i konfigurationen.');
     }
+
+    require_once __DIR__ . '/../../include/ai_quota.php';
+    if (!empty($context['user_email'])) {
+        enforceAiQuotaForEmail($context['user_email']);
+    }
+    if (empty($context['feature'])) $context['feature'] = 'course_gen';
+    $model = getModelForFeature($context['feature'], 'gpt-4o');
 
     $data = [
         'model' => $model,
@@ -835,9 +860,11 @@ function callOpenAI($systemPrompt, $userPrompt, $maxTokens = 16384) {
     $result = json_decode($response, true);
 
     if (isset($result['choices'][0]['message']['content'])) {
+        logAiUsage($context, $result['usage'] ?? [], $model, 'ok');
         return $result['choices'][0]['message']['content'];
     }
 
+    logAiUsage($context, [], $model, 'error');
     throw new Exception('Oväntat svar från AI API.');
 }
 
@@ -912,8 +939,10 @@ function generateAIImage($lessonTitle, $courseName) {
 
     $prompt = "Educational illustration for a lesson about '{$lessonTitle}' in a course about '{$courseName}'. Clean, professional, minimalist style suitable for e-learning. No text in image.";
 
+    require_once __DIR__ . '/../../include/ai_quota.php';
+    $imageModel = getModelForFeature('image', 'dall-e-3');
     $data = [
-        'model' => 'dall-e-3',
+        'model' => $imageModel,
         'prompt' => $prompt,
         'n' => 1,
         'size' => '1024x1024',
@@ -984,7 +1013,7 @@ function generateAIImage($lessonTitle, $courseName) {
 /**
  * Generate AI image using DALL-E with custom prompt and size
  */
-function generateAIImageWithPrompt($prompt, $size = '1024x1024') {
+function generateAIImageWithPrompt($prompt, $size = '1024x1024', array $context = []) {
     $apiKey = defined('AI_API_KEY') ? AI_API_KEY : '';
     $imageApiServer = 'https://api.openai.com/v1/images/generations';
 
@@ -993,14 +1022,28 @@ function generateAIImageWithPrompt($prompt, $size = '1024x1024') {
         return null;
     }
 
+    require_once __DIR__ . '/../../include/ai_quota.php';
+    if (!empty($context['user_email'])) {
+        try {
+            enforceAiQuotaForEmail($context['user_email']);
+        } catch (Exception $e) {
+            echo "  - AI quota exceeded, skipping image: {$e->getMessage()}\n";
+            logAiUsage($context, [], getModelForFeature('image', 'dall-e-3'), 'blocked');
+            return null;
+        }
+    }
+    $context['feature'] = $context['feature'] ?? 'image';
+    $context['is_image'] = true;
+
     // Validate size
     $validSizes = ['1024x1024', '1792x1024', '1024x1792'];
     if (!in_array($size, $validSizes)) {
         $size = '1024x1024';
     }
 
+    $imageModel = getModelForFeature('image', 'dall-e-3');
     $data = [
-        'model' => 'dall-e-3',
+        'model' => $imageModel,
         'prompt' => $prompt,
         'n' => 1,
         'size' => $size,
@@ -1053,6 +1096,7 @@ function generateAIImageWithPrompt($prompt, $size = '1024x1024') {
 
             if (file_put_contents($filePath, $imageContent)) {
                 echo "  - Image saved: {$fileName}\n";
+                logAiUsage($context, [], $imageModel ?? 'dall-e-3', 'ok');
                 return $fileName;
             } else {
                 echo "  - Failed to save image to: {$filePath}\n";
@@ -1062,6 +1106,7 @@ function generateAIImageWithPrompt($prompt, $size = '1024x1024') {
         }
     }
 
+    logAiUsage($context, [], $imageModel ?? 'dall-e-3', 'error');
     return null;
 }
 

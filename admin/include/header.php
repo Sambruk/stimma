@@ -235,6 +235,21 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a href="ai_usage.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'ai_usage.php' ? 'active' : '' ?>">
+                        <i class="bi bi-graph-up me-2"></i> AI-användning
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="ai_quotas.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'ai_quotas.php' ? 'active' : '' ?>">
+                        <i class="bi bi-speedometer2 me-2"></i> AI-kvoter & modellval
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="announcements.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'announcements.php' ? 'active' : '' ?>">
+                        <i class="bi bi-megaphone me-2"></i> Informationsmeddelanden
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a href="maintenance.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'maintenance.php' ? 'active' : '' ?>">
                         <i class="bi bi-tools me-2"></i> Underhållsläge
                         <?php if (isMaintenanceModeActive()): ?>
@@ -289,6 +304,50 @@ $current_page = basename($_SERVER['PHP_SELF']);
         </nav>
 
         <div class="container-fluid px-4 py-4">
+            <?php
+            // Informationsmeddelande från superadmin (visas för admin + editor)
+            if ($isAdmin || $isEditor) {
+                require_once __DIR__ . '/../../include/announcements.php';
+                renderAnnouncementModal((int)$_SESSION['user_id'], $_SESSION['csrf_token']);
+            }
+
+            // AI-kvotbanner (visas för admin + editor)
+            if ($isAdmin || $isEditor) {
+                require_once __DIR__ . '/../../include/ai_quota.php';
+                $aiQuotaScope = getAiScopeForEmail($_SESSION['user_email']);
+                $aiQuotaCheck = checkAiQuota($aiQuotaScope['organization_id'], $aiQuotaScope['domain']);
+                if ($aiQuotaCheck['level'] === 'block'):
+            ?>
+                <div class="alert alert-danger d-flex align-items-start" role="alert">
+                    <i class="bi bi-exclamation-octagon-fill me-2 mt-1 fs-5"></i>
+                    <div>
+                        <strong>AI-kvoten är förbrukad denna månad</strong>
+                        — <?= number_format($aiQuotaCheck['tokens_used'], 0, ',', ' ') ?>
+                        / <?= number_format($aiQuotaCheck['tokens_quota'], 0, ',', ' ') ?> tokens använda
+                        (<?= $aiQuotaCheck['pct'] ?>%).
+                        Nya AI-anrop blockeras tills nästa kalendermånad.
+                        Behöver ni mer kvot? Kontakta
+                        <a href="mailto:hjalp@sambruksupport.se?subject=Ut%C3%B6kad%20AI-kvot%20f%C3%B6r%20<?= rawurlencode($aiQuotaScope['label']) ?>" class="alert-link">hjalp@sambruksupport.se</a>.
+                    </div>
+                </div>
+            <?php elseif ($aiQuotaCheck['level'] === 'warn'): ?>
+                <div class="alert alert-warning d-flex align-items-start" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill me-2 mt-1 fs-5"></i>
+                    <div>
+                        <strong>AI-kvoten närmar sig sin gräns</strong>
+                        — <?= $aiQuotaCheck['pct'] ?>% använt denna månad
+                        (<?= number_format($aiQuotaCheck['tokens_used'], 0, ',', ' ') ?>
+                        / <?= number_format($aiQuotaCheck['tokens_quota'], 0, ',', ' ') ?> tokens).
+                        Vid 100% blockeras nya AI-anrop. Kontakta
+                        <a href="mailto:hjalp@sambruksupport.se?subject=Ut%C3%B6kad%20AI-kvot%20f%C3%B6r%20<?= rawurlencode($aiQuotaScope['label']) ?>" class="alert-link">hjalp@sambruksupport.se</a>
+                        om ni behöver mer.
+                    </div>
+                </div>
+            <?php
+                endif;
+            }
+            ?>
+
             <?php if (isset($_SESSION['message'])): ?>
                 <div class="alert alert-<?= htmlspecialchars($_SESSION['message_type'] ?? 'info') ?>">
                     <?= htmlspecialchars($_SESSION['message']) ?>

@@ -379,7 +379,7 @@ function isImpersonating() {
     return isset($_SESSION['impersonator_user_id']);
 }
 
-function sendOpenAIRequest($messages) {
+function sendOpenAIRequest($messages, array $context = []) {
     // Hämta API-konfiguration från .env
     $provider = getenv('AI_PROVIDER') ?: 'openai';
     $apiServer = getenv('AI_SERVER') ?: '';
@@ -387,7 +387,12 @@ function sendOpenAIRequest($messages) {
         $apiServer = getDefaultApiUrl($provider);
     }
     $apiKey = getenv('AI_API_KEY') ?: '';
-    $model = getenv('AI_MODEL') ?: 'gpt-4';
+    // Modell väljs i superadmin-UI per feature (chat är default-fallback för
+    // sendOpenAIRequest eftersom det är den generella anrops-funktionen).
+    require_once __DIR__ . '/ai_quota.php';
+    $featureForModel = $context['feature'] ?? 'chat';
+    $defaultModel = getenv('AI_MODEL') ?: 'gpt-4o-mini';
+    $model = getModelForFeature($featureForModel, $defaultModel);
     $maxTokens = (int)(getenv('AI_MAX_COMPLETION_TOKENS') ?: 4096);
     $temperature = (float)(getenv('AI_TEMPERATURE') ?: 0.7);
     $topP = (float)(getenv('AI_TOP_P') ?: 0.9);
@@ -397,6 +402,9 @@ function sendOpenAIRequest($messages) {
     if (empty($apiKey)) {
         throw new Exception('API-nyckel saknas i konfigurationen.');
     }
+
+    // Kvotkontroll innan vi spenderar pengar (kastar Exception om kvot full + behavior=block)
+    enforceAiQuotaForCurrentSession();
 
     // Avgör API-typ baserat på URL
     $isOpenRoute = strpos($apiServer, 'openrouter.ai') !== false;
@@ -456,33 +464,32 @@ function sendOpenAIRequest($messages) {
         if ($httpCode === 200 && empty($error)) {
             $responseData = json_decode($response, true);
             if (json_last_error() === JSON_ERROR_NONE) {
-                // Extrahera svaret från API-svaret baserat på API-typ
+                $content = null;
                 if ($isOpenRoute) {
-                    if (isset($responseData['choices'][0]['message']['content'])) {
-                        logActivity($userEmail, "AI-anrop lyckades efter $attempts försök");
-                        return $responseData['choices'][0]['message']['content'];
-                    } elseif (isset($responseData['choices'][0]['text'])) {
-                        logActivity($userEmail, "AI-anrop lyckades efter $attempts försök");
-                        return $responseData['choices'][0]['text'];
-                    }
+                    $content = $responseData['choices'][0]['message']['content']
+                        ?? $responseData['choices'][0]['text']
+                        ?? null;
                 } else {
-                    if (isset($responseData['choices'][0]['message']['content'])) {
-                        logActivity($userEmail, "AI-anrop lyckades efter $attempts försök");
-                        return $responseData['choices'][0]['message']['content'];
-                    } elseif (isset($responseData['content'])) {
-                        logActivity($userEmail, "AI-anrop lyckades efter $attempts försök");
-                        return $responseData['content'];
-                    }
+                    $content = $responseData['choices'][0]['message']['content']
+                        ?? $responseData['content']
+                        ?? null;
+                }
+                if ($content !== null) {
+                    $usage = $responseData['usage'] ?? [];
+                    logActivity($userEmail, "AI-anrop lyckades efter $attempts försök");
+                    logAiUsage($context, $usage, $model, 'ok');
+                    return $content;
                 }
             }
         }
-        
+
         // Om vi inte fick ett giltigt svar, spara felet och försök igen
         $lastError = "HTTP $httpCode: " . ($error ?: $response);
         sleep(1); // Vänta en sekund innan nästa försök
     }
-    
+
     // Om vi har nått max antal försök, kasta ett undantag
+    logAiUsage($context, [], $model, 'error');
     throw new Exception("Kunde inte få svar från AI efter $maxRetries försök. Senaste fel: $lastError");
 }
 
@@ -1238,11 +1245,16 @@ function getOrgPubAgreementArtifact($orgId) {
  * @return int|null Nytt organisations-ID eller null vid fel
  */
 function createOrganization($name, $orgNumber = null, $contactEmail = null) {
-    return execute(
+    $newId = execute(
         "INSERT INTO " . DB_DATABASE . ".organizations (name, org_number, contact_email)
          VALUES (?, ?, ?)",
         [trim($name), $orgNumber ? trim($orgNumber) : null, $contactEmail ? trim($contactEmail) : null]
     );
+    if ($newId) {
+        require_once __DIR__ . '/ai_quota.php';
+        ensureAiQuotaRow((int)$newId, null);
+    }
+    return $newId;
 }
 
 /**
@@ -2630,6 +2642,10 @@ function performUserSync(array $users, string $domain, bool $deactivateMissing, 
                 $stmt->execute([$email, $name, $role, $isAdmin, $isEditor]);
                 $userId = $db->lastInsertId();
                 $created++;
+                // Säkerställ AI-kvotrad för domänen/orgen
+                require_once __DIR__ . '/ai_quota.php';
+                $syncScope = getAiScopeForEmail($email);
+                ensureAiQuotaRow($syncScope['organization_id'], $syncScope['domain']);
             } else {
                 $userId = $existingUser['id'];
 

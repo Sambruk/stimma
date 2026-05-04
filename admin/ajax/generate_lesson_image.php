@@ -57,8 +57,21 @@ if (empty($lessonTitle)) {
     exit;
 }
 
+// Kvotkontroll
+require_once '../../include/ai_quota.php';
+try {
+    enforceAiQuotaForCurrentSession();
+} catch (Exception $e) {
+    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    exit;
+}
+
+// Slå upp course_id för loggning
+$lessonRow = queryOne("SELECT course_id FROM " . DB_DATABASE . ".lessons WHERE id = ?", [$lessonId]);
+$lessonCourseId = $lessonRow ? (int)$lessonRow['course_id'] : null;
+
 // Generera AI-bild
-$result = generateAIImage($lessonTitle, $courseName);
+$result = generateAIImage($lessonTitle, $courseName, $lessonCourseId);
 
 if ($result['success']) {
     // Uppdatera lektionen med bilden
@@ -79,7 +92,7 @@ if ($result['success']) {
 /**
  * Generate AI image using DALL-E
  */
-function generateAIImage($lessonTitle, $courseName) {
+function generateAIImage($lessonTitle, $courseName, $courseId = null) {
     $apiKey = defined('AI_API_KEY') ? AI_API_KEY : '';
     $imageApiServer = 'https://api.openai.com/v1/images/generations';
 
@@ -87,12 +100,15 @@ function generateAIImage($lessonTitle, $courseName) {
         return ['success' => false, 'error' => 'API-nyckel saknas.'];
     }
 
+    $context = ['feature' => 'image', 'course_id' => $courseId, 'is_image' => true];
+    $imageModel = getModelForFeature('image', 'dall-e-3');
+
     $prompt = "Educational illustration for a lesson about '{$lessonTitle}'" .
               ($courseName ? " in a course about '{$courseName}'" : "") .
               ". Clean, professional, minimalist style suitable for e-learning. No text in image.";
 
     $data = [
-        'model' => 'dall-e-3',
+        'model' => $imageModel,
         'prompt' => $prompt,
         'n' => 1,
         'size' => '1024x1024',
@@ -153,5 +169,6 @@ function generateAIImage($lessonTitle, $courseName) {
         return ['success' => false, 'error' => 'Kunde inte spara bildfilen.'];
     }
 
+    logAiUsage($context, [], $imageModel, 'ok');
     return ['success' => true, 'image_url' => $fileName];
 }

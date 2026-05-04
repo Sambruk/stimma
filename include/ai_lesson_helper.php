@@ -20,14 +20,17 @@ if (!function_exists('aiLessonGenerateContent')) {
  *
  * @throws Exception vid nätverks-, auth- eller parserfel
  */
-function aiLessonCallOpenAI(string $systemPrompt, string $userPrompt, int $maxTokens = 8192): string {
+function aiLessonCallOpenAI(string $systemPrompt, string $userPrompt, int $maxTokens = 8192, array $context = []): string {
     $apiServer = defined('AI_SERVER') && AI_SERVER ? AI_SERVER : 'https://api.openai.com/v1/chat/completions';
     $apiKey    = defined('AI_API_KEY') ? AI_API_KEY : '';
-    $model     = 'gpt-4o';
 
     if (empty($apiKey)) {
         throw new Exception('AI API-nyckel saknas i konfigurationen.');
     }
+
+    require_once __DIR__ . '/ai_quota.php';
+    enforceAiQuotaForCurrentSession();
+    $model = getModelForFeature($context['feature'] ?? 'lesson_gen', 'gpt-4o');
 
     $payload = [
         'model'       => $model,
@@ -66,8 +69,10 @@ function aiLessonCallOpenAI(string $systemPrompt, string $userPrompt, int $maxTo
 
     $result = json_decode($response, true);
     if (!isset($result['choices'][0]['message']['content'])) {
+        logAiUsage($context, [], $model, 'error');
         throw new Exception('Oväntat svar från AI API.');
     }
+    logAiUsage($context, $result['usage'] ?? [], $model, 'ok');
     return $result['choices'][0]['message']['content'];
 }
 
@@ -330,7 +335,10 @@ function aiLessonGenerateContent(array $opts): array {
     $user = "Skapa en lektion med följande beskrivning:\n\n{$lessonIdea}";
 
     $maxTokens = $includeQuiz ? 8192 : 6144;
-    $rawJson   = aiLessonCallOpenAI($sys, $user, $maxTokens);
+    $rawJson   = aiLessonCallOpenAI($sys, $user, $maxTokens, [
+        'feature' => 'lesson_gen',
+        'course_id' => isset($course['id']) ? (int)$course['id'] : null,
+    ]);
     $parsed    = aiLessonParseJson($rawJson);
 
     if (!is_array($parsed) || empty($parsed['title']) || empty($parsed['content'])) {

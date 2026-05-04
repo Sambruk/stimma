@@ -259,6 +259,11 @@ if (isset($_POST['action']) && $_POST['action'] === 'create_user') {
                      VALUES (?, NOW())",
                      [$email]);
 
+            // Säkerställ att domänen/orgen har en AI-kvotrad så den syns i UI:t
+            require_once '../include/ai_quota.php';
+            $newScope = getAiScopeForEmail($email);
+            ensureAiQuotaRow($newScope['organization_id'], $newScope['domain']);
+
             // Logga skapandet av användaren
             logActivity($_SESSION['user_email'], "Skapade ny användare: " . $email);
 
