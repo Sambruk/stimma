@@ -114,23 +114,25 @@ require_once 'include/header.php';
 </div>
 
 <!-- Roller Section -->
-<div class="row mb-5">
+<div class="row mb-5" id="anvandarroller">
     <div class="col-12">
         <div class="section-header">
             <span class="section-icon bg-primary"><i class="bi bi-people-fill"></i></span>
             <h2>Användarroller i Stimma</h2>
         </div>
 
-        <div class="row g-4">
+        <div class="row g-4 mb-4">
             <div class="col-md-6 col-lg-3">
                 <div class="role-card student">
                     <div class="role-icon"><i class="bi bi-person-fill"></i></div>
                     <h5>Användare</h5>
-                    <p>Tar kurser och följer sin progress genom utbildningen.</p>
+                    <p>Tar kurser och följer sin progress genom utbildningen. Standardrollen för alla inloggade.</p>
                     <ul class="role-features">
-                        <li><i class="bi bi-check2"></i> Ta kurser</li>
-                        <li><i class="bi bi-check2"></i> Svara på quiz</li>
-                        <li><i class="bi bi-check2"></i> Chatta med AI-tutor</li>
+                        <li><i class="bi bi-check2"></i> Bläddra och starta kurser</li>
+                        <li><i class="bi bi-check2"></i> Svara på quiz och se resultat</li>
+                        <li><i class="bi bi-check2"></i> Chatta med AI-tutor i lektion</li>
+                        <li><i class="bi bi-check2"></i> Egen dashboard med XP, nivå och progress</li>
+                        <li><i class="bi bi-check2"></i> Ladda ner egna diplom</li>
                     </ul>
                 </div>
             </div>
@@ -138,11 +140,16 @@ require_once 'include/header.php';
                 <div class="role-card editor">
                     <div class="role-icon"><i class="bi bi-pencil-fill"></i></div>
                     <h5>Redaktör</h5>
-                    <p>Skapar och redigerar kurser och lektioner.</p>
+                    <p>Allt en användare kan + skapa och redigera kurser. Begränsad till <em>egna kurser och kurser de tilldelats som redaktör</em>.</p>
                     <ul class="role-features">
-                        <li><i class="bi bi-check2"></i> Skapa kurser</li>
-                        <li><i class="bi bi-check2"></i> Redigera lektioner</li>
-                        <li><i class="bi bi-check2"></i> Generera AI-innehåll</li>
+                        <li><i class="bi bi-check2"></i> Skapa kurser (manuellt, AI eller från PowerPoint)</li>
+                        <li><i class="bi bi-check2"></i> Redigera lektioner, moduler och quiz</li>
+                        <li><i class="bi bi-check2"></i> Generera AI-innehåll och AI-bilder</li>
+                        <li><i class="bi bi-check2"></i> Importera/exportera egna kurser (ZIP)</li>
+                        <li><i class="bi bi-check2"></i> Tilldela andra som medredaktör för egna kurser</li>
+                        <li><i class="bi bi-check2"></i> Hantera taggar (organisationens)</li>
+                        <li><i class="bi bi-check2"></i> <strong>Se statistik</strong> — endast för kurser de skapat eller är medredaktör på</li>
+                        <li><i class="bi bi-check2"></i> Hantera publika deltagare för egna kurser</li>
                     </ul>
                 </div>
             </div>
@@ -150,11 +157,17 @@ require_once 'include/header.php';
                 <div class="role-card admin">
                     <div class="role-icon"><i class="bi bi-shield-fill"></i></div>
                     <h5>Admin</h5>
-                    <p>Hanterar användare och organisationens inställningar.</p>
+                    <p>Allt en redaktör kan + hantera organisationens användare och inställningar. Scope: <em>alla kurser och användare i den egna organisationen</em>.</p>
                     <ul class="role-features">
-                        <li><i class="bi bi-check2"></i> Hantera användare</li>
-                        <li><i class="bi bi-check2"></i> Se statistik</li>
-                        <li><i class="bi bi-check2"></i> Konfigurera påminnelser</li>
+                        <li><i class="bi bi-check2"></i> Se och redigera <strong>alla</strong> kurser i organisationen</li>
+                        <li><i class="bi bi-check2"></i> Statistik över <strong>hela</strong> organisationen, drill-down per kurs/avdelning</li>
+                        <li><i class="bi bi-check2"></i> Hantera användare: ge/ta bort redaktörs- och admin-rättigheter</li>
+                        <li><i class="bi bi-check2"></i> Hantera diplommallar och utfärdade diplom</li>
+                        <li><i class="bi bi-check2"></i> Konfigurera påminnelser (mailmallar, schemaläggning)</li>
+                        <li><i class="bi bi-check2"></i> Varumärke (organisationens logotyp/färger)</li>
+                        <li><i class="bi bi-check2"></i> API-nycklar, synkverktyg, synkloggar</li>
+                        <li><i class="bi bi-check2"></i> Hantera PUB-dokument</li>
+                        <li><i class="bi bi-check2"></i> Importera/exportera (admin-bara funktioner)</li>
                     </ul>
                 </div>
             </div>
@@ -162,13 +175,85 @@ require_once 'include/header.php';
                 <div class="role-card superadmin">
                     <div class="role-icon"><i class="bi bi-stars"></i></div>
                     <h5>Superadmin</h5>
-                    <p>Fullständig systemåtkomst inklusive AI-inställningar.</p>
+                    <p>Allt en admin kan + drift och konfiguration på <em>systemnivå</em>, över alla organisationer.</p>
                     <ul class="role-features">
-                        <li><i class="bi bi-check2"></i> Alla admin-funktioner</li>
-                        <li><i class="bi bi-check2"></i> AI-inställningar</li>
-                        <li><i class="bi bi-check2"></i> Guardrails</li>
+                        <li><i class="bi bi-check2"></i> Cross-organisation: domäner, organisationer, alla kurser</li>
+                        <li><i class="bi bi-check2"></i> AI-inställningar (provider, modell, prompt-versioner)</li>
+                        <li><i class="bi bi-check2"></i> AI-användning och AI-kvoter per organisation</li>
+                        <li><i class="bi bi-check2"></i> Modellval per funktion (kursgenerering, chat, bild m.m.)</li>
+                        <li><i class="bi bi-check2"></i> Informationsmeddelanden (popup till alla admin/redaktörer)</li>
+                        <li><i class="bi bi-check2"></i> Systemloggar, cronjobb, underhållsläge</li>
+                        <li><i class="bi bi-check2"></i> Visa-som-funktion (impersonate) för felsökning</li>
                     </ul>
                 </div>
+            </div>
+        </div>
+
+        <!-- Detaljerad rolljämförelse -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-light border-0 py-3">
+                <h5 class="mb-0"><i class="bi bi-table me-2"></i>Detaljerad rolljämförelse</h5>
+                <small class="text-muted">Vad varje roll faktiskt har åtkomst till — inom sitt scope (egen kurs / organisation / hela systemet).</small>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="min-width: 240px;">Funktion</th>
+                            <th class="text-center" style="width: 90px;">Användare</th>
+                            <th class="text-center" style="width: 90px;">Redaktör</th>
+                            <th class="text-center" style="width: 90px;">Admin</th>
+                            <th class="text-center" style="width: 90px;">Superadmin</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td colspan="5" class="bg-light fw-semibold small">Kursinnehåll</td></tr>
+                        <tr><td>Ta kurser och svara på quiz</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td></tr>
+                        <tr><td>AI-tutor i lektion (chat)</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td></tr>
+                        <tr><td>Skapa kurser (manuellt / AI / PPTX)</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td></tr>
+                        <tr><td>Redigera lektioner och quiz</td><td class="text-center text-muted">–</td><td class="text-center text-success">Egna<sup>1</sup></td><td class="text-center text-success">Org</td><td class="text-center text-success">Alla</td></tr>
+                        <tr><td>Generera AI-innehåll / AI-bilder</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td></tr>
+                        <tr><td>Importera kurs (ZIP/PPTX)</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td></tr>
+                        <tr><td>Exportera kurs (ZIP)</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td></tr>
+                        <tr><td>Kopiera kurs</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td></tr>
+                        <tr><td>Tilldela medredaktörer för en kurs</td><td class="text-center text-muted">–</td><td class="text-center text-success">Egna<sup>1</sup></td><td class="text-center text-success">Org</td><td class="text-center text-success">Alla</td></tr>
+                        <tr><td>Radera kurs/lektion/modul</td><td class="text-center text-muted">–</td><td class="text-center text-warning">Vissa<sup>2</sup></td><td class="text-center text-success">Org</td><td class="text-center text-success">Alla</td></tr>
+                        <tr><td>Hantera taggar</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td></tr>
+
+                        <tr><td colspan="5" class="bg-light fw-semibold small">Statistik och uppföljning</td></tr>
+                        <tr><td>Egen dashboard / progress</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td></tr>
+                        <tr><td>Statistik per kurs</td><td class="text-center text-muted">–</td><td class="text-center text-success">Egna<sup>1</sup></td><td class="text-center text-success">Org</td><td class="text-center text-success">Alla</td></tr>
+                        <tr><td>Aggregerad statistik (alla kurser)</td><td class="text-center text-muted">–</td><td class="text-center text-success">Egna<sup>1</sup></td><td class="text-center text-success">Org</td><td class="text-center text-success">Alla</td></tr>
+                        <tr><td>Exportera statistik (CSV)</td><td class="text-center text-muted">–</td><td class="text-center text-success">Egna<sup>1</sup></td><td class="text-center text-success">Org</td><td class="text-center text-success">Alla</td></tr>
+
+                        <tr><td colspan="5" class="bg-light fw-semibold small">Diplom och certifikat</td></tr>
+                        <tr><td>Egna diplom (ladda ner)</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td></tr>
+                        <tr><td>Hantera diplommallar och utfärdade diplom</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td></tr>
+
+                        <tr><td colspan="5" class="bg-light fw-semibold small">Användare och organisation</td></tr>
+                        <tr><td>Hantera användare (lägga till, ta bort)</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">Org</td><td class="text-center text-success">Alla</td></tr>
+                        <tr><td>Ge/ta bort redaktörsrättigheter</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">Org</td><td class="text-center text-success">Alla</td></tr>
+                        <tr><td>Ge/ta bort admin-rättigheter</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">Org</td><td class="text-center text-success">Alla</td></tr>
+                        <tr><td>Påminnelser (mailmallar, schema)</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td></tr>
+                        <tr><td>Varumärke (logo, färger)</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">Org</td><td class="text-center text-success">Alla</td></tr>
+                        <tr><td>API-nycklar, synkverktyg, synkloggar</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">Org</td><td class="text-center text-success">Alla</td></tr>
+                        <tr><td>PUB-dokument</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">Org</td><td class="text-center text-success">Alla</td></tr>
+
+                        <tr><td colspan="5" class="bg-light fw-semibold small">Systemnivå (superadmin)</td></tr>
+                        <tr><td>Domäner och organisationer (cross-org)</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td></tr>
+                        <tr><td>AI-inställningar / prompt-versioner</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td></tr>
+                        <tr><td>AI-användning, AI-kvoter, modellval</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td></tr>
+                        <tr><td>Informationsmeddelanden (popup)</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td></tr>
+                        <tr><td>Systemloggar, cronjobb, underhållsläge</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td></tr>
+                        <tr><td>Visa-som annan användare (impersonate)</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-body small text-muted border-top">
+                <p class="mb-1"><strong>Egna<sup>1</sup></strong> = kurser som redaktören skapat eller blivit tilldelad som medredaktör (via course_editors).</p>
+                <p class="mb-1"><strong>Org</strong> = alla kurser/användare på alla domäner som tillhör adminens organisation.</p>
+                <p class="mb-1"><strong>Alla</strong> = oavsett organisation. Bara superadmin kan se cross-organisation.</p>
+                <p class="mb-0"><strong>Vissa<sup>2</sup></strong> = redaktör kan radera lektioner i egna kurser, men hela kurser kan bara raderas av admin.</p>
             </div>
         </div>
     </div>
@@ -1397,11 +1482,14 @@ require_once 'include/header.php';
                             <h6 class="mb-3"><i class="bi bi-list-check me-2"></i>Vad får du tillgång till?</h6>
                             <div class="permission-item">
                                 <span class="badge bg-warning text-dark me-2">Redaktör</span>
-                                <small class="text-muted">Skapa och redigera kurser, generera AI-innehåll</small>
+                                <small class="text-muted">Skapa och redigera kurser, generera AI-innehåll, se statistik för egna kurser</small>
                             </div>
                             <div class="permission-item mt-2">
                                 <span class="badge bg-info me-2">Admin</span>
-                                <small class="text-muted">Hantera användare, se statistik, konfigurera påminnelser</small>
+                                <small class="text-muted">Allt en redaktör kan + hantera användare, se statistik för hela organisationen, konfigurera påminnelser, hantera diplom</small>
+                            </div>
+                            <div class="text-muted small mt-2">
+                                Se <a href="#anvandarroller">detaljerad rolljämförelse</a> för fullständig lista.
                             </div>
                         </div>
                     </div>

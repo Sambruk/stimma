@@ -436,4 +436,110 @@ function aiLessonInsert(int $courseId, array $lessonData, int $authorId, array $
     return $lessonId;
 }
 
+/**
+ * Generera AI-bild för en lektion via OpenAI:s images-API. Sparar bilden under
+ * upload/ och returnerar antingen ['success' => true, 'image_url' => 'ai_xxx.png']
+ * eller ['success' => false, 'error' => '...'].
+ *
+ * Kvot kontrolleras via enforceAiQuotaForCurrentSession (eller -ForEmail om
+ * $userEmail anges — användbart för cron/jobb). Användning loggas i ai_usage_log.
+ *
+ * @param string $lessonTitle
+ * @param string|null $courseName
+ * @param int|null $courseId   för loggning
+ * @param string|null $userEmail om null används $_SESSION
+ * @return array ['success' => bool, 'image_url'? => string, 'error'? => string]
+ */
+function aiGenerateLessonImage(string $lessonTitle, ?string $courseName, ?int $courseId = null, ?string $userEmail = null): array {
+    require_once __DIR__ . '/ai_quota.php';
+
+    $apiKey = defined('AI_API_KEY') ? AI_API_KEY : '';
+    if (empty($apiKey)) {
+        return ['success' => false, 'error' => 'AI API-nyckel saknas i konfigurationen.'];
+    }
+
+    try {
+        if ($userEmail !== null) {
+            enforceAiQuotaForEmail($userEmail);
+        } else {
+            enforceAiQuotaForCurrentSession();
+        }
+    } catch (Throwable $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+
+    $context = [
+        'feature'    => 'image',
+        'course_id'  => $courseId,
+        'is_image'   => true,
+        'user_email' => $userEmail,
+    ];
+    $imageModel = getModelForFeature('image', 'dall-e-3');
+
+    $prompt = "Educational illustration for a lesson about '{$lessonTitle}'" .
+              ($courseName ? " in a course about '{$courseName}'" : "") .
+              ". Clean, professional, minimalist style suitable for e-learning. No text in image.";
+
+    $data = [
+        'model'   => $imageModel,
+        'prompt'  => $prompt,
+        'n'       => 1,
+        'size'    => '1024x1024',
+        'quality' => 'standard',
+    ];
+
+    $ch = curl_init('https://api.openai.com/v1/images/generations');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($data),
+        CURLOPT_HTTPHEADER     => [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . $apiKey,
+        ],
+        CURLOPT_TIMEOUT        => 120,
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr  = curl_error($ch);
+    curl_close($ch);
+
+    if ($curlErr) {
+        logAiUsage($context, [], $imageModel, 'error');
+        return ['success' => false, 'error' => 'Curl-fel: ' . $curlErr];
+    }
+    if ($httpCode !== 200) {
+        logAiUsage($context, [], $imageModel, 'error');
+        $errData = json_decode($response, true);
+        $msg = $errData['error']['message'] ?? ('HTTP ' . $httpCode);
+        return ['success' => false, 'error' => 'API-fel: ' . $msg];
+    }
+
+    $result = json_decode($response, true);
+    if (!isset($result['data'][0]['url'])) {
+        logAiUsage($context, [], $imageModel, 'error');
+        return ['success' => false, 'error' => 'Ingen bild-URL i API-svaret.'];
+    }
+
+    $imageContent = @file_get_contents($result['data'][0]['url']);
+    if (!$imageContent) {
+        logAiUsage($context, [], $imageModel, 'error');
+        return ['success' => false, 'error' => 'Kunde inte ladda ner bilden från OpenAI.'];
+    }
+
+    $uploadDir = __DIR__ . '/../upload/';
+    if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true)) {
+        logAiUsage($context, [], $imageModel, 'error');
+        return ['success' => false, 'error' => 'Kunde inte skapa upload-mappen.'];
+    }
+    $fileName = 'ai_' . uniqid() . '.png';
+    if (!file_put_contents($uploadDir . $fileName, $imageContent)) {
+        logAiUsage($context, [], $imageModel, 'error');
+        return ['success' => false, 'error' => 'Kunde inte spara bildfilen.'];
+    }
+
+    logAiUsage($context, [], $imageModel, 'ok');
+    return ['success' => true, 'image_url' => $fileName];
+}
+
 } // end function_exists guard

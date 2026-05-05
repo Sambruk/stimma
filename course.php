@@ -82,8 +82,11 @@ if ($loggedIn) {
                 if (!in_array($ud, $sharedDoms, true)) $inOwnOrg = false;
             }
         }
-        $canAccess = $inOwnOrg || $hasPublic;
-        $accessReason = $hasPublic ? 'public' : ($inOwnOrg ? 'org' : 'no_access');
+        // Globala kurser (is_global=1, satta av superadmin) är synliga för alla
+        // domain-användare oavsett organisation.
+        $isGlobal = !empty($course['is_global']);
+        $canAccess = $inOwnOrg || $hasPublic || $isGlobal;
+        $accessReason = $hasPublic ? 'public' : ($inOwnOrg ? 'org' : ($isGlobal ? 'global' : 'no_access'));
     }
 
     // Kolla inskrivningsstatus

@@ -43,8 +43,19 @@ $page_title = 'Lektionshantering - ' . htmlspecialchars($course['title']);
 // Extra CSS för sorterbar tabell
 $extra_css = '.grip-handle { cursor: move; color: #adb5bd; } .grip-handle:hover { color: #6c757d; }';
 
-// Hämta alla lektioner för kursen
-$lessons = query("SELECT * FROM " . DB_DATABASE . ".lessons WHERE course_id = ? ORDER BY sort_order, title", [$courseId]);
+// Hämta alla lektioner för kursen.
+// quiz_question_count räknar rader i nya quiz_questions-tabellen — den gamla
+// inline-kolumnen lessons.quiz_question är legacy och fångar inte AI-genererade
+// frågor (som sparas direkt i quiz_questions). Listan nedan visar "Quiz"-badge
+// om antingen legacy-kolumnen eller nya tabellen har innehåll.
+$lessons = query(
+    "SELECT l.*,
+            (SELECT COUNT(*) FROM " . DB_DATABASE . ".quiz_questions qq WHERE qq.lesson_id = l.id) AS quiz_question_count
+       FROM " . DB_DATABASE . ".lessons l
+      WHERE l.course_id = ?
+      ORDER BY l.sort_order, l.title",
+    [$courseId]
+);
 
 // Bygg uppslag av lektionstitlar för "Tillhör"-kolumnen (endast lektioner,
 // inte infosidor, kan fungera som parent).
@@ -199,11 +210,17 @@ require_once 'include/header.php';
                                     </span>
                                 </td>
                                 <td>
+                                    <?php
+                                        $hasLegacyQuiz = !empty($lesson['quiz_question']);
+                                        $newQuizCount = (int)($lesson['quiz_question_count'] ?? 0);
+                                        $hasQuiz = $hasLegacyQuiz || $newQuizCount > 0;
+                                        $totalQuestions = $newQuizCount + ($hasLegacyQuiz ? 1 : 0);
+                                    ?>
                                     <?php if ($isInfo): ?>
                                         <span class="text-muted small">—</span>
-                                    <?php elseif (!empty($lesson['quiz_question'])): ?>
+                                    <?php elseif ($hasQuiz): ?>
                                         <a href="edit_quiz.php?lesson_id=<?= $lesson['id'] ?>" class="badge bg-primary text-decoration-none" title="Hantera quizfrågor">
-                                            <i class="bi bi-check-circle-fill"></i> Quiz
+                                            <i class="bi bi-check-circle-fill"></i> Quiz<?= $totalQuestions > 1 ? ' (' . $totalQuestions . ')' : '' ?>
                                         </a>
                                     <?php else: ?>
                                         <a href="edit_quiz.php?lesson_id=<?= $lesson['id'] ?>" class="badge bg-secondary text-decoration-none" title="Lägg till quizfrågor">
@@ -384,6 +401,14 @@ $parentCandidates = query(
                         </label>
                     </div>
 
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" name="generate_image" id="aiGenerateImage" value="1">
+                        <label class="form-check-label" for="aiGenerateImage">
+                            Generera även AI-bild till lektionen
+                            <span class="text-muted small">(kan ta extra ~30 s, drar mot AI-kvoten)</span>
+                        </label>
+                    </div>
+
                     <div id="aiLessonStatus" class="mt-3" style="display:none;"></div>
                 </form>
             </div>
@@ -426,22 +451,45 @@ $parentCandidates = query(
             return;
         }
 
+        var wantsImage = document.getElementById('aiGenerateImage').checked;
         statusDiv.style.display = 'block';
         statusDiv.className = 'mt-3 alert alert-info';
-        statusDiv.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Genererar lektion... det här tar ca 30-60 sekunder.';
+        statusDiv.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Genererar lektion'
+            + (wantsImage ? ' och bild' : '')
+            + '... det här tar ca '
+            + (wantsImage ? '60-90' : '30-60')
+            + ' sekunder.';
         submitBtn.disabled = true;
 
         var fd = new FormData(form);
+
+        function escHtml(s) {
+            return String(s).replace(/[<>&"']/g, function(c){
+                return ({"<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;","'":"&#39;"})[c];
+            });
+        }
 
         fetch('ajax/ai_generate_lesson.php', { method: 'POST', body: fd })
             .then(function(r){ return r.json().catch(function(){ throw new Error('Servern returnerade ogiltig data.'); }); })
             .then(function(data){
                 if (data && data.success) {
-                    statusDiv.className = 'mt-3 alert alert-success';
-                    statusDiv.innerHTML = '<i class="bi bi-check-circle me-1"></i>Lektion skapad: <strong>'
-                        + (data.title || '?').replace(/[<>&]/g, function(c){return ({"<":"&lt;",">":"&gt;","&":"&amp;"})[c];})
-                        + '</strong>. Laddar om...';
-                    setTimeout(function(){ window.location.reload(); }, 1200);
+                    var titleHtml = '<strong>' + escHtml(data.title || '?') + '</strong>';
+                    if (data.image_warning) {
+                        // Lektionen sparades men bilden misslyckades — visa varning
+                        // och vänta längre innan reload så användaren hinner läsa.
+                        statusDiv.className = 'mt-3 alert alert-warning';
+                        statusDiv.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>'
+                            + 'Lektion skapad: ' + titleHtml + ', men <strong>AI-bilden kunde inte genereras</strong>: '
+                            + escHtml(data.image_warning)
+                            + '. Du kan klicka "Generera AI-bild" i lektionsredigeraren senare. '
+                            + '<br><small>Laddar om om 5 sekunder...</small>';
+                        setTimeout(function(){ window.location.reload(); }, 5000);
+                    } else {
+                        statusDiv.className = 'mt-3 alert alert-success';
+                        statusDiv.innerHTML = '<i class="bi bi-check-circle me-1"></i>Lektion skapad: '
+                            + titleHtml + '. Laddar om...';
+                        setTimeout(function(){ window.location.reload(); }, 1200);
+                    }
                 } else {
                     statusDiv.className = 'mt-3 alert alert-danger';
                     statusDiv.textContent = (data && data.error) ? data.error : 'Ett okänt fel uppstod.';

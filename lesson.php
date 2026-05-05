@@ -99,10 +99,11 @@ if (!$isPreviewMode) {
         $allowed = $hasPublic;
     } else {
         $courseRow = queryOne(
-            "SELECT organization_domain FROM " . DB_DATABASE . ".courses WHERE id = ?",
+            "SELECT organization_domain, is_global FROM " . DB_DATABASE . ".courses WHERE id = ?",
             [$lesson['course_id']]
         );
         $courseOrg = $courseRow['organization_domain'] ?? '';
+        $isGlobalCourse = !empty($courseRow['is_global']);
         $orgScope = getOrgScopeDomains($_SESSION['user_email'] ?? '');
         $inOwnOrg = $courseOrg !== '' && in_array($courseOrg, $orgScope, true);
 
@@ -117,7 +118,8 @@ if (!$isPreviewMode) {
                 }
             }
         }
-        $allowed = $inOwnOrg || $hasPublic;
+        // Globala kurser (is_global=1) ger access till alla domain-användare.
+        $allowed = $inOwnOrg || $hasPublic || $isGlobalCourse;
     }
 
     if (!$allowed) {

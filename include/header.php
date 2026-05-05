@@ -32,10 +32,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= htmlspecialchars($page_title ?? SITE_NAME) ?></title>
-    
+
+    <!-- Tema-init: läs sparad temapreferens och sätt data-bs-theme INNAN
+         Bootstrap CSS parsas så vi slipper "flash of light theme". -->
+    <script>
+    (function() {
+        try {
+            var saved = localStorage.getItem('stimma_theme');
+            if (saved === 'dark' || (saved !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.setAttribute('data-bs-theme', 'dark');
+            }
+        } catch (e) {}
+    })();
+    </script>
+
     <!-- Preconnect to CDN domains for better performance -->
     <link rel="preconnect" href="https://cdnjs.cloudflare.com">
-    
+
     <!-- External CSS dependencies -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
@@ -209,6 +222,15 @@
                         $headerUserOrgTags = getUserOrgTags($_SESSION['user_id']);
                     }
                     ?>
+                    <!-- Tema-växlare (ljus/mörk) -->
+                    <button id="stimmaThemeToggle"
+                            class="btn btn-link text-muted p-1 me-1 d-inline-flex align-items-center justify-content-center text-decoration-none"
+                            type="button"
+                            title="Växla mellan ljust och mörkt läge"
+                            aria-label="Växla tema">
+                        <i class="bi bi-moon-stars" aria-hidden="true" style="font-size: 1.2rem;"></i>
+                    </button>
+
                     <!-- Profile button -->
                     <button class="btn btn-link text-muted p-1 d-inline-flex align-items-center justify-content-center text-decoration-none"
                             type="button" data-bs-toggle="offcanvas" data-bs-target="#profilePanel"

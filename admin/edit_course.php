@@ -23,6 +23,7 @@ $userEmail = $_SESSION['user_email'];
 // Hämta användarens domän för taggfiltrering
 $currentUser = queryOne("SELECT * FROM " . DB_DATABASE . ".users WHERE email = ?", [$userEmail]);
 $userDomain = $currentUser ? substr(strrchr($currentUser['email'], "@"), 1) : '';
+$isSuperAdmin = $currentUser && ($currentUser['role'] ?? '') === 'super_admin';
 
 // Org-scope: alla domäner i adminens organisation. Tag-listor och tag-validering
 // hämtas från hela orgen så adminer på olika domäner ser samma uppsättning taggar.
@@ -129,6 +130,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $seqReminderSubject = trim($_POST['seq_reminder_subject'] ?? '') ?: null;
     $seqReminderBody = trim($_POST['seq_reminder_body'] ?? '') ?: null;
     $enrollmentType = ($_POST['enrollment_type'] ?? 'bulk_start') === 'rolling' ? 'rolling' : 'bulk_start';
+
+    // Global synlighet — endast superadmin får sätta. För icke-superadmin
+    // bevaras befintligt värde (eller 0 vid create).
+    if ($isSuperAdmin) {
+        $isGlobal = !empty($_POST['is_global']) ? 1 : 0;
+    } else {
+        $isGlobal = $course && !empty($course['is_global']) ? 1 : 0;
+    }
     // Sätt sequential_status till 'pending' om stegvis läge + startdatum (bulk_start)
     // För rolling: sätt direkt till 'active'
     $sequentialStatus = null;
@@ -210,9 +219,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         sequential_status = ?,
                         enrollment_type = ?,
                         image_url = ?,
+                        is_global = ?,
                         updated_at = NOW()
                         WHERE id = ?",
-                        [$title, $description, $completionContent, $status, $deadline, $startDate, $sequentialMode, $sequentialIntervalDays, $sequentialReminderDelayDays, $seqNewLessonSubject, $seqNewLessonBody, $seqReminderSubject, $seqReminderBody, $sequentialStatus, $enrollmentType, $imageUrl, $_GET['id']]);
+                        [$title, $description, $completionContent, $status, $deadline, $startDate, $sequentialMode, $sequentialIntervalDays, $sequentialReminderDelayDays, $seqNewLessonSubject, $seqNewLessonBody, $seqReminderSubject, $seqReminderBody, $sequentialStatus, $enrollmentType, $imageUrl, $isGlobal, $_GET['id']]);
 
                 // Uppdatera kursens taggar
                 // Ta bort befintliga taggar
@@ -277,9 +287,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // original_organization_domain sätts permanent till skaparens org
                 // och får aldrig skrivas över senare.
                 execute("INSERT INTO " . DB_DATABASE . ".courses
-                        (title, description, completion_content, status, deadline, start_date, sequential_mode, sequential_interval_days, sequential_reminder_delay_days, seq_new_lesson_subject, seq_new_lesson_body, seq_reminder_subject, seq_reminder_body, sequential_status, enrollment_type, sort_order, image_url, author_id, organization_domain, original_organization_domain, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
-                        [$title, $description, $completionContent, $status, $deadline, $startDate, $sequentialMode, $sequentialIntervalDays, $sequentialReminderDelayDays, $seqNewLessonSubject, $seqNewLessonBody, $seqReminderSubject, $seqReminderBody, $sequentialStatus, $enrollmentType, $maxOrder + 1, $imageUrl, $authorId, $organizationDomain, $organizationDomain]);
+                        (title, description, completion_content, status, deadline, start_date, sequential_mode, sequential_interval_days, sequential_reminder_delay_days, seq_new_lesson_subject, seq_new_lesson_body, seq_reminder_subject, seq_reminder_body, sequential_status, enrollment_type, sort_order, image_url, is_global, author_id, organization_domain, original_organization_domain, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                        [$title, $description, $completionContent, $status, $deadline, $startDate, $sequentialMode, $sequentialIntervalDays, $sequentialReminderDelayDays, $seqNewLessonSubject, $seqNewLessonBody, $seqReminderSubject, $seqReminderBody, $sequentialStatus, $enrollmentType, $maxOrder + 1, $imageUrl, $isGlobal, $authorId, $organizationDomain, $organizationDomain]);
 
                 // Hämta det nya kurs-ID:t
                 $newCourseId = getDb()->lastInsertId();
@@ -434,6 +444,32 @@ require_once 'include/header.php';
                                 </div>
                             </div>
                         </div>
+
+                        <?php if ($isSuperAdmin): ?>
+                            <!-- Global synlighet (endast superadmin) -->
+                            <?php $isGlobalNow = !empty($course['is_global']); ?>
+                            <div class="card mb-3 <?= $isGlobalNow ? 'border-info' : '' ?>">
+                                <div class="card-body py-2 d-flex align-items-center justify-content-between">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi <?= $isGlobalNow ? 'bi-globe2 text-info' : 'bi-building text-secondary' ?> me-2 fs-5"></i>
+                                        <div>
+                                            <div class="fw-bold">
+                                                <?= $isGlobalNow ? 'Global kurs — synlig för alla organisationer' : 'Org-scoped — synlig endast för din organisation' ?>
+                                            </div>
+                                            <small class="text-muted">
+                                                Endast superadmin kan ändra detta. Globala kurser ignorerar org-domän, taggar och delningsregler.
+                                            </small>
+                                        </div>
+                                    </div>
+                                    <div class="form-check form-switch mb-0">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="is_global" name="is_global"
+                                               value="1" <?= $isGlobalNow ? 'checked' : '' ?>
+                                               style="width: 3em; height: 1.5em;">
+                                        <label class="form-check-label fw-bold" for="is_global">Global</label>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endif; ?>
 
                         <?php if (!empty($course['id'])): // Publik kurs-panelen kräver sparad kurs ?>
                         <?php

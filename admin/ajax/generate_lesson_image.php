@@ -57,21 +57,13 @@ if (empty($lessonTitle)) {
     exit;
 }
 
-// Kvotkontroll
-require_once '../../include/ai_quota.php';
-try {
-    enforceAiQuotaForCurrentSession();
-} catch (Exception $e) {
-    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
-    exit;
-}
-
 // Slå upp course_id för loggning
 $lessonRow = queryOne("SELECT course_id FROM " . DB_DATABASE . ".lessons WHERE id = ?", [$lessonId]);
 $lessonCourseId = $lessonRow ? (int)$lessonRow['course_id'] : null;
 
-// Generera AI-bild
-$result = generateAIImage($lessonTitle, $courseName, $lessonCourseId);
+// Generera AI-bild via centraliserad helper (kvotkontroll + loggning ingår)
+require_once '../../include/ai_lesson_helper.php';
+$result = aiGenerateLessonImage($lessonTitle, $courseName, $lessonCourseId);
 
 if ($result['success']) {
     // Uppdatera lektionen med bilden
@@ -89,86 +81,7 @@ if ($result['success']) {
     echo json_encode(['success' => false, 'message' => $result['error']]);
 }
 
-/**
- * Generate AI image using DALL-E
- */
-function generateAIImage($lessonTitle, $courseName, $courseId = null) {
-    $apiKey = defined('AI_API_KEY') ? AI_API_KEY : '';
-    $imageApiServer = 'https://api.openai.com/v1/images/generations';
-
-    if (empty($apiKey)) {
-        return ['success' => false, 'error' => 'API-nyckel saknas.'];
-    }
-
-    $context = ['feature' => 'image', 'course_id' => $courseId, 'is_image' => true];
-    $imageModel = getModelForFeature('image', 'dall-e-3');
-
-    $prompt = "Educational illustration for a lesson about '{$lessonTitle}'" .
-              ($courseName ? " in a course about '{$courseName}'" : "") .
-              ". Clean, professional, minimalist style suitable for e-learning. No text in image.";
-
-    $data = [
-        'model' => $imageModel,
-        'prompt' => $prompt,
-        'n' => 1,
-        'size' => '1024x1024',
-        'quality' => 'standard'
-    ];
-
-    $ch = curl_init($imageApiServer);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json',
-        'Authorization: Bearer ' . $apiKey
-    ]);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 120);
-
-    $response = curl_exec($ch);
-    $curlError = curl_error($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if ($curlError) {
-        return ['success' => false, 'error' => 'Curl-fel: ' . $curlError];
-    }
-
-    if ($httpCode !== 200) {
-        $errorResult = json_decode($response, true);
-        $errorMessage = $errorResult['error']['message'] ?? 'HTTP-fel ' . $httpCode;
-        return ['success' => false, 'error' => 'API-fel: ' . $errorMessage];
-    }
-
-    $result = json_decode($response, true);
-
-    if (!isset($result['data'][0]['url'])) {
-        return ['success' => false, 'error' => 'Ingen bild-URL i API-svaret.'];
-    }
-
-    // Download and save image locally
-    $imageUrl = $result['data'][0]['url'];
-    $imageContent = @file_get_contents($imageUrl);
-
-    if (!$imageContent) {
-        return ['success' => false, 'error' => 'Kunde inte ladda ner bilden från OpenAI.'];
-    }
-
-    $uploadDir = __DIR__ . '/../../upload/';
-
-    if (!is_dir($uploadDir)) {
-        if (!mkdir($uploadDir, 0755, true)) {
-            return ['success' => false, 'error' => 'Kunde inte skapa upload-mappen.'];
-        }
-    }
-
-    $fileName = 'ai_' . uniqid() . '.png';
-    $filePath = $uploadDir . $fileName;
-
-    if (!file_put_contents($filePath, $imageContent)) {
-        return ['success' => false, 'error' => 'Kunde inte spara bildfilen.'];
-    }
-
-    logAiUsage($context, [], $imageModel, 'ok');
-    return ['success' => true, 'image_url' => $fileName];
-}
+// Bildgenereringsfunktionen ligger nu centralt i include/ai_lesson_helper.php
+// (aiGenerateLessonImage). Återanvänds från ai_generate_lesson.php så lektions-
+// bildgenereringen kan triggas både via knappen i editorn och som del av
+// AI-skapa-lektion-flödet.

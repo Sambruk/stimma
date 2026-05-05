@@ -32,11 +32,13 @@ body {
     color: var(--white);
 }
 
-.nav-link {
+/* Scopas till navbaren — annars läcker den vita färgen ut till t.ex.
+   .nav-tabs på sidor som bäddas in i navbaren (Mina kurser-flikarna). */
+.navbar .nav-link {
     color: var(--white);
 }
 
-.nav-link:hover {
+.navbar .nav-link:hover {
     color: var(--accent-blue);
 }
 
@@ -386,4 +388,57 @@ body {
 @media (max-width: 576px) {
     .content img.img-sm,
     .content img.img-md { width: 100%; float: none; margin: 0.75rem 0; }
+}
+
+/* ============================================================
+   Dark mode — överrider för komponenter med hardcoded ljusa
+   värden ovan. Bootstrap 5.3 byter sina egna komponenter
+   automatiskt via [data-bs-theme="dark"]; här fångar vi alla
+   ställen där style.css satt egna vita/ljusa bakgrunder.
+   ============================================================ */
+[data-bs-theme="dark"] body {
+    background-color: var(--bs-body-bg);
+    color: var(--bs-body-color);
+}
+
+[data-bs-theme="dark"] .card {
+    background-color: var(--bs-tertiary-bg);
+    border-color: var(--bs-border-color);
+    color: var(--bs-body-color);
+}
+[data-bs-theme="dark"] .card-header {
+    background-color: var(--bs-secondary-bg);
+    color: var(--bs-body-color);
+    border-bottom-color: var(--bs-border-color);
+}
+[data-bs-theme="dark"] .card-header i {
+    color: var(--bs-body-color);
+}
+
+[data-bs-theme="dark"] .progress {
+    background-color: var(--bs-secondary-bg);
+}
+
+/* Navbaren har bg-white inline — byt till body-bg i mörkt läge */
+[data-bs-theme="dark"] .navbar.bg-white {
+    background-color: var(--bs-body-bg) !important;
+    border-bottom: 1px solid var(--bs-border-color);
+}
+[data-bs-theme="dark"] .navbar .text-dark { color: var(--bs-body-color) !important; }
+[data-bs-theme="dark"] .navbar .text-muted { color: var(--bs-secondary-color) !important; }
+
+/* Footer + ramar */
+[data-bs-theme="dark"] .footer { color: var(--bs-secondary-color); }
+[data-bs-theme="dark"] hr.border-light { border-top-color: var(--bs-border-color) !important; }
+
+/* Sidor med .container/.bg-light bakgrund */
+[data-bs-theme="dark"] .bg-light { background-color: var(--bs-tertiary-bg) !important; }
+
+/* Tab-flikar i mörkt läge — kanten + innehåll */
+[data-bs-theme="dark"] .nav-tabs {
+    border-bottom-color: var(--bs-border-color);
+}
+[data-bs-theme="dark"] .nav-tabs .nav-link.active {
+    background-color: var(--bs-tertiary-bg);
+    border-color: var(--bs-border-color) var(--bs-border-color) var(--bs-tertiary-bg);
 }

@@ -170,6 +170,12 @@ require_once 'include/header.php';
                                     <i class="bi bi-globe me-1"></i>Publik
                                 </a>
                                 <?php endif; ?>
+                                <?php if (!empty($course['is_global'])): ?>
+                                <span class="badge bg-info" style="font-size: 0.7rem;"
+                                      title="Global kurs — synlig för alla organisationer (satt av superadmin)">
+                                    <i class="bi bi-globe2 me-1"></i>Global
+                                </span>
+                                <?php endif; ?>
                                 <?php
                                 $courseSharedDoms = getCourseSharedDomains($course['id']);
                                 if (!empty($courseSharedDoms)):
