@@ -530,7 +530,7 @@ if (!$certificate) {
                     <?php if ($certOrgIcon && !empty($certOrgIcon['url'])): ?>
                     <img src="upload/org_icons/<?= htmlspecialchars($certOrgIcon['url']) ?>" alt="<?= htmlspecialchars($certOrgIcon['name']) ?>" class="course-logo">
                     <?php else: ?>
-                    <img src="images/stimma-logo.png" alt="Stimma" class="logo">
+                    <img src="images/stimma-logo-transparent.png" alt="Stimma" class="logo">
                     <?php endif; ?>
                 </div>
                 <h1 class="certificate-title">Diplom</h1>

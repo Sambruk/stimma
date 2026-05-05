@@ -181,7 +181,7 @@
                 <!-- Logo section with link to homepage -->
                 <h1 class="h3 mb-0">
                     <a href="index.php" aria-label="Hem">
-                        <img src="images/stimma-logo.png" height="80px" alt="<?= htmlspecialchars(SITE_NAME) ?>">
+                        <img src="images/stimma-logo-transparent.png" height="80px" alt="<?= htmlspecialchars(SITE_NAME) ?>">
                     </a>
                 </h1>
 

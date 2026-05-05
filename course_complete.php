@@ -132,7 +132,7 @@ $headerText = getHeaderText($userId);
 <nav class="navbar navbar-light bg-white shadow-sm py-2">
     <div class="container-fluid">
         <a href="/" class="navbar-brand d-flex align-items-center">
-            <img src="images/stimma-logo.png" height="48" alt="Stimma">
+            <img src="images/stimma-logo-transparent.png" height="48" alt="Stimma">
         </a>
         <span class="d-none d-md-inline text-muted" style="font-size: 0.95rem;"><?= $headerText ?: 'Stimma - en utbildningsplattform från Sambruk' ?></span>
         <?php if ($headerOrgIcon): ?>

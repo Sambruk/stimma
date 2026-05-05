@@ -119,7 +119,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <div class="sidebar d-flex flex-column h-100">
         <?php $headerOrgIconAdmin = getHeaderOrganizationIcon($_SESSION['user_id']); ?>
         <div class="px-3 mb-3 d-flex align-items-center justify-content-center gap-2">
-            <img src="../images/stimma-logo.png" alt="Stimma" height="<?= $headerOrgIconAdmin ? '50' : '60' ?>">
+            <img src="../images/stimma-logo-transparent.png" alt="Stimma" height="<?= $headerOrgIconAdmin ? '50' : '60' ?>">
             <?php if ($headerOrgIconAdmin): ?>
             <div class="bg-white rounded px-2 py-1 d-inline-flex align-items-center" title="<?= htmlspecialchars($headerOrgIconAdmin['name']) ?>">
                 <img src="../upload/org_icons/<?= htmlspecialchars($headerOrgIconAdmin['url']) ?>"

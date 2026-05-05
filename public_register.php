@@ -149,7 +149,7 @@ $page_title = 'Registrera dig för ' . $course['title'];
             <div class="card shadow-sm">
                 <div class="card-body p-4">
                     <div class="text-center mb-4">
-                        <img src="images/stimma-logo.png" height="80" alt="Stimma">
+                        <img src="images/stimma-logo-transparent.png" height="80" alt="Stimma">
                     </div>
                     <h1 class="h4 text-center mb-3">Registrera dig för kursen</h1>
                     <h2 class="h5 text-primary text-center mb-4"><?= htmlspecialchars($course['title']) ?></h2>

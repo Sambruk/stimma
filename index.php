@@ -153,7 +153,7 @@ if (!$isLoggedIn):
                 <div class="card shadow-sm">
                     <div class="card-body text-center p-4">
                         <!-- Logo and system description -->
-                        <h1 class="display-4 mb-3"><img src="images/stimma-logo.png" height="80px" alt="<?= $systemName ?>"></h1>
+                        <h1 class="display-4 mb-3"><img src="images/stimma-logo-transparent.png" height="80px" alt="<?= $systemName ?>"></h1>
                         <?php if ($systemDescription): ?>
                             <p class="lead text-muted mb-4"><?= htmlspecialchars($systemDescription) ?></p>
                         <?php endif; ?>
