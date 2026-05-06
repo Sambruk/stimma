@@ -140,16 +140,34 @@ $today = date('j') . ' ' . $monthNames[date('n') - 1] . ' ' . date('Y');
 
 // Peak för heatmap-skalning
 $maxLessonsInDay = max(array_column($activityHistory, 'lessons') + [0]);
+
+// Konfiguration för app-shell (sidebar/header)
+$page_title = 'Min dashboard — Stimma';
+$rdActive = 'dashboard';
+require_once 'include/header.php';
+
+// Hälsning + förnamn (samma logik som index.php)
+$rdHour = (int)date('G');
+$rdGreeting = $rdHour < 5  ? 'God natt'
+            : ($rdHour < 10 ? 'God morgon'
+            : ($rdHour < 13 ? 'Hej'
+            : ($rdHour < 18 ? 'God eftermiddag'
+            : 'God kväll')));
+$rdFirstName = !empty($user['name']) ? strtok($user['name'], ' ')
+             : strstr($user['email'], '@', true);
+
+$rdOrgName = $headerOrganization['name'] ?? $userDomain;
+$rdOrgInitials = '';
+foreach (preg_split('/\s+/', trim($rdOrgName), -1, PREG_SPLIT_NO_EMPTY) as $part) {
+    $rdOrgInitials .= mb_strtoupper(mb_substr($part, 0, 1));
+    if (mb_strlen($rdOrgInitials) >= 2) break;
+}
+if ($rdOrgInitials === '') $rdOrgInitials = mb_strtoupper(mb_substr($rdOrgName, 0, 2));
 ?>
-<!DOCTYPE html>
-<html lang="sv">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Min dashboard — Stimma</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css">
-    <style>
+
+<!-- Dashboard-specifika stilar (panel, heatmap, course-row m.m.) — kvar
+     inline efter att header.php redan satt <head> på sidan. -->
+<style>
         body { background: #f6f7fb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
         .dash-header { background: #fff; border-bottom: 1px solid #e9ecef; padding: 0.85rem 0; }
         .dash-header h1 { color: #212529; }
@@ -193,26 +211,35 @@ $maxLessonsInDay = max(array_column($activityHistory, 'lessons') + [0]);
             .heatmap { grid-template-columns: repeat(15, 1fr); }
         }
     </style>
-</head>
-<body>
 
-<a href="index.php" class="back-btn btn btn-light btn-sm shadow-sm">
-    <i class="bi bi-arrow-left me-1"></i>Tillbaka
-</a>
-
-<header class="dash-header">
-    <div class="container">
-        <div class="d-flex align-items-center gap-3 flex-wrap">
-            <div class="avatar"><i class="bi bi-person"></i></div>
-            <div class="flex-grow-1">
-                <h1 class="h6 mb-0 fw-semibold"><?= htmlspecialchars($user['name'] ?: $user['email']) ?></h1>
-                <small class="text-muted"><?= $today ?></small>
-            </div>
+<!-- Org-bar -->
+<div class="rd-org-bar">
+    <div class="rd-org-info">
+        <div class="rd-org-logo" aria-hidden="true">
+            <?php if (!empty($headerOrgIcon['url'])): ?>
+                <img src="upload/org_icons/<?= htmlspecialchars($headerOrgIcon['url']) ?>"
+                     alt="<?= htmlspecialchars($headerOrgIcon['name'] ?? $rdOrgName) ?>">
+            <?php else: ?>
+                <?= htmlspecialchars($rdOrgInitials) ?>
+            <?php endif; ?>
         </div>
+        <div class="rd-org-text">
+            <span class="rd-org-label">Inloggad i</span>
+            <span class="rd-org-name"><?= htmlspecialchars($rdOrgName) ?></span>
+        </div>
+    </div>
+</div>
+
+<!-- Page-head -->
+<header class="rd-page-head">
+    <div>
+        <div class="rd-greeting"><?= htmlspecialchars($rdGreeting . ($rdFirstName !== '' ? ', ' . $rdFirstName : '')) ?></div>
+        <h1 class="rd-hero">Min dashboard</h1>
+        <small class="text-muted"><?= $today ?></small>
     </div>
 </header>
 
-<main class="container py-3">
+<main class="container py-3" style="padding-left: 0; padding-right: 0;">
 
     <!-- Top stats row -->
     <div class="row g-2 mb-3">
@@ -360,6 +387,4 @@ $maxLessonsInDay = max(array_column($activityHistory, 'lessons') + [0]);
 
 </main>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+<?php require_once 'include/footer.php'; ?>

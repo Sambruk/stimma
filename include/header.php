@@ -48,21 +48,28 @@
 
     <!-- Preconnect to CDN domains for better performance -->
     <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <!-- Typsnitt: Inter (sans) + Fraunces (serif) — redesign v3 -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fraunces:opsz,wght@9..144,400;9..144,500&display=swap" rel="stylesheet">
 
     <!-- External CSS dependencies -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    
+
     <!-- External JavaScript dependencies -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js" defer></script>
-    
+
     <!-- Custom CSS for site-specific styles -->
     <link href="include/css/style.css" rel="stylesheet">
+    <link href="include/css/redesign.css" rel="stylesheet">
 </head>
 <body>
 
 <?php if (isLoggedIn()): ?>
+    <a href="#rdMain" class="rd-skip-link">Hoppa till innehåll</a>
     <?php if (isImpersonating()): ?>
     <?php
     // Beräkna rätt relativ sökväg till stop_impersonate.php beroende på om
@@ -174,109 +181,55 @@
         </div>
     </div>
     <?php endif; ?>
-    <!-- Navigation bar for logged-in users with responsive design -->
-    <nav class="navbar navbar-expand-sm navbar-light bg-white shadow-sm sticky-top" role="navigation" aria-label="Main navigation" style="z-index: 1030;">
-        <div class="container-fluid">
-            <div class="d-flex justify-content-between align-items-center w-100">
-                <!-- Logo section with link to homepage -->
-                <h1 class="h3 mb-0">
-                    <a href="index.php" aria-label="Hem">
-                        <img src="images/stimma-logo-transparent.png" height="80px" alt="<?= htmlspecialchars(SITE_NAME) ?>">
-                    </a>
-                </h1>
+    <?php
+    // Roll-flaggor och user-data — användbart för sidebar.php och org-bar
+    $isAdmin = false;
+    $isCourseEditor = false;
+    $headerUserName = '';
+    $headerUserRole = 'student';
+    $headerUserOrgTags = [];
 
-                <!-- Centered title with domain -->
-                <?php
-                $userDomain = '';
-                if (isset($_SESSION['user_email'])) {
-                    $emailParts = explode('@', $_SESSION['user_email']);
-                    $userDomain = isset($emailParts[1]) ? $emailParts[1] : '';
-                }
-                ?>
-                <div class="d-none d-md-block text-center">
-                    <span class="fw-bold text-dark" style="font-size: 1.4rem; letter-spacing: 0.5px;">
-                        <?= getHeaderText($_SESSION['user_id']) ?>
-                    </span>
-                </div>
+    if (isset($_SESSION['user_id'])) {
+        $user = queryOne("SELECT name, is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
+        $isAdmin = $user ? (bool)$user['is_admin'] : false;
+        $isCourseEditor = $user ? (bool)$user['is_editor'] : false;
+        $headerUserName = $user['name'] ?? '';
+        if ($isAdmin) {
+            $headerUserRole = 'admin';
+        } elseif ($isCourseEditor) {
+            $headerUserRole = 'editor';
+        }
+        $headerUserOrgTags = getUserOrgTags($_SESSION['user_id']);
+    }
 
-                <!-- Right side section with user info and action buttons -->
-                <div class="d-flex align-items-center">
-                    <?php
-                    // Check if user has admin privileges or is a course editor
-                    $isAdmin = false;
-                    $isCourseEditor = false;
-                    $headerUserName = '';
-                    $headerUserRole = 'student';
-                    $headerUserOrgTags = [];
+    $userDomain = '';
+    if (isset($_SESSION['user_email'])) {
+        $emailParts = explode('@', $_SESSION['user_email']);
+        $userDomain = isset($emailParts[1]) ? $emailParts[1] : '';
+    }
 
-                    if (isset($_SESSION['user_id'])) {
-                        $user = queryOne("SELECT name, is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
-                        $isAdmin = $user ? (bool)$user['is_admin'] : false;
-                        $isCourseEditor = $user ? (bool)$user['is_editor'] : false;
-                        $headerUserName = $user['name'] ?? '';
-                        if ($isAdmin) {
-                            $headerUserRole = 'admin';
-                        } elseif ($isCourseEditor) {
-                            $headerUserRole = 'editor';
-                        }
-                        $headerUserOrgTags = getUserOrgTags($_SESSION['user_id']);
-                    }
-                    ?>
-                    <!-- Tema-växlare (ljus/mörk) -->
-                    <button id="stimmaThemeToggle"
-                            class="btn btn-link text-muted p-1 me-1 d-inline-flex align-items-center justify-content-center text-decoration-none"
-                            type="button"
-                            title="Växla mellan ljust och mörkt läge"
-                            aria-label="Växla tema">
-                        <i class="bi bi-moon-stars" aria-hidden="true" style="font-size: 1.2rem;"></i>
-                    </button>
+    // Org-data till org-bar (steg 3) — slå upp organisation om domänen tillhör en
+    $headerOrganization = null;
+    if ($userDomain !== '' && function_exists('getOrganizationByDomain')) {
+        $headerOrganization = getOrganizationByDomain($userDomain);
+    }
+    $headerOrgIcon = getHeaderOrganizationIcon($_SESSION['user_id']);
+    $headerText = getHeaderText($_SESSION['user_id']);
+    ?>
 
-                    <!-- Profile button -->
-                    <button class="btn btn-link text-muted p-1 d-inline-flex align-items-center justify-content-center text-decoration-none"
-                            type="button" data-bs-toggle="offcanvas" data-bs-target="#profilePanel"
-                            aria-controls="profilePanel"
-                            title="Min profil">
-                        <i class="bi bi-person-circle me-1" style="font-size: 1.2rem;"></i>
-                        <span class="d-none d-md-inline"><?= htmlspecialchars($headerUserName ?: ($_SESSION['user_email'] ?? '')) ?></span>
-                    </button>
-                    <!-- Dashboard link -->
-                    <a href="dashboard.php"
-                       class="btn btn-link p-1 me-2 d-inline-flex align-items-center justify-content-center"
-                       title="Min dashboard"
-                       aria-label="Dashboard">
-                        <i class="bi bi-speedometer2 text-dark" aria-hidden="true"></i>
-                    </a>
-                    <?php if (($isAdmin || $isCourseEditor) && !$isHeaderPublicOnly): ?>
-                        <!-- Admin panel link (hidden on small screens) -->
-                        <a href="admin/index.php"
-                           class="btn btn-link p-1 me-2 d-inline-flex align-items-center justify-content-center d-none d-sm-inline-flex"
-                           title="Administrera"
-                           aria-label="Administration panel">
-                            <i class="bi bi-gear text-dark" aria-hidden="true"></i>
-                        </a>
-                    <?php endif; ?>
-                    <!-- Logout button -->
-                    <a href="logout.php"
-                       class="btn btn-link p-1 d-inline-flex align-items-center justify-content-center"
-                       title="Logga ut"
-                       aria-label="Log out">
-                        <i class="bi bi-box-arrow-right text-dark" aria-hidden="true"></i>
-                    </a>
-                    <!-- Organisationsikon (längst till höger) -->
-                    <?php
-                    $headerOrgIcon = getHeaderOrganizationIcon($_SESSION['user_id']);
-                    if ($headerOrgIcon):
-                    ?>
-                    <span class="ms-3 d-inline-flex align-items-center" title="<?= htmlspecialchars($headerOrgIcon['name']) ?>">
-                        <img src="upload/org_icons/<?= htmlspecialchars($headerOrgIcon['url']) ?>"
-                             alt="<?= htmlspecialchars($headerOrgIcon['name']) ?>"
-                             style="max-height: 60px; max-width: 120px; object-fit: contain;">
-                    </span>
-                    <?php endif; ?>
-                </div>
-            </div>
-        </div>
-    </nav>
+    <!-- App-shell: sidebar (vänster) + main (höger). Strukturen stängs i footer.php.
+         Outer-wrappern är <div> (inte <main>) eftersom enskilda sidor redan har
+         egna <main>-element — vi vill inte få nested main. -->
+    <div class="rd-shell">
+        <?php require __DIR__ . '/sidebar.php'; ?>
+        <div class="rd-main" id="rdMain">
+
+            <!-- Mobil-only hamburger för sidebar — visas via CSS @media -->
+            <button type="button" class="rd-sidebar-toggle d-md-none" id="rdSidebarToggle"
+                    aria-label="Öppna meny" aria-expanded="false" aria-controls="rdSidebar">
+                <i class="bi bi-list" aria-hidden="true"></i>
+                <span>Meny</span>
+            </button>
 
     <!-- Profile Offcanvas Panel -->
     <div class="offcanvas offcanvas-end" tabindex="-1" id="profilePanel" aria-labelledby="profilePanelLabel">

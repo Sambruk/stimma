@@ -37,11 +37,15 @@ $coDomClause = buildDomainInClause($orgScopeDomains, 'co.organization_domain');
 // Hämta kurser med diplominfo — filtrerade på adminens egen organisation.
 // Super admin använder samma filter: sidan handlar om adminens egen orgs
 // diplom, inte cross-org-översikt.
+// Visa både aktiva och inaktiva kurser så admin kan:
+//   1) förbereda diplom innan kursen aktiveras
+//   2) hantera diplom även för kurser som inaktiverats efter utfärdande
+// Aktiva sorteras först så de syns högst upp.
 $courses = query("SELECT c.*,
                          (SELECT COUNT(*) FROM " . DB_DATABASE . ".certificates WHERE course_id = c.id) as cert_count
                   FROM " . DB_DATABASE . ".courses c
-                  WHERE c.status = 'active' AND {$courseDomClause['fragment']}
-                  ORDER BY c.title", $courseDomClause['params']);
+                  WHERE {$courseDomClause['fragment']}
+                  ORDER BY (c.status = 'active') DESC, c.title", $courseDomClause['params']);
 
 // Hantera bilduppladdning
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
@@ -150,6 +154,12 @@ require_once 'include/header.php';
                                             <small class="<?= $previewCourseId == $course['id'] ? 'text-white-50' : 'text-muted' ?>">
                                                 <?= $course['cert_count'] ?> diplom utfärdade
                                             </small>
+                                            <?php if ($course['status'] !== 'active'): ?>
+                                            <span class="badge bg-warning text-dark ms-2"
+                                                  title="Kursen är inaktiverad — diplom utfärdas inte men befintliga är kvar">
+                                                <i class="bi bi-pause-circle me-1"></i>Inaktiv
+                                            </span>
+                                            <?php endif; ?>
                                             <?php if ($course['certificate_image_url']): ?>
                                             <span class="badge bg-success ms-2">
                                                 <i class="bi bi-image me-1"></i>Bild

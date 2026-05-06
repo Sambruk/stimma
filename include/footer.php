@@ -1,5 +1,32 @@
+<?php if (function_exists('isLoggedIn') && isLoggedIn()): ?>
+        </div><!-- /.rd-main -->
+    </div><!-- /.rd-shell -->
+<?php endif; ?>
+
 <!-- Ladda JS-bibliotek -->
 <script src="include/js/stimma-confetti.js"></script>
+
+<!-- Sidebar-hamburger för mobil — togglar body.rd-sidebar-open -->
+<script>
+(function() {
+    var btn = document.getElementById('rdSidebarToggle');
+    var backdrop = document.querySelector('.rd-sidebar-backdrop');
+    if (!btn) return;
+    function close() {
+        document.body.classList.remove('rd-sidebar-open');
+        btn.setAttribute('aria-expanded', 'false');
+    }
+    btn.addEventListener('click', function() {
+        var open = document.body.classList.toggle('rd-sidebar-open');
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    if (backdrop) backdrop.addEventListener('click', close);
+    // Stäng på Escape
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && document.body.classList.contains('rd-sidebar-open')) close();
+    });
+})();
+</script>
 
 <!-- Tema-växlare: knapp i navbaren togglar data-bs-theme + sparar i localStorage -->
 <script>

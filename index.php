@@ -436,16 +436,111 @@ else:
 
     // Set page title
     $page_title = $systemName . ' - en nanolearningsplattform';
+    // Aktiv sidebar-länk
+    $rdActive = 'overview';
     // Include header
     require_once 'include/header.php';
+
+    // Hälsning baserat på tid på dygnet
+    $rdHour = (int)date('G');
+    $rdGreeting = $rdHour < 5  ? 'God natt'
+                : ($rdHour < 10 ? 'God morgon'
+                : ($rdHour < 13 ? 'Hej'
+                : ($rdHour < 18 ? 'God eftermiddag'
+                : 'God kväll')));
+    $rdFirstName = '';
+    if (!empty($headerUserName)) {
+        $rdFirstName = strtok($headerUserName, ' ');
+    } elseif (!empty($_SESSION['user_email'])) {
+        $rdFirstName = strstr($_SESSION['user_email'], '@', true);
+    }
+    $rdOrgName = $headerOrganization['name'] ?? $userDomain;
+    // Org-logo: ikoninitial från orgens namn
+    $rdOrgInitials = '';
+    foreach (preg_split('/\s+/', trim($rdOrgName), -1, PREG_SPLIT_NO_EMPTY) as $part) {
+        $rdOrgInitials .= mb_strtoupper(mb_substr($part, 0, 1));
+        if (mb_strlen($rdOrgInitials) >= 2) break;
+    }
+    if ($rdOrgInitials === '') $rdOrgInitials = mb_strtoupper(mb_substr($rdOrgName, 0, 2));
 ?>
+
+    <!-- Org-bar -->
+    <div class="rd-org-bar">
+        <div class="rd-org-info">
+            <div class="rd-org-logo" aria-hidden="true">
+                <?php if ($headerOrgIcon && !empty($headerOrgIcon['url'])): ?>
+                    <img src="upload/org_icons/<?= htmlspecialchars($headerOrgIcon['url']) ?>"
+                         alt="<?= htmlspecialchars($headerOrgIcon['name'] ?? $rdOrgName) ?>">
+                <?php else: ?>
+                    <?= htmlspecialchars($rdOrgInitials) ?>
+                <?php endif; ?>
+            </div>
+            <div class="rd-org-text">
+                <span class="rd-org-label">Inloggad i</span>
+                <span class="rd-org-name"><?= htmlspecialchars($rdOrgName) ?></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page-head (greeting + serif h1) -->
+    <header class="rd-page-head">
+        <div>
+            <div class="rd-greeting"><?= htmlspecialchars($rdGreeting . ($rdFirstName !== '' ? ', ' . $rdFirstName : '')) ?></div>
+            <h1 class="rd-hero">Fortsätt där du slutade</h1>
+        </div>
+    </header>
+
+    <?php
+    // ====== Stats-rutor (Pågående / Avslutade / Studietimmar) ======
+    $rdLessonsCompleted = (int)(queryOne(
+        "SELECT COUNT(*) AS c FROM " . DB_DATABASE . ".progress p
+         JOIN " . DB_DATABASE . ".lessons l ON l.id = p.lesson_id
+         JOIN " . DB_DATABASE . ".courses c ON c.id = l.course_id
+         WHERE p.user_id = ? AND p.status = 'completed'", [$userId]
+    )['c'] ?? 0);
+    $rdCoursesCompleted = (int)(queryOne(
+        "SELECT COUNT(*) AS c FROM " . DB_DATABASE . ".certificates WHERE user_id = ?", [$userId]
+    )['c'] ?? 0);
+    // Pågående: kurser där användaren klarat minst en lektion men inte alla
+    $rdInProgress = (int)(queryOne(
+        "SELECT COUNT(*) AS c FROM (
+            SELECT c.id, COUNT(DISTINCT l.id) AS total_l,
+                   COUNT(DISTINCT CASE WHEN p.status='completed' THEN l.id END) AS done_l
+              FROM " . DB_DATABASE . ".courses c
+              JOIN " . DB_DATABASE . ".lessons l ON l.course_id = c.id
+              LEFT JOIN " . DB_DATABASE . ".progress p ON p.lesson_id = l.id AND p.user_id = ?
+             WHERE c.status='active'
+             GROUP BY c.id
+            HAVING done_l > 0 AND done_l < total_l
+        ) t", [$userId]
+    )['c'] ?? 0);
+    // Studietimmar: schablon 5 min per lektion (samma som dashboardens estimering)
+    $rdStudyMinutes = $rdLessonsCompleted * 5;
+    $rdStudyHoursLabel = $rdStudyMinutes >= 60
+        ? round($rdStudyMinutes / 60) . 'h'
+        : $rdStudyMinutes . 'min';
+    ?>
+
+    <section class="rd-stats">
+        <div class="rd-stat">
+            <div class="rd-stat-label">Pågående</div>
+            <div class="rd-stat-value"><?= $rdInProgress ?></div>
+        </div>
+        <div class="rd-stat">
+            <div class="rd-stat-label">Avslutade</div>
+            <div class="rd-stat-value"><?= $rdCoursesCompleted ?></div>
+        </div>
+        <div class="rd-stat">
+            <div class="rd-stat-label">Studietimmar</div>
+            <div class="rd-stat-value"><?= $rdStudyHoursLabel ?></div>
+        </div>
+    </section>
+
     <!-- Main content container -->
-    <div class="container-fluid px-3 px-md-4 py-4 px-md-5">
-        <div class="row">
-            <!-- Left sidebar (empty on desktop) -->
-            <div class="col-lg-2 d-none d-lg-block"></div>
-            <!-- Main content area -->
-            <div class="col-12 col-lg-8">
+    <div class="container-fluid p-0" id="mina-kurser">
+        <div class="row g-0">
+            <!-- Main content area (full bredd nu — sidebar finns redan i app-shell) -->
+            <div class="col-12">
                 <main>
                     <?php
                     // Pre-bucket: räkna pågående vs avslutade så flikarna kan visa antal.
@@ -670,57 +765,49 @@ else:
                     <?php else: ?>
 
                     <div class="courses-view-wrapper view-cards">
-                        <!-- Kortvy -->
-                        <div class="courses-cards-grid row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3 mx-2 mx-md-0">
-                            <?php foreach ($tabCourses as $tc): ?>
+                        <!-- Kortvy (redesign v3 — ikon-platta i stället för bild) -->
+                        <div class="courses-cards-grid row row-cols-1 row-cols-md-2 g-3 mx-0">
+                            <?php foreach ($tabCourses as $tcIdx => $tc): ?>
                                 <?php
-                                    $imgSrc = $tc['image_url']
-                                        ? 'upload/' . sanitize($tc['image_url'])
-                                        : 'images/placeholder.png';
+                                    // Alternera färgad ikon-platta så cards får visuell variation
+                                    $rdIconColors = ['purple', 'teal', 'amber'];
+                                    $rdIconColor = $rdIconColors[$tcIdx % 3];
                                 ?>
                                 <div class="col">
-                                    <div class="modern-course-card h-100 d-flex flex-column">
-                                        <?php if ($tc['next_lesson']): ?>
-                                            <a href="lesson.php?id=<?= (int)$tc['next_lesson']['id'] ?>" aria-label="Fortsätt med <?= sanitize($tc['title']) ?>">
-                                                <img src="<?= $imgSrc ?>" class="course-banner" alt="<?= sanitize($tc['title']) ?>">
-                                            </a>
-                                        <?php else: ?>
-                                            <img src="<?= $imgSrc ?>" class="course-banner" alt="<?= sanitize($tc['title']) ?>">
-                                        <?php endif; ?>
-                                        <div class="card-body d-flex flex-column">
-                                            <h5 class="card-title text-truncate" title="<?= sanitize($tc['title']) ?>">
-                                                <?= sanitize($tc['title']) ?>
-                                            </h5>
-                                            <div class="d-flex align-items-center mb-2">
-                                                <div class="progress flex-grow-1" style="height: 6px;">
-                                                    <div class="progress-bar bg-success" role="progressbar"
-                                                         style="width: <?= $tc['pct'] ?>%"></div>
+                                    <div class="rd-course">
+                                        <div class="rd-course-top">
+                                            <div class="rd-course-info">
+                                                <div class="rd-course-icon <?= $rdIconColor ?>" aria-hidden="true">
+                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
                                                 </div>
-                                                <span class="ms-2 text-muted small"><?= $tc['completed'] ?>/<?= $tc['total'] ?></span>
+                                                <div style="min-width:0;">
+                                                    <div class="rd-course-meta"><?= $tc['total'] ?> lektioner</div>
+                                                    <div class="rd-course-title text-truncate" title="<?= sanitize($tc['title']) ?>"><?= sanitize($tc['title']) ?></div>
+                                                    <?php if ($tc['next_lesson']): ?>
+                                                        <div class="rd-course-next text-truncate">Nästa: <?= sanitize($tc['next_lesson']['title']) ?></div>
+                                                    <?php endif; ?>
+                                                </div>
                                             </div>
+                                            <span class="rd-course-percent"><?= $tc['pct'] ?>%</span>
+                                        </div>
+                                        <div class="rd-progress" role="progressbar" aria-valuenow="<?= $tc['pct'] ?>" aria-valuemin="0" aria-valuemax="100" aria-label="Kursprogress">
+                                            <div class="rd-progress-fill" style="width: <?= $tc['pct'] ?>%;"></div>
+                                        </div>
+                                        <div class="rd-actions">
                                             <?php if ($tc['next_lesson']): ?>
-                                                <p class="next-lesson"><i class="bi bi-arrow-right-circle me-1"></i><?= sanitize($tc['next_lesson']['title']) ?></p>
+                                                <a href="lesson.php?id=<?= (int)$tc['next_lesson']['id'] ?>" class="rd-btn rd-btn-primary">Fortsätt lektion</a>
+                                            <?php else: ?>
+                                                <span class="rd-btn rd-btn-primary" style="cursor: default; opacity: 0.7;"><i class="bi bi-check-circle me-1"></i>Klar!</span>
                                             <?php endif; ?>
-                                            <div class="mt-auto d-flex gap-2 align-items-center">
-                                                <?php if ($tc['next_lesson']): ?>
-                                                    <a href="lesson.php?id=<?= (int)$tc['next_lesson']['id'] ?>" class="btn btn-primary btn-sm flex-grow-1">
-                                                        Fortsätt
-                                                    </a>
-                                                <?php else: ?>
-                                                    <button class="btn btn-success btn-sm flex-grow-1" disabled>
-                                                        <i class="bi bi-check-circle me-1"></i>Klar!
-                                                    </button>
-                                                <?php endif; ?>
-                                                <div class="dropdown">
-                                                    <button class="btn btn-sm btn-light" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Mer">
-                                                        <i class="bi bi-three-dots"></i>
-                                                    </button>
-                                                    <ul class="dropdown-menu dropdown-menu-end">
-                                                        <li><a class="dropdown-item" href="abandon_course.php?course_id=<?= (int)$tc['course_id'] ?>">
-                                                            <i class="bi bi-x-circle me-2"></i>Avsluta kurs
-                                                        </a></li>
-                                                    </ul>
-                                                </div>
+                                            <div class="dropdown">
+                                                <button class="rd-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Mer alternativ">
+                                                    <i class="bi bi-three-dots"></i>
+                                                </button>
+                                                <ul class="dropdown-menu dropdown-menu-end">
+                                                    <li><a class="dropdown-item" href="abandon_course.php?course_id=<?= (int)$tc['course_id'] ?>">
+                                                        <i class="bi bi-x-circle me-2"></i>Avsluta kurs
+                                                    </a></li>
+                                                </ul>
                                             </div>
                                         </div>
                                     </div>
@@ -820,7 +907,7 @@ else:
                     <?php if (!empty($catalogCourses)): ?>
                         <hr class="my-4 border-light">
 
-                        <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-3" id="kurskatalog">
                             <h2 class="h2 fs-5 fs-md-3 mb-0">Kurskatalog</h2>
                         </div>
 
@@ -852,45 +939,36 @@ else:
                         </div>
 
                         <div class="courses-view-wrapper view-cards" id="catalogViewWrapper">
-                            <!-- Kortvy -->
-                            <div class="courses-cards-grid row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3 mx-2 mx-md-0" id="orgCourseGrid">
-                                <?php foreach ($catalogCourses as $cc): ?>
+                            <!-- Kortvy (redesign v3) -->
+                            <div class="courses-cards-grid row row-cols-1 row-cols-md-2 g-3 mx-0" id="orgCourseGrid">
+                                <?php foreach ($catalogCourses as $ccIdx => $cc): ?>
                                     <?php
-                                        $imgSrc = $cc['image_url']
-                                            ? 'upload/' . sanitize($cc['image_url'])
-                                            : 'images/placeholder.png';
+                                        $rdIconColor = ['purple', 'teal', 'amber'][$ccIdx % 3];
                                     ?>
                                     <div class="col catalog-item"
                                          data-tags="<?= htmlspecialchars(implode(',', $cc['tag_ids'])) ?>"
                                          data-title="<?= htmlspecialchars(mb_strtolower($cc['title'])) ?>">
-                                        <div class="modern-course-card h-100 d-flex flex-column">
-                                            <a href="lesson.php?id=<?= $cc['first_lesson_id'] ?>" aria-label="Börja kursen <?= sanitize($cc['title']) ?>">
-                                                <img src="<?= $imgSrc ?>" class="course-banner" alt="<?= sanitize($cc['title']) ?>">
-                                            </a>
-                                            <div class="card-body d-flex flex-column">
-                                                <h5 class="card-title text-truncate" title="<?= sanitize($cc['title']) ?>">
-                                                    <?= sanitize($cc['title']) ?>
-                                                </h5>
-                                                <?php if ($cc['sequential']): ?>
-                                                    <div class="mb-2">
-                                                        <span class="badge bg-info"><i class="bi bi-signpost-split me-1"></i>Stegvis</span>
+                                        <div class="rd-course">
+                                            <div class="rd-course-top">
+                                                <div class="rd-course-info">
+                                                    <div class="rd-course-icon <?= $rdIconColor ?>" aria-hidden="true">
+                                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
                                                     </div>
-                                                <?php endif; ?>
-                                                <?php if (!empty($cc['tags'])): ?>
-                                                    <div class="mb-2">
-                                                        <?php foreach ($cc['tags'] as $tag): ?>
-                                                            <span class="badge bg-primary me-1"><?= htmlspecialchars($tag['name']) ?></span>
-                                                        <?php endforeach; ?>
+                                                    <div style="min-width:0;">
+                                                        <div class="rd-course-meta"><?= $cc['lesson_count'] ?> lektioner<?= $cc['sequential'] ? ' · stegvis' : '' ?></div>
+                                                        <div class="rd-course-title text-truncate" title="<?= sanitize($cc['title']) ?>"><?= sanitize($cc['title']) ?></div>
+                                                        <?php if (!empty($cc['tags'])): ?>
+                                                            <div class="rd-course-next">
+                                                                <?php foreach ($cc['tags'] as $tag): ?>
+                                                                    <span style="display: inline-block; background: var(--rd-bg-muted); color: var(--rd-text-secondary); padding: 1px 8px; border-radius: 4px; font-size: 11px; margin-right: 4px;"><?= htmlspecialchars($tag['name']) ?></span>
+                                                                <?php endforeach; ?>
+                                                            </div>
+                                                        <?php endif; ?>
                                                     </div>
-                                                <?php endif; ?>
-                                                <p class="next-lesson mb-2">
-                                                    <i class="bi bi-journal-text me-1"></i><?= $cc['lesson_count'] ?> lektioner
-                                                </p>
-                                                <div class="mt-auto">
-                                                    <a href="lesson.php?id=<?= $cc['first_lesson_id'] ?>" class="btn btn-outline-primary btn-sm w-100">
-                                                        Börja kursen
-                                                    </a>
                                                 </div>
+                                            </div>
+                                            <div class="rd-actions">
+                                                <a href="lesson.php?id=<?= $cc['first_lesson_id'] ?>" class="rd-btn rd-btn-primary">Börja kursen</a>
                                             </div>
                                         </div>
                                     </div>
@@ -934,6 +1012,67 @@ else:
                         </div>
 
                     <?php endif; ?>
+
+                    <!-- Achievements-preview (länkar till Min dashboard) -->
+                    <?php
+                    // Beräkna enkla achievements:
+                    // 1. Första kursen klar (har minst 1 diplom)
+                    // 2. Snabbstartare (≥5 lektioner senaste 7 dgr)
+                    // 3. Streak (≥3 dagar i rad nyligen)
+                    // 4. Locked: Expert — kräver 5 kurser klara
+                    $rd7DayLessons = (int)(queryOne(
+                        "SELECT COUNT(*) AS c FROM " . DB_DATABASE . ".progress
+                         WHERE user_id = ? AND status='completed'
+                           AND updated_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)", [$userId]
+                    )['c'] ?? 0);
+                    $rdLastCertDate = queryOne(
+                        "SELECT completion_date FROM " . DB_DATABASE . ".certificates
+                         WHERE user_id = ? ORDER BY completion_date DESC LIMIT 1", [$userId]
+                    );
+                    $rdMonthNames = ['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'];
+                    $rdCertLabel = $rdLastCertDate
+                        ? $rdMonthNames[(int)date('n', strtotime($rdLastCertDate['completion_date'])) - 1]
+                          . ' ' . date('Y', strtotime($rdLastCertDate['completion_date']))
+                        : '';
+                    ?>
+                    <section class="rd-section mt-5">
+                        <div class="rd-section-head">
+                            <h2>Senaste utmärkelser</h2>
+                            <a href="dashboard.php" style="font-size: 12px; color: var(--rd-text-secondary); text-decoration: none;">
+                                Se alla →
+                            </a>
+                        </div>
+                        <div class="rd-achievements">
+                            <a href="dashboard.php" class="rd-badge-card <?= $rdCoursesCompleted < 1 ? 'locked' : '' ?>">
+                                <div class="rd-badge-icon amber" aria-hidden="true">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.5 13.5L17 21l-5-3-5 3 1.5-7.5"/></svg>
+                                </div>
+                                <div class="rd-badge-name">Första diplom</div>
+                                <div class="rd-badge-sub"><?= $rdCertLabel ?: 'Slutför en kurs' ?></div>
+                            </a>
+                            <a href="dashboard.php" class="rd-badge-card <?= $rd7DayLessons < 5 ? 'locked' : '' ?>">
+                                <div class="rd-badge-icon teal" aria-hidden="true">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+                                </div>
+                                <div class="rd-badge-name">Snabbstartare</div>
+                                <div class="rd-badge-sub"><?= $rd7DayLessons ?> lekt./vecka</div>
+                            </a>
+                            <a href="dashboard.php" class="rd-badge-card <?= $rdLessonsCompleted < 10 ? 'locked' : '' ?>">
+                                <div class="rd-badge-icon purple" aria-hidden="true">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg>
+                                </div>
+                                <div class="rd-badge-name">10 lektioner</div>
+                                <div class="rd-badge-sub"><?= $rdLessonsCompleted ?>/10 klara</div>
+                            </a>
+                            <a href="dashboard.php" class="rd-badge-card locked">
+                                <div class="rd-badge-icon muted" aria-hidden="true">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                                </div>
+                                <div class="rd-badge-name">Expert</div>
+                                <div class="rd-badge-sub"><?= $rdCoursesCompleted ?>/5 kurser</div>
+                            </a>
+                        </div>
+                    </section>
 
                     <!-- Information om behörigheter -->
                     <div class="card border-0 bg-light mt-5">
