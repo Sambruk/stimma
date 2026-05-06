@@ -217,6 +217,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
                         <i class="bi bi-gear me-2"></i> Cronjobb
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a href="ai_usage.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'ai_usage.php' ? 'active' : '' ?>">
+                        <i class="bi bi-graph-up me-2"></i> AI-användning
+                    </a>
+                </li>
                 <?php endif; ?>
                 <?php if ($isSuperAdmin): ?>
                 <li class="nav-item">
@@ -232,11 +237,6 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <li class="nav-item">
                     <a href="ai_settings.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'ai_settings.php' ? 'active' : '' ?>">
                         <i class="bi bi-robot me-2"></i> AI-inställningar
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="ai_usage.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'ai_usage.php' ? 'active' : '' ?>">
-                        <i class="bi bi-graph-up me-2"></i> AI-användning
                     </a>
                 </li>
                 <li class="nav-item">

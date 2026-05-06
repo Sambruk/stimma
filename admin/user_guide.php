@@ -168,6 +168,7 @@ require_once 'include/header.php';
                         <li><i class="bi bi-check2"></i> API-nycklar, synkverktyg, synkloggar</li>
                         <li><i class="bi bi-check2"></i> Hantera PUB-dokument</li>
                         <li><i class="bi bi-check2"></i> Importera/exportera (admin-bara funktioner)</li>
+                        <li><i class="bi bi-check2"></i> Se AI-användning för egna organisationen (drill-down per kurs/användare)</li>
                     </ul>
                 </div>
             </div>
@@ -239,10 +240,15 @@ require_once 'include/header.php';
                         <tr><td>API-nycklar, synkverktyg, synkloggar</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">Org</td><td class="text-center text-success">Alla</td></tr>
                         <tr><td>PUB-dokument</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">Org</td><td class="text-center text-success">Alla</td></tr>
 
+                        <tr><td colspan="5" class="bg-light fw-semibold small">AI-användning</td></tr>
+                        <tr><td>Använda AI-kursgenerering, AI-bilder och AI-tutor</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td></tr>
+                        <tr><td>Se AI-användning (tokens, antal anrop, kvotgrad)</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">Org</td><td class="text-center text-success">Alla</td></tr>
+                        <tr><td>Se kvotwidget på admin-dashboarden</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td><td class="text-center text-success">✓</td></tr>
+                        <tr><td>Justera AI-kvoter och modellval</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td></tr>
+                        <tr><td>AI-inställningar / prompt-versioner</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td></tr>
+
                         <tr><td colspan="5" class="bg-light fw-semibold small">Systemnivå (superadmin)</td></tr>
                         <tr><td>Domäner och organisationer (cross-org)</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td></tr>
-                        <tr><td>AI-inställningar / prompt-versioner</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td></tr>
-                        <tr><td>AI-användning, AI-kvoter, modellval</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td></tr>
                         <tr><td>Informationsmeddelanden (popup)</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td></tr>
                         <tr><td>Systemloggar, cronjobb, underhållsläge</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td></tr>
                         <tr><td>Visa-som annan användare (impersonate)</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-muted">–</td><td class="text-center text-success">✓</td></tr>

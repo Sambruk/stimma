@@ -1,9 +1,12 @@
 <?php
 /**
- * Stimma - Lär dig i små steg
- * Copyright (C) 2025 Christian Alfredsson
+ * Stimma — AI-användning
  *
- * AI-användning per organisation/domän/kurs (superadmin).
+ * Superadmin: ser alla organisationer/domäner cross-org.
+ * Admin (icke-super): ser bara sin egen organisations rader.
+ *
+ * Tokens-fokuserad — kostnadsdata loggas fortfarande i bakgrunden men
+ * visas inte i UI:t (priser ändras frekvent och svåra att hålla aktuella).
  */
 
 require_once '../include/config.php';
@@ -15,15 +18,47 @@ require_once 'include/auth_check.php';
 
 $currentUser = queryOne("SELECT * FROM " . DB_DATABASE . ".users WHERE email = ?", [$_SESSION['user_email']]);
 $isSuperAdmin = $currentUser && $currentUser['role'] === 'super_admin';
+$isAdmin = $currentUser && (int)$currentUser['is_admin'] === 1;
 
-if (!$isSuperAdmin) {
-    $_SESSION['message'] = 'Endast superadmin har tillgång till AI-användning.';
+if (!$isAdmin && !$isSuperAdmin) {
+    $_SESSION['message'] = 'Du har inte behörighet att se AI-användning.';
     $_SESSION['message_type'] = 'danger';
     header('Location: index.php');
     exit;
 }
 
-// --- Filter ----------------------------------------------------------------
+// --- Org-scope för icke-superadmin ----------------------------------------
+// Admin (men ej superadmin) får bara se rader som tillhör deras egen org —
+// både som organization_id-match och som domän-match (om någon i orgen
+// råkar logga som "domain" istället för "organization_id").
+$adminScopeFragment = '1=1';
+$adminScopeParams = [];
+$myOrg = null;
+$myOrgScopeDomains = [];
+if (!$isSuperAdmin) {
+    $myDomain = substr(strrchr($currentUser['email'], '@'), 1);
+    $myOrg = getOrganizationByDomain($myDomain);
+    $myOrgScopeDomains = getOrgScopeDomains($currentUser['email']);
+
+    $clauses = [];
+    if ($myOrg && !empty($myOrg['id'])) {
+        $clauses[] = 'organization_id = ?';
+        $adminScopeParams[] = (int)$myOrg['id'];
+    }
+    if (!empty($myOrgScopeDomains)) {
+        $placeholders = implode(',', array_fill(0, count($myOrgScopeDomains), '?'));
+        $clauses[] = "domain IN ($placeholders)";
+        $adminScopeParams = array_merge($adminScopeParams, $myOrgScopeDomains);
+    }
+    if (empty($clauses)) {
+        // Inget scope alls — användaren har varken org eller domän. Tomt.
+        $adminScopeFragment = '0=1';
+    } else {
+        $adminScopeFragment = '(' . implode(' OR ', $clauses) . ')';
+    }
+}
+
+// --- Filter ---------------------------------------------------------------
 $year = isset($_GET['year']) ? (int)$_GET['year'] : (int)date('Y');
 $month = isset($_GET['month']) ? (int)$_GET['month'] : (int)date('n');
 $year = max(2024, min(2099, $year));
@@ -35,45 +70,54 @@ $drillOrgId = isset($_GET['org_id']) ? (int)$_GET['org_id'] : 0;
 $drillDomain = isset($_GET['domain']) ? trim($_GET['domain']) : '';
 $drillFeature = isset($_GET['feature']) ? trim($_GET['feature']) : '';
 
-// --- CSV-export ------------------------------------------------------------
+// Säkerhet: admin (icke-super) får inte drilla in på en annan org/domän
+if (!$isSuperAdmin) {
+    if ($drillOrgId && (!$myOrg || (int)$myOrg['id'] !== $drillOrgId)) {
+        $drillOrgId = 0;
+    }
+    if ($drillDomain !== '' && !in_array($drillDomain, $myOrgScopeDomains, true)) {
+        $drillDomain = '';
+    }
+}
+
+// --- CSV-export -----------------------------------------------------------
 if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     $rows = query(
         "SELECT id, organization_id, domain, user_email, course_id, feature, model,
-                prompt_tokens, completion_tokens, total_tokens, cost_cents, status, created_at
+                prompt_tokens, completion_tokens, total_tokens, status, created_at
            FROM " . DB_DATABASE . ".ai_usage_log
-          WHERE created_at >= ? AND created_at < ?
+          WHERE created_at >= ? AND created_at < ? AND $adminScopeFragment
           ORDER BY created_at ASC",
-        [$start, $end]
+        array_merge([$start, $end], $adminScopeParams)
     );
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="ai_usage_' . sprintf('%04d-%02d', $year, $month) . '.csv"');
     $out = fopen('php://output', 'w');
-    fputcsv($out, ['id','org_id','domain','user_email','course_id','feature','model','prompt_tokens','completion_tokens','total_tokens','cost_cents','status','created_at'], ';');
+    fputcsv($out, ['id','org_id','domain','user_email','course_id','feature','model','prompt_tokens','completion_tokens','total_tokens','status','created_at'], ';');
     foreach ((array)$rows as $r) {
         fputcsv($out, [
             $r['id'], $r['organization_id'], $r['domain'], $r['user_email'], $r['course_id'],
             $r['feature'], $r['model'], $r['prompt_tokens'], $r['completion_tokens'],
-            $r['total_tokens'], $r['cost_cents'], $r['status'], $r['created_at'],
+            $r['total_tokens'], $r['status'], $r['created_at'],
         ], ';');
     }
     fclose($out);
     exit;
 }
 
-// --- Översikt per scope (org eller domän) ---------------------------------
+// --- Översikt per scope (org eller domän) --------------------------------
 $scopeRows = query(
     "SELECT
         COALESCE(CAST(organization_id AS CHAR), '') AS org_id,
         COALESCE(domain, '') AS domain,
         COUNT(*) AS requests,
         SUM(total_tokens) AS tokens,
-        SUM(cost_cents) AS cents,
         SUM(CASE WHEN status='blocked' THEN 1 ELSE 0 END) AS blocked
        FROM " . DB_DATABASE . ".ai_usage_log
-      WHERE created_at >= ? AND created_at < ?
+      WHERE created_at >= ? AND created_at < ? AND $adminScopeFragment
       GROUP BY org_id, domain
       ORDER BY tokens DESC",
-    [$start, $end]
+    array_merge([$start, $end], $adminScopeParams)
 );
 
 // Berika med kvot + namn
@@ -99,24 +143,23 @@ foreach ((array)$scopeRows as $r) {
         'requests' => (int)$r['requests'],
         'tokens' => $tokensUsed,
         'tokens_quota' => $tokensQuota,
-        'cents' => (int)$r['cents'],
         'blocked' => (int)$r['blocked'],
         'pct' => $pct,
         'quota_is_default' => $quota['is_default'],
     ];
 }
 
-// --- Per feature ----------------------------------------------------------
+// --- Per feature ---------------------------------------------------------
 $featureRows = query(
-    "SELECT feature, COUNT(*) AS requests, SUM(total_tokens) AS tokens, SUM(cost_cents) AS cents
+    "SELECT feature, COUNT(*) AS requests, SUM(total_tokens) AS tokens
        FROM " . DB_DATABASE . ".ai_usage_log
-      WHERE created_at >= ? AND created_at < ?
+      WHERE created_at >= ? AND created_at < ? AND $adminScopeFragment
       GROUP BY feature
       ORDER BY tokens DESC",
-    [$start, $end]
+    array_merge([$start, $end], $adminScopeParams)
 );
 
-// --- Drill-down ------------------------------------------------------------
+// --- Drill-down ----------------------------------------------------------
 $drillCourses = [];
 $drillUsers = [];
 $drillTitle = '';
@@ -137,8 +180,7 @@ if ($drillOrgId || $drillDomain !== '') {
         "SELECT u.course_id,
                 c.title AS course_title,
                 COUNT(*) AS requests,
-                SUM(u.total_tokens) AS tokens,
-                SUM(u.cost_cents) AS cents
+                SUM(u.total_tokens) AS tokens
            FROM " . DB_DATABASE . ".ai_usage_log u
            LEFT JOIN " . DB_DATABASE . ".courses c ON c.id = u.course_id
           WHERE $whereScope $featureFilter
@@ -150,7 +192,7 @@ if ($drillOrgId || $drillDomain !== '') {
     );
 
     $drillUsers = query(
-        "SELECT user_email, COUNT(*) AS requests, SUM(total_tokens) AS tokens, SUM(cost_cents) AS cents
+        "SELECT user_email, COUNT(*) AS requests, SUM(total_tokens) AS tokens
            FROM " . DB_DATABASE . ".ai_usage_log
           WHERE $whereScope $featureFilter
             AND created_at >= ? AND created_at < ?
@@ -210,6 +252,11 @@ require_once 'include/header.php';
                 </div>
             <?php endif; ?>
         </form>
+        <?php if (!$isSuperAdmin): ?>
+            <div class="text-muted small mt-2">
+                <i class="bi bi-info-circle me-1"></i>Du ser data för din egen organisation.
+            </div>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -220,8 +267,9 @@ require_once 'include/header.php';
     <div class="table-responsive">
         <table class="table table-sm mb-0">
             <thead><tr>
-                <th>Feature</th><th class="text-end">Antal anrop</th>
-                <th class="text-end">Tokens</th><th class="text-end">Kostnad (USD)</th>
+                <th>Feature</th>
+                <th class="text-end">Antal anrop</th>
+                <th class="text-end">Tokens</th>
             </tr></thead>
             <tbody>
                 <?php foreach ((array)$featureRows as $f): ?>
@@ -229,11 +277,10 @@ require_once 'include/header.php';
                         <td><code><?= htmlspecialchars($f['feature']) ?></code></td>
                         <td class="text-end"><?= number_format($f['requests'], 0, ',', ' ') ?></td>
                         <td class="text-end"><?= number_format($f['tokens'], 0, ',', ' ') ?></td>
-                        <td class="text-end">$<?= number_format(((int)$f['cents']) / 100, 2) ?></td>
                     </tr>
                 <?php endforeach; ?>
                 <?php if (empty($featureRows)): ?>
-                    <tr><td colspan="4" class="text-center text-muted py-3">Ingen användning denna månad.</td></tr>
+                    <tr><td colspan="3" class="text-center text-muted py-3">Ingen användning denna månad.</td></tr>
                 <?php endif; ?>
             </tbody>
         </table>
@@ -241,7 +288,9 @@ require_once 'include/header.php';
 </div>
 
 <div class="card">
-    <div class="card-header"><strong>Per organisation/domän — <?= sprintf('%04d-%02d', $year, $month) ?></strong></div>
+    <div class="card-header">
+        <strong><?= $isSuperAdmin ? 'Per organisation/domän' : 'Översikt' ?> — <?= sprintf('%04d-%02d', $year, $month) ?></strong>
+    </div>
     <div class="table-responsive">
         <table class="table table-sm align-middle mb-0">
             <thead><tr>
@@ -250,7 +299,6 @@ require_once 'include/header.php';
                 <th class="text-end">Tokens</th>
                 <th>Kvot</th>
                 <th>%</th>
-                <th class="text-end">Kostnad</th>
                 <th class="text-end">Blockerade</th>
                 <th></th>
             </tr></thead>
@@ -283,7 +331,6 @@ require_once 'include/header.php';
                                 </div>
                             </div>
                         </td>
-                        <td class="text-end">$<?= number_format($s['cents'] / 100, 2) ?></td>
                         <td class="text-end">
                             <?= $s['blocked'] > 0 ? '<span class="badge bg-danger">' . $s['blocked'] . '</span>' : '0' ?>
                         </td>
@@ -295,7 +342,7 @@ require_once 'include/header.php';
                     </tr>
                 <?php endforeach; ?>
                 <?php if (empty($scopes)): ?>
-                    <tr><td colspan="8" class="text-center text-muted py-3">Ingen användning denna månad.</td></tr>
+                    <tr><td colspan="7" class="text-center text-muted py-3">Ingen användning denna månad.</td></tr>
                 <?php endif; ?>
             </tbody>
         </table>
@@ -320,7 +367,7 @@ require_once 'include/header.php';
             <div class="card-header"><strong>Per kurs</strong> (top 50)</div>
             <div class="table-responsive">
                 <table class="table table-sm mb-0">
-                    <thead><tr><th>Kurs</th><th class="text-end">Anrop</th><th class="text-end">Tokens</th><th class="text-end">Kostnad</th></tr></thead>
+                    <thead><tr><th>Kurs</th><th class="text-end">Anrop</th><th class="text-end">Tokens</th></tr></thead>
                     <tbody>
                         <?php foreach ((array)$drillCourses as $c): ?>
                             <tr>
@@ -334,11 +381,10 @@ require_once 'include/header.php';
                                 </td>
                                 <td class="text-end"><?= number_format($c['requests'], 0, ',', ' ') ?></td>
                                 <td class="text-end"><?= number_format($c['tokens'], 0, ',', ' ') ?></td>
-                                <td class="text-end">$<?= number_format(((int)$c['cents']) / 100, 2) ?></td>
                             </tr>
                         <?php endforeach; ?>
                         <?php if (empty($drillCourses)): ?>
-                            <tr><td colspan="4" class="text-center text-muted py-3">Inga rader.</td></tr>
+                            <tr><td colspan="3" class="text-center text-muted py-3">Inga rader.</td></tr>
                         <?php endif; ?>
                     </tbody>
                 </table>
@@ -350,18 +396,17 @@ require_once 'include/header.php';
             <div class="card-header"><strong>Per användare</strong> (top 50)</div>
             <div class="table-responsive">
                 <table class="table table-sm mb-0">
-                    <thead><tr><th>E-post</th><th class="text-end">Anrop</th><th class="text-end">Tokens</th><th class="text-end">Kostnad</th></tr></thead>
+                    <thead><tr><th>E-post</th><th class="text-end">Anrop</th><th class="text-end">Tokens</th></tr></thead>
                     <tbody>
                         <?php foreach ((array)$drillUsers as $u): ?>
                             <tr>
                                 <td><?= htmlspecialchars($u['user_email'] ?? '–') ?></td>
                                 <td class="text-end"><?= number_format($u['requests'], 0, ',', ' ') ?></td>
                                 <td class="text-end"><?= number_format($u['tokens'], 0, ',', ' ') ?></td>
-                                <td class="text-end">$<?= number_format(((int)$u['cents']) / 100, 2) ?></td>
                             </tr>
                         <?php endforeach; ?>
                         <?php if (empty($drillUsers)): ?>
-                            <tr><td colspan="4" class="text-center text-muted py-3">Inga rader.</td></tr>
+                            <tr><td colspan="3" class="text-center text-muted py-3">Inga rader.</td></tr>
                         <?php endif; ?>
                     </tbody>
                 </table>

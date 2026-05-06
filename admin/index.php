@@ -379,6 +379,68 @@ require_once 'include/header.php';
     </div>
 </div>
 
+<!-- AI-kvotwidget — visar aktuell användning vs kvot för admins egen org -->
+<?php
+require_once '../include/ai_quota.php';
+$aiWidgetScope = getAiScopeForEmail($_SESSION['user_email']);
+$aiWidgetUsage = getMonthlyAiUsage($aiWidgetScope['organization_id'], $aiWidgetScope['domain']);
+$aiWidgetQuota = getAiQuota($aiWidgetScope['organization_id'], $aiWidgetScope['domain']);
+$aiWidgetTokensQuota = max(1, (int)$aiWidgetQuota['monthly_token_quota']);
+$aiWidgetTokensUsed = (int)$aiWidgetUsage['total_tokens'];
+$aiWidgetPct = (int)floor(($aiWidgetTokensUsed / $aiWidgetTokensQuota) * 100);
+$aiWidgetColor = $aiWidgetPct >= 100 ? 'bg-danger' : ($aiWidgetPct >= (int)$aiWidgetQuota['alert_threshold_pct'] ? 'bg-warning' : 'bg-success');
+$aiWidgetLabel = $aiWidgetScope['label'] ?: ($_SESSION['user_email'] ?? 'din organisation');
+?>
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <h6 class="font-weight-bold text-primary mb-1">
+                            <i class="bi bi-robot me-1"></i>AI-användning denna månad
+                        </h6>
+                        <small class="text-muted"><?= htmlspecialchars($aiWidgetLabel) ?> · <?= date('Y-m') ?></small>
+                    </div>
+                    <a href="ai_usage.php" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-bar-chart me-1"></i>Se detaljer
+                    </a>
+                </div>
+                <div class="d-flex align-items-center gap-3 mb-2">
+                    <div class="flex-grow-1">
+                        <div class="progress" style="height: 14px;">
+                            <div class="progress-bar <?= $aiWidgetColor ?>" role="progressbar"
+                                 style="width: <?= min(100, $aiWidgetPct) ?>%;"
+                                 aria-valuenow="<?= $aiWidgetPct ?>" aria-valuemin="0" aria-valuemax="100">
+                                <?= $aiWidgetPct ?>%
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-end" style="min-width: 200px;">
+                        <span class="font-weight-bold"><?= number_format($aiWidgetTokensUsed, 0, ',', ' ') ?></span>
+                        <span class="text-muted">/ <?= number_format($aiWidgetTokensQuota, 0, ',', ' ') ?> tokens</span>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between align-items-center text-muted small">
+                    <span><?= number_format($aiWidgetUsage['requests'], 0, ',', ' ') ?> AI-anrop</span>
+                    <?php if ($aiWidgetPct >= 100): ?>
+                        <span class="text-danger fw-semibold">
+                            <i class="bi bi-exclamation-octagon me-1"></i>Kvoten är förbrukad —
+                            <a href="mailto:hjalp@sambruksupport.se">hjalp@sambruksupport.se</a>
+                        </span>
+                    <?php elseif ($aiWidgetPct >= (int)$aiWidgetQuota['alert_threshold_pct']): ?>
+                        <span class="text-warning fw-semibold">
+                            <i class="bi bi-exclamation-triangle me-1"></i>Närmar sig gränsen
+                        </span>
+                    <?php else: ?>
+                        <span><?= number_format(max(0, $aiWidgetTokensQuota - $aiWidgetTokensUsed), 0, ',', ' ') ?> tokens kvar</span>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Statistikkort - Rad 2 -->
 <div class="row mb-4">
     <div class="col-xl-3 col-md-6 mb-3">
