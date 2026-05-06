@@ -214,13 +214,14 @@ function aiLessonRandomizeAnswers(array &$questions): void {
  * @throws Exception
  */
 function aiLessonGenerateContent(array $opts): array {
-    $course        = $opts['course'];
-    $lessonIdea    = trim($opts['lesson_idea'] ?? '');
-    $lessonType    = ($opts['lesson_type'] ?? 'lesson') === 'info_page' ? 'info_page' : 'lesson';
-    $includeQuiz   = ($lessonType === 'lesson') && !empty($opts['include_quiz']);
-    $textLength    = $opts['text_length']   ?? 'medium';
-    $tone          = $opts['tone']          ?? 'pedagogical';
-    $languageStyle = $opts['language_style'] ?? 'formal';
+    $course           = $opts['course'];
+    $lessonIdea       = trim($opts['lesson_idea'] ?? '');
+    $lessonType       = ($opts['lesson_type'] ?? 'lesson') === 'info_page' ? 'info_page' : 'lesson';
+    $includeQuiz      = ($lessonType === 'lesson') && !empty($opts['include_quiz']);
+    $generateMultipage = !empty($opts['generate_multipage']);
+    $textLength       = $opts['text_length']   ?? 'medium';
+    $tone             = $opts['tone']          ?? 'pedagogical';
+    $languageStyle    = $opts['language_style'] ?? 'formal';
 
     if (mb_strlen($lessonIdea) < 20) {
         throw new Exception('Beskriv lektionens ämne med minst 20 tecken.');
@@ -297,6 +298,21 @@ function aiLessonGenerateContent(array $opts): array {
     $sys .= "4. Minst ett lesson-example\n";
     $sys .= "5. Avsluta med lesson-summary\n";
     $sys .= "6. Använd <strong> för nyckelord och <ul>/<li> för listor\n";
+
+    if ($generateMultipage) {
+        $sys .= "\nFLERA SIDOR (multi-page):\n";
+        $sys .= "Lektionen ska delas upp i flera bläddringsbara sidor som var och en\n";
+        $sys .= "ska få plats i webbläsarens viewport utan att kräva scroll.\n";
+        $sys .= "Sätt in markören <!-- pagebreak --> mellan logiska sektioner.\n";
+        $sys .= "Riktlinjer:\n";
+        $sys .= "  - Sida 1: lesson-intro + översikt över vad lektionen handlar om\n";
+        $sys .= "  - Mellan varje h3-huvudsektion: <!-- pagebreak -->\n";
+        $sys .= "  - Före lesson-summary: <!-- pagebreak --> (sammanfattningen ligger på sista sidan)\n";
+        $sys .= "  - Varje sida ska ha ungefär 80-180 ord — kort nog att rymmas utan scroll\n";
+        $sys .= "  - Mål: 4-7 sidor totalt\n";
+        $sys .= "Pagebreak-markören är en HTML-kommentar och ska skrivas EXAKT som\n";
+        $sys .= "<!-- pagebreak --> (inkl. mellanslag, inga andra tecken).\n";
+    }
 
     if ($includeQuiz) {
         $sys .= "\nQUIZ-FRÅGOR (2-4 st):\n\n";

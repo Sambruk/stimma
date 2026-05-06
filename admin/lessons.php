@@ -409,6 +409,14 @@ $parentCandidates = query(
                         </label>
                     </div>
 
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" name="generate_multipage" id="aiGenerateMultipage" value="1">
+                        <label class="form-check-label" for="aiGenerateMultipage">
+                            Bygg som flera sidor
+                            <span class="text-muted small">(eleven bläddrar mellan korta sidor istället för att scrolla)</span>
+                        </label>
+                    </div>
+
                     <div id="aiLessonStatus" class="mt-3" style="display:none;"></div>
                 </form>
             </div>

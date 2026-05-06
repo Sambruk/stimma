@@ -596,3 +596,112 @@ body {
     outline: 2px solid var(--rd-text-info);
     outline-offset: 2px;
 }
+
+/* ============================================================
+   Lektionspaginator — multi-page lektion
+   Varje .lesson-page är fixed-height (calc(100vh - chrome)) med
+   intern scroll om innehållet flödar över. Bara aktiv sida syns.
+   ============================================================ */
+.lesson-paginator {
+    display: flex;
+    flex-direction: column;
+}
+/* Content-slices inom content-cardet: fix-höjd, intern scroll, padding */
+section.lesson-page[data-page-kind="content"] {
+    min-height: calc(100vh - 320px);
+    max-height: calc(100vh - 260px);
+    overflow-y: auto;
+    padding: 4px 8px;
+    color: var(--rd-text-primary);
+}
+/* Alla .lesson-page (både sections och kort): default dolda om inte aktiva */
+.lesson-page {
+    display: none;
+}
+.lesson-page.active {
+    display: block;
+}
+.lesson-page-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px;
+    border: 0.5px solid var(--rd-border);
+    border-radius: var(--rd-radius-md);
+    background: var(--rd-bg-muted);
+    margin-bottom: 16px;
+    position: sticky;
+    bottom: 16px;
+    z-index: 10;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+[data-bs-theme="dark"] .lesson-page-nav {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+.lesson-page-indicator {
+    font-size: 13px;
+    color: var(--rd-text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+.lesson-page-prev,
+.lesson-page-next {
+    font-size: 13.5px;
+    padding: 8px 16px;
+    border-radius: var(--rd-radius-sm);
+    border: 0.5px solid var(--rd-border-strong);
+    background: var(--rd-bg-surface);
+    color: var(--rd-text-primary);
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.lesson-page-prev:hover:not(:disabled),
+.lesson-page-next:hover:not(:disabled) {
+    background: var(--rd-bg-muted);
+}
+.lesson-page-prev:disabled,
+.lesson-page-next:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.lesson-page-next.is-finish {
+    background: var(--rd-text-primary);
+    color: var(--rd-bg-surface);
+    border-color: var(--rd-text-primary);
+    font-weight: 500;
+}
+.lesson-page-next.is-finish:hover:not(:disabled) {
+    background: #000;
+}
+[data-bs-theme="dark"] .lesson-page-next.is-finish:hover:not(:disabled) {
+    opacity: 0.85;
+}
+
+/* Mobil: mindre chrome-höjd-uträkning */
+@media (max-width: 768px) {
+    section.lesson-page[data-page-kind="content"] {
+        min-height: calc(100vh - 240px);
+        max-height: calc(100vh - 200px);
+        padding: 4px 6px;
+    }
+    .lesson-page-nav {
+        padding: 12px 14px;
+    }
+    .lesson-page-indicator {
+        font-size: 12px;
+    }
+}
+
+/* TinyMCE-redigerare — visa pagebreak-markören tydligt */
+.mce-content-body img.mce-pagebreak,
+.mce-content-body img[data-mce-resize="false"][src*="pagebreak"] {
+    border: 2px dashed var(--rd-text-info, #0c447c);
+    background-color: var(--rd-bg-info, #e6f1fb);
+    width: 100%;
+    height: 28px;
+    margin: 12px 0;
+}

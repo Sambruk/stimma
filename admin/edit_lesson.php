@@ -74,6 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $content = $_POST['content'] ?? '';
     $ai_instruction = $_POST['ai_instruction'] ?? '';
     $ai_prompt = $_POST['ai_prompt'] ?? '';
+    $ai_chat_enabled = !empty($_POST['ai_chat_enabled']) ? 1 : 0;
     $quiz_pass_mode = ($_POST['quiz_pass_mode'] ?? '') === 'any_result' ? 'any_result' : 'require_all_correct';
     $quiz_question = $_POST['quiz_question'] ?? '';
     $background_color = trim($_POST['background_color'] ?? '');
@@ -245,12 +246,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     status = ?,
                     ai_instruction = ?,
                     ai_prompt = ?,
+                    ai_chat_enabled = ?,
                     quiz_pass_mode = ?,
                     updated_at = NOW()
                     WHERE id = ?",
                     [$title, $content, $background_color ?: null, $course_id, $lesson_type, $belongs_to_lesson_id,
                      $image_url, $video_url, $video_type, $audio_url, $status,
-                     $ai_instruction, $ai_prompt, $quiz_pass_mode, $_GET['id']]);
+                     $ai_instruction, $ai_prompt, $ai_chat_enabled, $quiz_pass_mode, $_GET['id']]);
             
             // Logga ändringen
             logActivity($_SESSION['user_email'], "Uppdaterade lektionen '" . $title . "' (ID: " . $_GET['id'] . ")");
@@ -268,11 +270,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             execute("INSERT INTO " . DB_DATABASE . ".lessons
                     (title, content, background_color, course_id, lesson_type, belongs_to_lesson_id,
                      image_url, video_url, video_type, audio_url, status,
-                     ai_instruction, ai_prompt, quiz_pass_mode, sort_order, author_id, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                     ai_instruction, ai_prompt, ai_chat_enabled, quiz_pass_mode, sort_order, author_id, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
                     [$title, $content, $background_color ?: null, $course_id, $lesson_type, $belongs_to_lesson_id,
                      $image_url, $video_url, $video_type, $audio_url, $status,
-                     $ai_instruction, $ai_prompt, $quiz_pass_mode, $maxOrder + 1, $authorId]);
+                     $ai_instruction, $ai_prompt, $ai_chat_enabled, $quiz_pass_mode, $maxOrder + 1, $authorId]);
             
             $newId = getDb()->lastInsertId();
             logActivity($_SESSION['user_email'], "Skapade ny lektion '" . $title . "' (ID: " . $newId . ")");
@@ -300,6 +302,7 @@ $videoType = '';
 $audioUrl = '';
 $aiInstruction = '';
 $aiPrompt = '';
+$aiChatEnabled = 0;
 $quizQuestion = '';
 $quizType = 'single_choice';
 $quizAnswer1 = '';
@@ -329,6 +332,7 @@ if (isset($_GET['id']) && is_numeric($_GET['id'])) {
         $audioUrl = $lesson['audio_url'] ?? '';
         $aiInstruction = $lesson['ai_instruction'] ?? '';
         $aiPrompt = $lesson['ai_prompt'] ?? '';
+        $aiChatEnabled = !empty($lesson['ai_chat_enabled']) ? 1 : 0;
         $quizQuestion = $lesson['quiz_question'] ?? '';
         $quizType = $lesson['quiz_type'] ?? 'single_choice';
         $quizAnswer1 = $lesson['quiz_answer1'] ?? '';
@@ -672,6 +676,16 @@ if ($isAdmin) {
                         </div>
 
                         <div class="mb-3 lesson-only-field"<?= $lessonType === 'info_page' ? ' style="display:none;"' : '' ?>>
+                            <div class="form-check form-switch border rounded p-3 ps-5 mb-3 bg-light">
+                                <input class="form-check-input" type="checkbox" role="switch" id="ai_chat_enabled" name="ai_chat_enabled" value="1" <?= $aiChatEnabled ? 'checked' : '' ?>>
+                                <label class="form-check-label fw-bold" for="ai_chat_enabled">
+                                    <i class="bi bi-robot me-1"></i>Aktivera AI-chat för denna lektion
+                                </label>
+                                <div class="form-text small">
+                                    När påslaget visas AI-chatten för eleven (med fälten nedan som styrning).
+                                    Avstängd som default — slå på medvetet för lektioner där en AI-handledare ger värde.
+                                </div>
+                            </div>
                             <label for="ai_instruction" class="form-label fw-normal">AI Instruktion<br><span class="form-text fw-normal">Instruktioner som visas för användaren i AI-chatten.</span></label>
                             <?php require_once 'include/editor.php'; renderEditor($aiInstruction ?? '', 'ai_instruction', 'aiInstructionEditor'); ?>
 

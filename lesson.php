@@ -784,6 +784,24 @@ function convertYoutubeUrl($url) {
         <!-- Main content area -->
         <div class="col-12 col-lg-8">
             <main>
+                <?php
+                // Multi-page-stöd: räkna sidbrytningar i lektionsinnehållet redan här
+                // så vi vet om vi ska wrappa kort i en lesson-paginator. Splitten görs
+                // INNAN cleanHtml senare så HTML-kommentaren <!-- pagebreak --> överlever.
+                $rdRawContent = (string)($lesson['content'] ?? '');
+                $rdPages = preg_split('/<!--\s*pagebreak\s*-->/i', $rdRawContent);
+                $rdContentPageCount = is_array($rdPages) ? count($rdPages) : 1;
+                $rdMultiPage = $rdContentPageCount > 1;
+                $rdHasVideo = !empty($lesson['video_url']);
+                // AI-chat visas bara om författaren explicit aktiverat den
+                // ai_chat_enabled OCH minst ett av styrfälten har innehåll.
+                $rdHasAiChat = !empty($lesson['ai_chat_enabled'])
+                    && (!empty($lesson['ai_instruction']) || !empty($lesson['ai_prompt']));
+                ?>
+                <?php if ($rdMultiPage): ?>
+                <div class="lesson-paginator" id="lessonPaginator" aria-label="Lektionssidor">
+                <?php endif; ?>
+
                 <!-- Lesson content card -->
                 <div class="card mb-4"<?php if (!empty($lesson['background_color'])): ?> style="background-color: <?= htmlspecialchars($lesson['background_color']) ?>"<?php endif; ?>>
                     <div class="card-body">
@@ -827,9 +845,23 @@ function convertYoutubeUrl($url) {
                             <?php endif; ?>
                             
                             <div class="<?= !empty($lesson['image_url']) ? 'col-md-8' : 'col-12' ?>">
+                                <?php if ($rdMultiPage): ?>
+                                    <?php foreach ($rdPages as $idx => $rdPageHtml): ?>
+                                    <section class="lesson-page <?= $idx === 0 ? 'active' : '' ?>"
+                                             data-page-kind="content"
+                                             role="region"
+                                             aria-label="Innehållssida <?= $idx + 1 ?>"
+                                             <?= $idx === 0 ? '' : 'hidden' ?>>
+                                        <div class="content clearfix">
+                                            <?= cleanHtml($rdPageHtml) ?>
+                                        </div>
+                                    </section>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
                                 <div class="content clearfix">
-                                    <?= cleanHtml($lesson['content']) ?>
+                                    <?= cleanHtml($rdRawContent) ?>
                                 </div>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </div>
@@ -837,7 +869,7 @@ function convertYoutubeUrl($url) {
 
                 <!-- Video Section -->
                 <?php if (!empty($lesson['video_url'])): ?>
-                <div class="card mb-4">
+                <div class="card mb-4 <?= $rdMultiPage ? 'lesson-page' : '' ?>" <?php if ($rdMultiPage): ?>data-page-kind="video" hidden role="region" aria-label="Video"<?php endif; ?>>
                     <div class="card-header">
                         <?php if (($lesson['video_type'] ?? '') === 'local'): ?>
                             <i class="bi bi-camera-video me-2"></i> Video
@@ -898,8 +930,8 @@ function convertYoutubeUrl($url) {
                 <?php endif; ?>
 
                 <!-- AI chat interface card -->
-                <?php if (!empty($lesson['ai_instruction']) || !empty($lesson['ai_prompt'])): ?>
-                <div class="card mb-4">
+                <?php if ($rdHasAiChat): ?>
+                <div class="card mb-4 <?= $rdMultiPage ? 'lesson-page' : '' ?>" <?php if ($rdMultiPage): ?>data-page-kind="ai-chat" hidden role="region" aria-label="Fråga AI"<?php endif; ?>>
                     <div class="card-header d-flex align-items-center" id="aiChatToggle">
                         <i class="bi bi-robot me-2"></i> Fråga AI om detta ämne
                     </div>
@@ -932,7 +964,7 @@ function convertYoutubeUrl($url) {
                 
                 <?php if (($lesson['lesson_type'] ?? 'lesson') === 'info_page'): ?>
                 <!-- Informationssida: "Fortsätt"-knapp istället för quiz -->
-                <div class="card">
+                <div class="card <?= $rdMultiPage ? 'lesson-page' : '' ?>" <?php if ($rdMultiPage): ?>data-page-kind="finish" hidden role="region" aria-label="Avsluta lektion"<?php endif; ?>>
                     <div class="card-body text-center">
                         <p class="text-muted mb-3"><i class="bi bi-info-circle me-1 text-info"></i>Detta är en informationssida. När du har läst klart — klicka för att fortsätta.</p>
                         <button type="button" class="btn btn-primary" id="infoPageContinueBtn">
@@ -946,7 +978,7 @@ function convertYoutubeUrl($url) {
                 <?php
                 $lessonQuestions = getQuizQuestionsForLesson($lessonId);
                 ?>
-                <div class="card">
+                <div class="card <?= $rdMultiPage ? 'lesson-page' : '' ?>" <?php if ($rdMultiPage): ?>data-page-kind="quiz" hidden role="region" aria-label="Quiz / Avsluta lektion"<?php endif; ?>>
                     <div class="card-header">
                         <i class="bi bi-question-circle me-2"></i> Quiz
                         <?php if (count($lessonQuestions) > 0): ?>
@@ -974,6 +1006,23 @@ function convertYoutubeUrl($url) {
                         <?php endif; ?>
                     </div>
                 </div>
+                <?php endif; /* info_page vs quiz */ ?>
+
+                <?php if ($rdMultiPage): ?>
+                <nav class="lesson-page-nav" aria-label="Bläddra mellan sidor">
+                    <button type="button" class="lesson-page-prev" disabled aria-label="Föregående sida">
+                        <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                        <span>Föregående</span>
+                    </button>
+                    <span class="lesson-page-indicator" aria-live="polite">
+                        Sida <span data-page-current>1</span> av <span data-page-total>1</span>
+                    </span>
+                    <button type="button" class="lesson-page-next" aria-label="Nästa sida">
+                        <span>Nästa</span>
+                        <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                    </button>
+                </nav>
+                </div><!-- /.lesson-paginator -->
                 <?php endif; ?>
 
                 <!-- Interaktions-JS för drag-drop, hotspot etc -->
@@ -1053,7 +1102,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
 	<?php
-		if (!empty($lesson['ai_instruction']) || !empty($lesson['ai_prompt'])):
+		if ($rdHasAiChat):
 	?>
 
     // Toggle AI chat
@@ -1138,7 +1187,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
 	<?php
-		if (!empty($lesson['ai_instruction']) || !empty($lesson['ai_prompt'])):
+		if ($rdHasAiChat):
 	?>
 
     // Event listeners för att skicka meddelande
@@ -1330,6 +1379,85 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
+<!-- Multi-page lektion: sidnavigering -->
+<script>
+(function() {
+    var paginator = document.getElementById('lessonPaginator');
+    if (!paginator) return;
 
+    // Alla pages: content-slices INSIDE content card + extra-cards (video, chat, quiz/finish)
+    // Vi tar dem i dokumentordning så användaren bläddrar:
+    // content slice 1 → ... → content slice N → video → AI-chat → quiz/avslut
+    var pages = paginator.querySelectorAll('.lesson-page');
+    var prevBtn = paginator.querySelector('.lesson-page-prev');
+    var nextBtn = paginator.querySelector('.lesson-page-next');
+    var indicator = paginator.querySelector('[data-page-current]');
+    var totalIndicator = paginator.querySelector('[data-page-total]');
+    var total = pages.length;
+    var current = 0;
+
+    if (total < 2) return;
+    if (totalIndicator) totalIndicator.textContent = String(total);
+
+    function show(idx) {
+        if (idx < 0 || idx >= total) return;
+        pages.forEach(function(p, i) {
+            var isActive = (i === idx);
+            p.classList.toggle('active', isActive);
+            if (isActive) {
+                p.removeAttribute('hidden');
+            } else {
+                p.setAttribute('hidden', '');
+            }
+        });
+        current = idx;
+        if (indicator) indicator.textContent = String(idx + 1);
+
+        if (prevBtn) prevBtn.disabled = (idx === 0);
+
+        // Sista sidan: gör Nästa till "Avsluta"-look (bara visuellt — själva
+        // klar-markeringen sköts av infoPageContinueBtn / quiz-svar, oförändrat)
+        if (nextBtn) {
+            if (idx === total - 1) {
+                nextBtn.classList.add('is-finish');
+                nextBtn.disabled = true;
+                nextBtn.innerHTML = '<i class="bi bi-check-circle" aria-hidden="true"></i> <span>Sista sidan</span>';
+                nextBtn.setAttribute('aria-label', 'Du är på sista sidan');
+            } else {
+                nextBtn.classList.remove('is-finish');
+                nextBtn.disabled = false;
+                nextBtn.innerHTML = '<span>Nästa</span> <i class="bi bi-chevron-right" aria-hidden="true"></i>';
+                nextBtn.setAttribute('aria-label', 'Nästa sida');
+            }
+        }
+
+        // Scrolla till toppen av paginatorn så ny sida börjar synligt
+        try {
+            paginator.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (e) {}
+    }
+
+    if (prevBtn) prevBtn.addEventListener('click', function() {
+        if (current > 0) show(current - 1);
+    });
+
+    if (nextBtn) nextBtn.addEventListener('click', function() {
+        if (current < total - 1) show(current + 1);
+    });
+
+    // Tangentbordsstöd: pil-vänster/höger när inte i input
+    document.addEventListener('keydown', function(e) {
+        var inField = ['INPUT', 'TEXTAREA', 'SELECT'].indexOf(e.target.tagName) !== -1;
+        if (inField || e.target.isContentEditable) return;
+        if (e.key === 'ArrowLeft' && current > 0) {
+            show(current - 1);
+        } else if (e.key === 'ArrowRight' && current < total - 1) {
+            show(current + 1);
+        }
+    });
+
+    show(0);
+})();
+</script>
 
 <?php include 'include/footer.php'; ?>

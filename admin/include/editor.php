@@ -59,14 +59,20 @@ function initStimmaEditor(selector, fullToolbar) {
         elementpath: true,
 
         plugins: fullToolbar
-            ? 'lists image link table code fullscreen autolink image'
+            ? 'lists image link table code fullscreen autolink image pagebreak'
             : 'lists autolink',
+
+        // Sidbrytningsmarkör för multi-page-lektioner. Lektionsplayern
+        // (lesson.php) splittar content på exakt detta värde. Använd HTML-
+        // kommentar så TinyMCE round-trippar utan att skada befintligt content.
+        pagebreak_separator: '<!-- pagebreak -->',
+        pagebreak_split_block: true,
 
         toolbar: fullToolbar
             ? [
                 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | forecolor backcolor',
                 'alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | lineheight',
-                'link image table | lessonblocks | removeformat fullscreen code'
+                'link image table | lessonblocks pagebreak | removeformat fullscreen code'
               ]
             : 'undo redo | bold italic | bullist numlist | removeformat',
 

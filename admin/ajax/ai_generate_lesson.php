@@ -27,15 +27,16 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-$courseId      = (int)($_POST['course_id'] ?? 0);
-$lessonIdea    = trim($_POST['lesson_idea'] ?? '');
-$lessonType    = ($_POST['lesson_type'] ?? 'lesson') === 'info_page' ? 'info_page' : 'lesson';
-$includeQuiz   = !empty($_POST['include_quiz']);
-$generateImage = !empty($_POST['generate_image']);
-$textLength    = $_POST['text_length'] ?? 'medium';
-$tone          = $_POST['tone']        ?? 'pedagogical';
-$belongsToRaw  = trim((string)($_POST['belongs_to_lesson_id'] ?? ''));
-$belongsTo     = ($belongsToRaw !== '' && (int)$belongsToRaw > 0) ? (int)$belongsToRaw : null;
+$courseId         = (int)($_POST['course_id'] ?? 0);
+$lessonIdea       = trim($_POST['lesson_idea'] ?? '');
+$lessonType       = ($_POST['lesson_type'] ?? 'lesson') === 'info_page' ? 'info_page' : 'lesson';
+$includeQuiz      = !empty($_POST['include_quiz']);
+$generateImage    = !empty($_POST['generate_image']);
+$generateMultipage = !empty($_POST['generate_multipage']);
+$textLength       = $_POST['text_length'] ?? 'medium';
+$tone             = $_POST['tone']        ?? 'pedagogical';
+$belongsToRaw     = trim((string)($_POST['belongs_to_lesson_id'] ?? ''));
+$belongsTo        = ($belongsToRaw !== '' && (int)$belongsToRaw > 0) ? (int)$belongsToRaw : null;
 
 if ($courseId <= 0) {
     echo json_encode(['success' => false, 'error' => 'Saknad kurs-ID.']);
@@ -96,12 +97,13 @@ if ($belongsTo !== null) {
 
 try {
     $lessonData = aiLessonGenerateContent([
-        'course'       => $course,
-        'lesson_idea'  => $lessonIdea,
-        'lesson_type'  => $lessonType,
-        'include_quiz' => $includeQuiz,
-        'text_length'  => $textLength,
-        'tone'         => $tone,
+        'course'             => $course,
+        'lesson_idea'        => $lessonIdea,
+        'lesson_type'        => $lessonType,
+        'include_quiz'       => $includeQuiz,
+        'generate_multipage' => $generateMultipage,
+        'text_length'        => $textLength,
+        'tone'               => $tone,
     ]);
 
     $lessonId = aiLessonInsert(
