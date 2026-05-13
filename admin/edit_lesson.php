@@ -518,7 +518,95 @@ if ($isAdmin) {
                                 <i class="bi bi-image me-1"></i>
                                 Bilder som infogas i innehållet: <strong>max 5 MB</strong>, format <strong>JPG, PNG, GIF</strong>. Dra och släpp direkt i editorn, eller klicka på bildknappen i verktygsraden.
                             </div>
+
+                            <!-- Sidbrytningshjälp: live-statistik per sida + auto-förslag -->
+                            <div class="border rounded p-2 mt-2 bg-light small" id="pagebreakHelper">
+                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div>
+                                        <i class="bi bi-layout-text-window me-1 text-primary"></i>
+                                        <strong>Sidor:</strong>
+                                        <span id="pagebreakHelperStats" class="text-muted">Beräknar...</span>
+                                    </div>
+                                    <div class="d-flex gap-2">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" id="pagebreakSuggestBtn"
+                                                title="Lägger in en sidbrytning före varje h3-rubrik (om sådan saknas)">
+                                            <i class="bi bi-magic me-1"></i>Föreslå sidbrytningar
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="text-muted small mt-1">
+                                    Rikta dig mot <strong>80–180 ord per sida</strong> så slipper läsaren scrolla.
+                                    Lägg in en sidbrytning via verktygsraden där rubriker/avsnitt naturligt börjar.
+                                </div>
+                            </div>
                         </div>
+
+                        <script>
+                        // Sidbrytningshjälp för contentEditor — körs när TinyMCE är initierad.
+                        (function() {
+                            function pagebreakStatsHtml() {
+                                var ed = (typeof tinymce !== 'undefined') ? tinymce.get('contentEditor') : null;
+                                if (!ed) return '';
+                                var content = ed.getContent() || '';
+                                var pages = content.split(/<!--\s*pagebreak\s*-->/i);
+                                var parts = pages.map(function(html, i) {
+                                    var tmp = document.createElement('div');
+                                    tmp.innerHTML = html;
+                                    var text = (tmp.textContent || '').replace(/\s+/g, ' ').trim();
+                                    var words = text === '' ? 0 : text.split(/\s+/).length;
+                                    var cls = 'text-success';
+                                    if (words > 250) cls = 'text-danger';
+                                    else if (words > 180 || (words > 0 && words < 30)) cls = 'text-warning';
+                                    return '<span class="' + cls + '">Sida ' + (i + 1) + ': ' + words + ' ord</span>';
+                                });
+                                if (parts.length === 1) {
+                                    return parts[0] + ' <span class="text-muted">— ingen sidbrytning ännu</span>';
+                                }
+                                return parts.join(' · ') + ' <span class="text-muted">(totalt ' + pages.length + ' sidor)</span>';
+                            }
+
+                            function refresh() {
+                                var el = document.getElementById('pagebreakHelperStats');
+                                if (el) el.innerHTML = pagebreakStatsHtml();
+                            }
+
+                            function suggest() {
+                                var ed = tinymce.get('contentEditor');
+                                if (!ed) return;
+                                var content = ed.getContent() || '';
+                                if (/<!--\s*pagebreak\s*-->/i.test(content)) {
+                                    if (!confirm('Lektionen har redan sidbrytningar. Vill du ändå lägga till nya före h3-rubriker som saknar dem?')) return;
+                                }
+                                // Lägg pagebreak före varje h3 utom första
+                                var skippedFirst = false;
+                                var modified = content.replace(/(<!--\s*pagebreak\s*-->\s*)?(<h3\b)/gi, function(m, existing, tag) {
+                                    if (!skippedFirst) { skippedFirst = true; return m; }
+                                    if (existing) return m; // sidbrytning finns redan precis före — rör ej
+                                    return '<!-- pagebreak -->' + tag;
+                                });
+                                if (modified !== content) {
+                                    ed.setContent(modified);
+                                    ed.undoManager.add();
+                                    refresh();
+                                } else {
+                                    alert('Inga h3-rubriker att bryta vid (eller alla har redan en sidbrytning).');
+                                }
+                            }
+
+                            function waitForEditor() {
+                                if (typeof tinymce === 'undefined' || !tinymce.get('contentEditor')) {
+                                    setTimeout(waitForEditor, 250);
+                                    return;
+                                }
+                                var ed = tinymce.get('contentEditor');
+                                refresh();
+                                ed.on('change keyup undo redo SetContent', refresh);
+                                var btn = document.getElementById('pagebreakSuggestBtn');
+                                if (btn) btn.addEventListener('click', suggest);
+                            }
+                            waitForEditor();
+                        })();
+                        </script>
 
                         <div class="mb-3">
                             <label for="background_color" class="form-label fw-normal">Bakgrundsfärg för lektionen</label>

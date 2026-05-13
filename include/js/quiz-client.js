@@ -256,6 +256,23 @@
             (left > 0 ? left + ' kvar' : 'alla frågor besvarade');
         }
 
+        // Notifiera ev. multipage-paginator att en fråga är bedömd. Den
+        // använder kvitto-eventet för att avaktivera/aktivera Next-knappen.
+        try {
+          document.dispatchEvent(new CustomEvent('quiz-question-graded', {
+            detail: {
+              questionId: qid,
+              correct: !!data.correct,
+              passMode: data.pass_mode || 'require_all_correct',
+              lockQuestion: !!data.lock_question,
+              allDone: !!data.all_done,
+              nextLesson: data.nextLesson || null,
+              courseComplete: !!data.courseComplete,
+              completeUrl: data.completeUrl || null
+            }
+          }));
+        } catch (e) { /* gammal browser utan CustomEvent — ignorera */ }
+
         // Alla frågor besvarade?
         if (data.all_done) {
           // Hela kursen klar? Skicka direkt till avslutssidan.

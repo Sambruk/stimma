@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $course) {
                 'reason' => $reason
             ]);
 
-            $success = 'Du har avslutat kursen "' . htmlspecialchars($course['title']) . '". Du kommer inte längre få påminnelser om denna kurs.';
+            $success = 'Du har avbrutit kursen "' . htmlspecialchars($course['title']) . '". Du kommer inte längre få påminnelser om denna kurs. Du kan återuppta den senare om du ändrar dig.';
         }
     } else {
         $error = 'Du måste vara inloggad för att avsluta en kurs.';
@@ -99,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $course) {
 }
 
 // Sätt sidtitel
-$page_title = 'Avsluta kurs - ' . $systemName;
+$page_title = 'Avbryt kurs - ' . $systemName;
 require_once 'include/header.php';
 ?>
 
@@ -110,7 +110,7 @@ require_once 'include/header.php';
                 <div class="card-body p-4">
                     <h1 class="h4 mb-4 text-center">
                         <i class="bi bi-x-circle text-warning me-2"></i>
-                        Avsluta kurs
+                        Avbryt kurs
                     </h1>
 
                     <?php if ($success): ?>
@@ -146,7 +146,7 @@ require_once 'include/header.php';
                     <?php elseif (!$isLoggedIn): ?>
                         <div class="alert alert-info">
                             <i class="bi bi-info-circle-fill me-2"></i>
-                            Du måste logga in för att avsluta kursen "<?= htmlspecialchars($course['title']) ?>".
+                            Du måste logga in för att avbryta kursen "<?= htmlspecialchars($course['title']) ?>".
                         </div>
                         <div class="text-center mt-4">
                             <a href="index.php" class="btn btn-primary">
@@ -156,11 +156,15 @@ require_once 'include/header.php';
                     <?php else: ?>
                         <div class="mb-4">
                             <p class="text-muted">
-                                Vill du verkligen avsluta kursen <strong>"<?= htmlspecialchars($course['title']) ?>"</strong>?
+                                Vill du verkligen <strong>avbryta</strong> kursen <strong>"<?= htmlspecialchars($course['title']) ?>"</strong>?
                             </p>
                             <p class="text-muted small">
-                                Om du avslutar kursen kommer du inte längre få påminnelser om den.
-                                Din framsteg i kursen kommer att sparas och du kan alltid återvända till kursen senare om du ändrar dig.
+                                <strong>OBS:</strong> "Avbryt" betyder att du slutar läsa kursen — inte att du markerar
+                                den som slutförd. Om du vill markera kursen som klar, gå till sista lektionen och slutför den.
+                            </p>
+                            <p class="text-muted small">
+                                Om du avbryter kursen slutar du få påminnelser. Ditt framsteg sparas och du kan
+                                återuppta kursen senare om du ändrar dig.
                             </p>
                         </div>
 
@@ -168,7 +172,7 @@ require_once 'include/header.php';
                             <input type="hidden" name="csrf_token" value="<?= generateCsrfToken() ?>">
 
                             <div class="mb-3">
-                                <label for="reason" class="form-label">Varför vill du avsluta kursen? (valfritt)</label>
+                                <label for="reason" class="form-label">Varför vill du avbryta kursen? (valfritt)</label>
                                 <select class="form-select" id="reason" name="reason">
                                     <option value="">Välj en anledning...</option>
                                     <option value="Startade kursen av misstag">Startade kursen av misstag</option>
@@ -181,8 +185,8 @@ require_once 'include/header.php';
                             </div>
 
                             <div class="d-grid gap-2">
-                                <button type="submit" class="btn btn-warning">
-                                    <i class="bi bi-x-circle me-1"></i>Ja, avsluta kursen
+                                <button type="submit" class="btn btn-danger">
+                                    <i class="bi bi-x-circle me-1"></i>Ja, avbryt kursen
                                 </button>
                                 <a href="index.php" class="btn btn-outline-secondary">
                                     <i class="bi bi-arrow-left me-1"></i>Nej, gå tillbaka

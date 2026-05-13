@@ -1,6 +1,16 @@
 # Stimma - Utvecklingsuppgifter
 
 ## Pågående
+- [x] Kurskatalog visar alla kurser + avbrutna kurser i Avslutade-fliken (2026-05-11)
+  - [x] index.php: kurskatalogen filtrerar inte längre bort påbörjade/klara kurser
+  - [x] index.php: kontextuell knapptext i katalogen ("Börja kursen" / "Fortsätt" / "Gå igenom igen")
+  - [x] index.php: status-badge i katalogen ("påbörjad" / "klar" / "avbruten") för både kort- och listvy
+  - [x] index.php: pre-bucket räknar abandoned som "Avslutade"
+  - [x] index.php: tab-loop inkluderar abandoned-kurser i Avslutade-fliken
+  - [x] index.php: "Avbruten"-badge i Mina kurser (kort + lista) med Återuppta-knapp
+  - [x] index.php: is_done prioriteras före is_abandoned i visning (100% klar = Slutförd, oavsett abandoned-flagga)
+  - [x] resume_course.php: ny POST-endpoint som återställer course_enrollments.status till 'active'
+  - [x] admin/include/header.php: "AI-användning"-menypost synlig för admins (inte bara superadmin) — ai_usage.php stödde redan org-scope-filtrering
 - [x] Publika kurser (2026-04-22) — stor feature, se /root/.claude/plans/det-finns-ett-nskem-l-quiet-kazoo.md
   - [x] Migration 025: access_mode, is_public, public_registration_token, public_course_access, public_registration_intents
   - [x] include/functions.php: helpers (generate/validateToken, grantAccess, hasAccess, purgeData, maybeDeleteOrphan)

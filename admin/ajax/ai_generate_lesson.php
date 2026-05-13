@@ -32,7 +32,9 @@ $lessonIdea       = trim($_POST['lesson_idea'] ?? '');
 $lessonType       = ($_POST['lesson_type'] ?? 'lesson') === 'info_page' ? 'info_page' : 'lesson';
 $includeQuiz      = !empty($_POST['include_quiz']);
 $generateImage    = !empty($_POST['generate_image']);
-$generateMultipage = !empty($_POST['generate_multipage']);
+// Default på: skicka generate_multipage=0 explicit för en enda lång sida.
+$generateMultipage = !array_key_exists('generate_multipage', $_POST)
+    || !empty($_POST['generate_multipage']);
 $textLength       = $_POST['text_length'] ?? 'medium';
 $tone             = $_POST['tone']        ?? 'pedagogical';
 $belongsToRaw     = trim((string)($_POST['belongs_to_lesson_id'] ?? ''));

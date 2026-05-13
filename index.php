@@ -544,18 +544,34 @@ else:
                 <main>
                     <?php
                     // Pre-bucket: räkna pågående vs avslutade så flikarna kan visa antal.
-                    // Avslutad = alla aktiva lektioner i kursen är progress.status='completed'.
-                    $abandonedCourses = query("SELECT course_id FROM " . DB_DATABASE . ".course_enrollments
-                                               WHERE user_id = ? AND status = 'abandoned'", [$userId]);
-                    $abandonedCourseIds = array_column($abandonedCourses, 'course_id');
+                    // Avslutad = alla aktiva lektioner i kursen är progress.status='completed'
+                    //            ELLER kursen är avbruten (course_enrollments.status='abandoned').
+                    // Pågående = användaren har klickat "Börja kursen" (aktiv enrollment)
+                    //            ELLER har minst en klar lektion. Det räcker alltså
+                    //            med att ha öppnat kursen — man behöver inte ha
+                    //            slutfört en lektion för att den ska räknas.
+                    $enrollRows = query(
+                        "SELECT course_id, status FROM " . DB_DATABASE . ".course_enrollments WHERE user_id = ?",
+                        [$userId]
+                    );
+                    $abandonedCourseIds = [];
+                    $activeEnrolledCourseIds = [];
+                    foreach ($enrollRows as $er) {
+                        if ($er['status'] === 'abandoned') {
+                            $abandonedCourseIds[] = (int)$er['course_id'];
+                        } elseif ($er['status'] === 'active') {
+                            $activeEnrolledCourseIds[] = (int)$er['course_id'];
+                        }
+                    }
 
                     $countOngoing = 0;
                     $countCompleted = 0;
                     foreach ($groupedLessons as $courseTitle => $courseData) {
                         $courseLessons = $courseData['lessons'];
                         $firstLessonInGroup = reset($courseLessons);
-                        $currentCourseId = $firstLessonInGroup['course_id'];
-                        if (in_array($currentCourseId, $abandonedCourseIds)) continue;
+                        $currentCourseId = (int)$firstLessonInGroup['course_id'];
+                        $isAbandoned = in_array($currentCourseId, $abandonedCourseIds, true);
+                        $isEnrolled = in_array($currentCourseId, $activeEnrolledCourseIds, true);
                         $cTotal = count($courseLessons);
                         $cDone = 0;
                         foreach ($courseLessons as $lesson) {
@@ -563,8 +579,12 @@ else:
                                 $cDone++;
                             }
                         }
-                        if ($cDone === 0) continue;        // ej påbörjad — visas inte
-                        if ($cDone >= $cTotal) $countCompleted++;
+                        if ($isAbandoned) {
+                            $countCompleted++;          // Avbrutna räknas under "Avslutade"
+                            continue;
+                        }
+                        if ($cDone === 0 && !$isEnrolled) continue;  // ej påbörjad — visas inte
+                        if ($cTotal > 0 && $cDone >= $cTotal) $countCompleted++;
                         else $countOngoing++;
                     }
                     ?>
@@ -714,12 +734,15 @@ else:
                     <?php
                     // Bygg lista med kurser som hör till denna flik (pre-pass).
                     // Båda vy-renderingarna nedan itererar över samma lista.
+                    // - Pågående: cDone>0, ej klar, ej avbruten
+                    // - Avslutade: helt klar ELLER avbruten (även med cDone=0)
                     $tabCourses = [];
                     foreach ($groupedLessons as $courseTitle2 => $courseData2):
                         $cLessons = $courseData2['lessons'];
                         $firstLG = reset($cLessons);
-                        $cCourseId = $firstLG['course_id'];
-                        if (in_array($cCourseId, $abandonedCourseIds)) continue;
+                        $cCourseId = (int)$firstLG['course_id'];
+                        $isAbandoned = in_array($cCourseId, $abandonedCourseIds, true);
+                        $isEnrolled = in_array($cCourseId, $activeEnrolledCourseIds, true);
 
                         $cTotal2 = count($cLessons);
                         $cDone2 = 0;
@@ -728,10 +751,15 @@ else:
                                 $cDone2++;
                             }
                         }
-                        if ($cDone2 === 0) continue;
-                        $isCDone = ($cDone2 >= $cTotal2);
-                        if ($isOngoing && $isCDone) continue;
-                        if (!$isOngoing && !$isCDone) continue;
+                        $isCDone = ($cTotal2 > 0 && $cDone2 >= $cTotal2);
+
+                        if ($isOngoing) {
+                            if ($isAbandoned) continue;
+                            if ($cDone2 === 0 && !$isEnrolled) continue;  // ej påbörjad
+                            if ($isCDone) continue;
+                        } else {
+                            if (!$isCDone && !$isAbandoned) continue;
+                        }
 
                         $nextLes = null;
                         foreach ($cLessons as $lesson) {
@@ -741,15 +769,41 @@ else:
                             }
                         }
 
+                        // För stegvisa kurser: nästa lektion kan vara låst (väntar
+                        // på sequential_lesson_schedule.available_at). Då vill vi inte
+                        // skicka användaren till en sida som bara redirectar tillbaka.
+                        $isSequential = !empty($firstLG['sequential_mode']);
+                        $isNextAvailable = true;
+                        if ($nextLes && $isSequential) {
+                            $isNextAvailable = isLessonAvailableForUser(
+                                (int)$userId, (int)$nextLes['id'], $cCourseId
+                            );
+                        }
+
+                        // Hitta senaste klara lektion som fallback-länkmål när
+                        // nästa lektion är låst — då hamnar användaren ändå inne
+                        // i kursen och kan bläddra via lektionsmenyn.
+                        $lastDoneLessonId = 0;
+                        foreach ($cLessons as $lesson) {
+                            if (isset($userProgress[$lesson['id']]) && $userProgress[$lesson['id']]['status'] === 'completed') {
+                                $lastDoneLessonId = (int)$lesson['id'];
+                            }
+                        }
+
                         $tabCourses[] = [
-                            'title'     => $courseTitle2,
-                            'course_id' => $cCourseId,
-                            'image_url' => $firstLG['course_image_url'] ?? null,
-                            'completed' => $cDone2,
-                            'total'     => $cTotal2,
-                            'pct'       => $cTotal2 > 0 ? (int)round($cDone2 / $cTotal2 * 100) : 0,
-                            'next_lesson' => $nextLes,
-                            'is_done'   => $isCDone,
+                            'title'        => $courseTitle2,
+                            'course_id'    => $cCourseId,
+                            'image_url'    => $firstLG['course_image_url'] ?? null,
+                            'completed'    => $cDone2,
+                            'total'        => $cTotal2,
+                            'pct'          => $cTotal2 > 0 ? (int)round($cDone2 / $cTotal2 * 100) : 0,
+                            'next_lesson'  => $nextLes,
+                            'is_next_available' => $isNextAvailable,
+                            'is_sequential'     => $isSequential,
+                            'last_done_lesson_id' => $lastDoneLessonId,
+                            'is_done'      => $isCDone,
+                            'is_abandoned' => $isAbandoned,
+                            'first_lesson_id' => isset($cLessons[0]) ? (int)$cLessons[0]['id'] : 0,
                         ];
                     endforeach;
                     ?>
@@ -781,9 +835,16 @@ else:
                                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
                                                 </div>
                                                 <div style="min-width:0;">
-                                                    <div class="rd-course-meta"><?= $tc['total'] ?> lektioner</div>
+                                                    <div class="rd-course-meta">
+                                                        <?= $tc['total'] ?> lektioner
+                                                        <?php if ($tc['is_done']): ?>
+                                                            · <span class="text-success"><i class="bi bi-check-circle-fill"></i> slutförd</span>
+                                                        <?php elseif ($tc['is_abandoned']): ?>
+                                                            · <span class="text-warning"><i class="bi bi-x-circle-fill"></i> avbruten</span>
+                                                        <?php endif; ?>
+                                                    </div>
                                                     <div class="rd-course-title text-truncate" title="<?= sanitize($tc['title']) ?>"><?= sanitize($tc['title']) ?></div>
-                                                    <?php if ($tc['next_lesson']): ?>
+                                                    <?php if ($tc['next_lesson'] && !$tc['is_abandoned'] && !$tc['is_done']): ?>
                                                         <div class="rd-course-next text-truncate">Nästa: <?= sanitize($tc['next_lesson']['title']) ?></div>
                                                     <?php endif; ?>
                                                 </div>
@@ -794,22 +855,41 @@ else:
                                             <div class="rd-progress-fill" style="width: <?= $tc['pct'] ?>%;"></div>
                                         </div>
                                         <div class="rd-actions">
-                                            <?php if ($tc['next_lesson']): ?>
+                                            <?php if ($tc['is_done']): ?>
+                                                <span class="rd-btn rd-btn-primary" style="cursor: default; opacity: 0.7;"><i class="bi bi-check-circle me-1"></i>Klar!</span>
+                                            <?php elseif ($tc['is_abandoned']): ?>
+                                                <form method="post" action="resume_course.php" class="d-inline">
+                                                    <input type="hidden" name="csrf_token" value="<?= generateCsrfToken() ?>">
+                                                    <input type="hidden" name="course_id" value="<?= (int)$tc['course_id'] ?>">
+                                                    <button type="submit" class="rd-btn rd-btn-primary"><i class="bi bi-arrow-clockwise me-1"></i>Återuppta kurs</button>
+                                                </form>
+                                            <?php elseif ($tc['next_lesson'] && $tc['is_next_available']): ?>
                                                 <a href="lesson.php?id=<?= (int)$tc['next_lesson']['id'] ?>" class="rd-btn rd-btn-primary">Fortsätt lektion</a>
+                                            <?php elseif ($tc['next_lesson'] && !$tc['is_next_available']): ?>
+                                                <?php $fallbackId = $tc['last_done_lesson_id'] ?: $tc['first_lesson_id']; ?>
+                                                <a href="lesson.php?id=<?= (int)$fallbackId ?>" class="rd-btn rd-btn-primary" title="Nästa lektion är inte upplåst ännu — visa det du redan har läst">Se kursinnehåll</a>
                                             <?php else: ?>
                                                 <span class="rd-btn rd-btn-primary" style="cursor: default; opacity: 0.7;"><i class="bi bi-check-circle me-1"></i>Klar!</span>
                                             <?php endif; ?>
-                                            <div class="dropdown">
-                                                <button class="rd-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Mer alternativ">
-                                                    <i class="bi bi-three-dots"></i>
-                                                </button>
-                                                <ul class="dropdown-menu dropdown-menu-end">
-                                                    <li><a class="dropdown-item" href="abandon_course.php?course_id=<?= (int)$tc['course_id'] ?>">
-                                                        <i class="bi bi-x-circle me-2"></i>Avsluta kurs
-                                                    </a></li>
-                                                </ul>
-                                            </div>
+                                            <?php if (!$tc['is_abandoned'] && !$tc['is_done']): ?>
+                                                <div class="dropdown">
+                                                    <button class="rd-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Mer alternativ">
+                                                        <i class="bi bi-three-dots"></i>
+                                                    </button>
+                                                    <ul class="dropdown-menu dropdown-menu-end">
+                                                        <li><a class="dropdown-item text-danger" href="abandon_course.php?course_id=<?= (int)$tc['course_id'] ?>">
+                                                            <i class="bi bi-x-circle me-2"></i>Avbryt kursen
+                                                        </a></li>
+                                                    </ul>
+                                                </div>
+                                            <?php endif; ?>
                                         </div>
+                                        <?php if ($tc['next_lesson'] && !$tc['is_next_available'] && !$tc['is_done'] && !$tc['is_abandoned']): ?>
+                                            <div class="small text-muted mt-2">
+                                                <i class="bi bi-clock-history me-1"></i>
+                                                Stegvis kurs — nästa lektion är ännu inte upplåst.
+                                            </div>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                             <?php endforeach; ?>
@@ -824,8 +904,42 @@ else:
                                         : 'images/placeholder.png';
                                 ?>
                                 <div class="course-list-item">
-                                    <?php if ($tc['next_lesson']): ?>
-                                        <a href="lesson.php?id=<?= (int)$tc['next_lesson']['id'] ?>" class="d-flex align-items-center gap-3 flex-grow-1 text-decoration-none text-dark" style="min-width: 0;">
+                                    <?php if ($tc['is_done']): ?>
+                                        <img src="<?= $imgSrc ?>" class="thumb" alt="">
+                                        <div class="meta">
+                                            <div class="li-title"><?= sanitize($tc['title']) ?></div>
+                                            <div class="progress-row">
+                                                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Slutförd</span>
+                                                <span class="pct"><?= $tc['total'] ?>/<?= $tc['total'] ?> lektioner</span>
+                                            </div>
+                                        </div>
+                                    <?php elseif ($tc['is_abandoned']): ?>
+                                        <img src="<?= $imgSrc ?>" class="thumb" alt="">
+                                        <div class="meta">
+                                            <div class="li-title"><?= sanitize($tc['title']) ?></div>
+                                            <div class="progress-row">
+                                                <span class="badge bg-warning text-dark"><i class="bi bi-x-circle me-1"></i>Avbruten</span>
+                                                <?php if ($tc['completed'] > 0): ?>
+                                                    <span class="pct"><?= $tc['completed'] ?>/<?= $tc['total'] ?> lektioner</span>
+                                                <?php else: ?>
+                                                    <span class="pct"><?= $tc['total'] ?> lektioner</span>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
+                                        <div class="li-actions">
+                                            <form method="post" action="resume_course.php" class="d-inline">
+                                                <input type="hidden" name="csrf_token" value="<?= generateCsrfToken() ?>">
+                                                <input type="hidden" name="course_id" value="<?= (int)$tc['course_id'] ?>">
+                                                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-arrow-clockwise me-1"></i>Återuppta</button>
+                                            </form>
+                                        </div>
+                                    <?php elseif ($tc['next_lesson']):
+                                        $linkTargetId = $tc['is_next_available']
+                                            ? (int)$tc['next_lesson']['id']
+                                            : ($tc['last_done_lesson_id'] ?: $tc['first_lesson_id']);
+                                        $listBtnLabel = $tc['is_next_available'] ? 'Fortsätt' : 'Se innehåll';
+                                    ?>
+                                        <a href="lesson.php?id=<?= (int)$linkTargetId ?>" class="d-flex align-items-center gap-3 flex-grow-1 text-decoration-none text-dark" style="min-width: 0;">
                                             <img src="<?= $imgSrc ?>" class="thumb" alt="">
                                             <div class="meta">
                                                 <div class="li-title"><?= sanitize($tc['title']) ?></div>
@@ -834,18 +948,21 @@ else:
                                                         <div class="progress-bar bg-success" style="width: <?= $tc['pct'] ?>%"></div>
                                                     </div>
                                                     <span class="pct"><?= $tc['completed'] ?>/<?= $tc['total'] ?> · <?= $tc['pct'] ?>%</span>
+                                                    <?php if (!$tc['is_next_available']): ?>
+                                                        <span class="badge bg-info text-dark" title="Stegvis kurs — nästa lektion är inte upplåst"><i class="bi bi-clock-history me-1"></i>Väntar på upplåsning</span>
+                                                    <?php endif; ?>
                                                 </div>
                                             </div>
                                         </a>
                                         <div class="li-actions">
-                                            <a href="lesson.php?id=<?= (int)$tc['next_lesson']['id'] ?>" class="btn btn-primary btn-sm">Fortsätt</a>
+                                            <a href="lesson.php?id=<?= (int)$linkTargetId ?>" class="btn btn-primary btn-sm"><?= $listBtnLabel ?></a>
                                             <div class="dropdown">
                                                 <button class="btn btn-sm btn-light" type="button" data-bs-toggle="dropdown" aria-label="Mer">
                                                     <i class="bi bi-three-dots"></i>
                                                 </button>
                                                 <ul class="dropdown-menu dropdown-menu-end">
-                                                    <li><a class="dropdown-item" href="abandon_course.php?course_id=<?= (int)$tc['course_id'] ?>">
-                                                        <i class="bi bi-x-circle me-2"></i>Avsluta kurs
+                                                    <li><a class="dropdown-item text-danger" href="abandon_course.php?course_id=<?= (int)$tc['course_id'] ?>">
+                                                        <i class="bi bi-x-circle me-2"></i>Avbryt kursen
                                                     </a></li>
                                                 </ul>
                                             </div>
@@ -871,7 +988,9 @@ else:
                     </div><!-- /.tab-content -->
 
                     <?php
-                    // Bygg kurskatalog: kurser i orgens scope som användaren INTE har startat.
+                    // Bygg kurskatalog: ALLA kurser i orgens scope (oavsett progress).
+                    // Användaren ser även påbörjade/klara kurser här så de kan
+                    // återbesöka eller starta om.
                     $catalogCourses = [];
                     foreach ($orgCourses as $course) {
                         $catalogLessons = query(
@@ -879,27 +998,42 @@ else:
                               WHERE course_id = ? ORDER BY sort_order",
                             [$course['id']]
                         );
-                        $started = false;
+                        if (empty($catalogLessons)) continue;
+
+                        // Räkna progress för att avgöra knapptext och länkmål
+                        $catCompleted = 0;
+                        $catNextLessonId = null;
                         foreach ($catalogLessons as $lesson) {
                             if (isset($userProgress[$lesson['id']]) && $userProgress[$lesson['id']]['status'] === 'completed') {
-                                $started = true; break;
+                                $catCompleted++;
+                            } elseif ($catNextLessonId === null) {
+                                $catNextLessonId = (int)$lesson['id'];
                             }
                         }
-                        if ($started || empty($catalogLessons)) continue;
+                        $catTotal = count($catalogLessons);
+                        $catIsDone = ($catCompleted >= $catTotal);
+                        $catIsStarted = ($catCompleted > 0);
+                        $catIsAbandoned = in_array((int)$course['id'], $abandonedCourseIds);
+
+                        // Länkmål: nästa ej-klara lektion om sådan finns, annars första
+                        $catLinkLessonId = $catNextLessonId ?? (int)$catalogLessons[0]['id'];
 
                         $tagsForCourse = $courseTagsMap[$course['id']] ?? [];
                         $tagIds = array_column($tagsForCourse, 'id');
 
                         $catalogCourses[] = [
-                            'id'           => (int)$course['id'],
-                            'title'        => $course['title'],
-                            'image_url'    => $course['image_url'] ?? null,
-                            'lesson_count' => count($catalogLessons),
-                            'first_lesson_id' => (int)$catalogLessons[0]['id'],
-                            'sequential'   => !empty($course['sequential_mode']),
-                            'author_email' => $course['author_email'] ?? '',
-                            'tags'         => $tagsForCourse,
-                            'tag_ids'      => $tagIds,
+                            'id'              => (int)$course['id'],
+                            'title'           => $course['title'],
+                            'image_url'       => $course['image_url'] ?? null,
+                            'lesson_count'    => $catTotal,
+                            'first_lesson_id' => $catLinkLessonId,
+                            'sequential'      => !empty($course['sequential_mode']),
+                            'author_email'    => $course['author_email'] ?? '',
+                            'tags'            => $tagsForCourse,
+                            'tag_ids'         => $tagIds,
+                            'is_started'      => $catIsStarted,
+                            'is_done'         => $catIsDone,
+                            'is_abandoned'    => $catIsAbandoned,
                         ];
                     }
                     ?>
@@ -955,7 +1089,16 @@ else:
                                                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
                                                     </div>
                                                     <div style="min-width:0;">
-                                                        <div class="rd-course-meta"><?= $cc['lesson_count'] ?> lektioner<?= $cc['sequential'] ? ' · stegvis' : '' ?></div>
+                                                        <div class="rd-course-meta">
+                                                            <?= $cc['lesson_count'] ?> lektioner<?= $cc['sequential'] ? ' · stegvis' : '' ?>
+                                                            <?php if ($cc['is_done']): ?>
+                                                                · <span class="text-success"><i class="bi bi-check-circle-fill"></i> klar</span>
+                                                            <?php elseif ($cc['is_abandoned']): ?>
+                                                                · <span class="text-warning"><i class="bi bi-x-circle-fill"></i> avbruten</span>
+                                                            <?php elseif ($cc['is_started']): ?>
+                                                                · <span class="text-info"><i class="bi bi-play-circle-fill"></i> påbörjad</span>
+                                                            <?php endif; ?>
+                                                        </div>
                                                         <div class="rd-course-title text-truncate" title="<?= sanitize($cc['title']) ?>"><?= sanitize($cc['title']) ?></div>
                                                         <?php if (!empty($cc['tags'])): ?>
                                                             <div class="rd-course-next">
@@ -968,7 +1111,16 @@ else:
                                                 </div>
                                             </div>
                                             <div class="rd-actions">
-                                                <a href="lesson.php?id=<?= $cc['first_lesson_id'] ?>" class="rd-btn rd-btn-primary">Börja kursen</a>
+                                                <?php
+                                                    if ($cc['is_done']) {
+                                                        $catBtnLabel = 'Gå igenom igen';
+                                                    } elseif ($cc['is_started']) {
+                                                        $catBtnLabel = 'Fortsätt';
+                                                    } else {
+                                                        $catBtnLabel = 'Börja kursen';
+                                                    }
+                                                ?>
+                                                <a href="lesson.php?id=<?= $cc['first_lesson_id'] ?>" class="rd-btn rd-btn-primary"><?= $catBtnLabel ?></a>
                                             </div>
                                         </div>
                                     </div>
@@ -996,6 +1148,13 @@ else:
                                                         <?php if ($cc['sequential']): ?>
                                                             · <span class="text-info"><i class="bi bi-signpost-split"></i> stegvis</span>
                                                         <?php endif; ?>
+                                                        <?php if ($cc['is_done']): ?>
+                                                            · <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Klar</span>
+                                                        <?php elseif ($cc['is_abandoned']): ?>
+                                                            · <span class="badge bg-warning text-dark"><i class="bi bi-x-circle me-1"></i>Avbruten</span>
+                                                        <?php elseif ($cc['is_started']): ?>
+                                                            · <span class="badge bg-info text-dark"><i class="bi bi-play-circle me-1"></i>Påbörjad</span>
+                                                        <?php endif; ?>
                                                         <?php foreach ($cc['tags'] as $tag): ?>
                                                             · <span class="badge bg-primary"><?= htmlspecialchars($tag['name']) ?></span>
                                                         <?php endforeach; ?>
@@ -1004,7 +1163,16 @@ else:
                                             </div>
                                         </a>
                                         <div class="li-actions">
-                                            <a href="lesson.php?id=<?= $cc['first_lesson_id'] ?>" class="btn btn-outline-primary btn-sm">Börja</a>
+                                            <?php
+                                                if ($cc['is_done']) {
+                                                    $catListBtnLabel = 'Gå igen';
+                                                } elseif ($cc['is_started']) {
+                                                    $catListBtnLabel = 'Fortsätt';
+                                                } else {
+                                                    $catListBtnLabel = 'Börja';
+                                                }
+                                            ?>
+                                            <a href="lesson.php?id=<?= $cc['first_lesson_id'] ?>" class="btn btn-outline-primary btn-sm"><?= $catListBtnLabel ?></a>
                                         </div>
                                     </div>
                                 <?php endforeach; ?>

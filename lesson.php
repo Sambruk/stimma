@@ -139,21 +139,38 @@ if (!$isPreviewMode) {
     }
 }
 
-// Handle sequential course enrollment and access control (skip in preview mode)
-if (!$isPreviewMode && !empty($lesson['sequential_mode'])) {
-    // Auto-enroll: om användaren inte är inskriven i kursen, skriv in hen.
-    // Funktionen är idempotent (returnerar direkt om schedule redan finns),
-    // så vi kan trigga den vid vilken sida som helst — det betyder att även
-    // en fristående infosida som ligger först i sort_order (ev. välkomstsida)
-    // triggar inskrivningen för stegvisa kurser.
-    enrollUserInSequentialCourse($userId, $lesson['course_id']);
+// Auto-enroll när användaren öppnar en lektion (skip in preview mode).
+// Detta är vad som markerar en kurs som "pågående" i Mina kurser-fliken.
+if (!$isPreviewMode) {
+    if (!empty($lesson['sequential_mode'])) {
+        // Stegvisa kurser: kompletta schedule-rader behövs, hanteras av helpern.
+        // Funktionen är idempotent (returnerar direkt om schedule redan finns).
+        enrollUserInSequentialCourse($userId, $lesson['course_id']);
 
-    // Check if the lesson is available
-    if (!isLessonAvailableForUser($userId, $lessonId, $lesson['course_id'])) {
-        $_SESSION['flash_message'] = 'Denna lektion är inte tillgänglig ännu.';
-        $_SESSION['flash_type'] = 'warning';
-        redirect('index.php');
-        exit;
+        // Check if the lesson is available
+        if (!isLessonAvailableForUser($userId, $lessonId, $lesson['course_id'])) {
+            $_SESSION['flash_message'] = 'Denna lektion är inte tillgänglig ännu.';
+            $_SESSION['flash_type'] = 'warning';
+            redirect('index.php');
+            exit;
+        }
+    } else {
+        // Icke-stegvisa kurser: en course_enrollments-rad räcker. Idempotent
+        // via en kontroll först — utan denna dyker kursen aldrig upp som
+        // pågående förrän användaren markerat en lektion som klar.
+        $existingEnrollment = queryOne(
+            "SELECT id FROM " . DB_DATABASE . ".course_enrollments
+              WHERE user_id = ? AND course_id = ? LIMIT 1",
+            [$userId, (int)$lesson['course_id']]
+        );
+        if (!$existingEnrollment) {
+            execute(
+                "INSERT INTO " . DB_DATABASE . ".course_enrollments
+                    (user_id, course_id, status, started_at)
+                 VALUES (?, ?, 'active', NOW())",
+                [$userId, (int)$lesson['course_id']]
+            );
+        }
     }
 }
 
@@ -694,11 +711,22 @@ function convertYoutubeUrl($url) {
 </div>
 <?php endif; ?>
 
+<!-- Override globala rd-main max-width (1100px) för lesson-sidan — vi vill
+     att lektionsinnehållet får använda hela bredden mellan app-sidebaren
+     och en liten marginal i högerkant. -->
+<style>
+    #rdMain { max-width: none; }
+    @media (min-width: 992px) {
+        /* Lite extra padding-right så texten inte klistras i högerkanten */
+        #rdMain { padding-right: 48px; }
+    }
+</style>
+
 <!-- Main content container -->
-<div class="container-sm py-4">
-    <div class="row">
+<div class="container-fluid py-4 px-0">
+    <div class="row g-4">
         <!-- Left sidebar: lektionsmeny -->
-        <div class="col-lg-2 d-none d-lg-block">
+        <div class="col-lg-3 d-none d-lg-block">
             <?php
             $navLessons = query(
                 "SELECT id, title, sort_order, lesson_type, belongs_to_lesson_id FROM " . DB_DATABASE . ".lessons
@@ -782,7 +810,7 @@ function convertYoutubeUrl($url) {
         </div>
 
         <!-- Main content area -->
-        <div class="col-12 col-lg-8">
+        <div class="col-12 col-lg-9">
             <main>
                 <?php
                 // Multi-page-stöd: räkna sidbrytningar i lektionsinnehållet redan här
@@ -791,19 +819,58 @@ function convertYoutubeUrl($url) {
                 $rdRawContent = (string)($lesson['content'] ?? '');
                 $rdPages = preg_split('/<!--\s*pagebreak\s*-->/i', $rdRawContent);
                 $rdContentPageCount = is_array($rdPages) ? count($rdPages) : 1;
-                $rdMultiPage = $rdContentPageCount > 1;
                 $rdHasVideo = !empty($lesson['video_url']);
                 // AI-chat visas bara om författaren explicit aktiverat den
                 // ai_chat_enabled OCH minst ett av styrfälten har innehåll.
                 $rdHasAiChat = !empty($lesson['ai_chat_enabled'])
                     && (!empty($lesson['ai_instruction']) || !empty($lesson['ai_prompt']));
+                // Ladda quiz tidigt så vi kan räkna in det när vi avgör multipage.
+                $rdIsInfoPage = ($lesson['lesson_type'] ?? 'lesson') === 'info_page';
+                $lessonQuestions = $rdIsInfoPage ? [] : getQuizQuestionsForLesson($lessonId);
+                $rdHasQuizCard = $rdIsInfoPage || !empty($lessonQuestions);
+                // Multipage aktiveras om totalt antal sidor > 1. Quiz/AI-chat/video
+                // räknas som egna sidor även när content bara har en sida — annars
+                // skulle quiz visas direkt under innehållet istället för på egen
+                // bläddringsbar sida.
+                $rdExtraPages = ($rdHasVideo ? 1 : 0)
+                              + ($rdHasAiChat ? 1 : 0)
+                              + ($rdHasQuizCard ? 1 : 0);
+                $rdMultiPage = ($rdContentPageCount + $rdExtraPages) > 1;
                 ?>
-                <?php if ($rdMultiPage): ?>
-                <div class="lesson-paginator" id="lessonPaginator" aria-label="Lektionssidor">
+                <?php if ($rdMultiPage):
+                    // Skicka över nästa-lektion-status och completed-flag till paginator-JS
+                    // så Next-knappen på sista sidan kan bli "Nästa lektion →" när
+                    // lektionen är klar.
+                    $rdNextLessonId = $nextLesson ? (int)$nextLesson['id'] : 0;
+                    $rdNextLessonTitle = $nextLesson ? (string)$nextLesson['title'] : '';
+                    $rdNextLessonAvailable = 0;
+                    if ($nextLesson) {
+                        $rdNextLessonAvailable = isLessonAvailableForUser(
+                            (int)$userId, (int)$nextLesson['id'], (int)$lesson['course_id']
+                        ) ? 1 : 0;
+                    }
+                    // Läs pass-mode direkt från lektionen — $lessonPassMode
+                    // definieras bara inom POST-handlern och är odefinierad vid
+                    // normal GET. Default är 'require_all_correct' enligt
+                    // schemat.
+                    $rdPassMode = ($lesson['quiz_pass_mode'] ?? 'require_all_correct') === 'any_result'
+                        ? 'any_result' : 'require_all_correct';
+                ?>
+                <div class="lesson-paginator"
+                     id="lessonPaginator"
+                     aria-label="Lektionssidor"
+                     data-lesson-completed="<?= $isCompleted ? '1' : '0' ?>"
+                     data-pass-mode="<?= htmlspecialchars($rdPassMode) ?>"
+                     data-preview-mode="<?= $isPreviewMode ? '1' : '0' ?>"
+                     data-next-id="<?= (int)$rdNextLessonId ?>"
+                     data-next-title="<?= htmlspecialchars($rdNextLessonTitle) ?>"
+                     data-next-available="<?= (int)$rdNextLessonAvailable ?>">
                 <?php endif; ?>
 
-                <!-- Lesson content card -->
-                <div class="card mb-4"<?php if (!empty($lesson['background_color'])): ?> style="background-color: <?= htmlspecialchars($lesson['background_color']) ?>"<?php endif; ?>>
+                <!-- Lesson content card. I multipage-läge gömmer paginator-JS
+                     hela kortet när active page inte är "content" — annars
+                     skulle lektionens titel + bild visas ovanför quiz/AI-chat/video. -->
+                <div class="card mb-4 lesson-content-card"<?php if (!empty($lesson['background_color'])): ?> style="background-color: <?= htmlspecialchars($lesson['background_color']) ?>"<?php endif; ?>>
                     <div class="card-body">
                         <!-- Flash message display -->
                         <?php if (isset($_SESSION['flash_message']) && $_SESSION['flash_type'] !== 'danger'): ?>
@@ -973,39 +1040,61 @@ function convertYoutubeUrl($url) {
                         <div id="infoPageContinueResult" class="mt-3" style="display: none;"></div>
                     </div>
                 </div>
-                <?php else: ?>
-                <!-- Quiz-sektion (flera frågor per lektion) -->
-                <?php
-                $lessonQuestions = getQuizQuestionsForLesson($lessonId);
-                ?>
-                <div class="card <?= $rdMultiPage ? 'lesson-page' : '' ?>" <?php if ($rdMultiPage): ?>data-page-kind="quiz" hidden role="region" aria-label="Quiz / Avsluta lektion"<?php endif; ?>>
-                    <div class="card-header">
-                        <i class="bi bi-question-circle me-2"></i> Quiz
-                        <?php if (count($lessonQuestions) > 0): ?>
-                        <span class="badge bg-secondary ms-2"><?= count($lessonQuestions) ?> <?= count($lessonQuestions) === 1 ? 'fråga' : 'frågor' ?></span>
-                        <?php endif; ?>
-                    </div>
-                    <div class="card-body">
-                        <?php if (!empty($lessonQuestions)): ?>
-                            <?php if (isset($_SESSION['flash_message']) && $_SESSION['flash_type'] === 'danger'): ?>
-                            <div class="alert alert-danger mb-3">
-                                <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                                <?= htmlspecialchars($_SESSION['flash_message']) ?>
-                            </div>
-                            <?php unset($_SESSION['flash_message'], $_SESSION['flash_type']); endif; ?>
+                <?php elseif (!empty($lessonQuestions)): ?>
+                <!-- Quiz-sektion. I multipage-läge renderas varje fråga på egen
+                     sida (data-page-kind="quiz") och submit-knappen på sista
+                     sidan submittar hela formen. I single-page-läge listas alla
+                     frågor i ett kort. -->
+                <?php if (isset($_SESSION['flash_message']) && $_SESSION['flash_type'] === 'danger'): ?>
+                <div class="alert alert-danger mb-3">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <?= htmlspecialchars($_SESSION['flash_message']) ?>
+                </div>
+                <?php unset($_SESSION['flash_message'], $_SESSION['flash_type']); endif; ?>
 
-                            <form method="post" class="quiz-form" id="quizForm" onsubmit="return false;">
-                                <input type="hidden" name="csrf_token" id="quizCsrfToken" value="<?= generateCsrfToken() ?>">
+                <form method="post" class="quiz-form" id="quizForm" onsubmit="return false;">
+                    <input type="hidden" name="csrf_token" id="quizCsrfToken" value="<?= generateCsrfToken() ?>">
+
+                    <?php if ($rdMultiPage): ?>
+                        <?php
+                        $rdQuizCount = count($lessonQuestions);
+                        foreach ($lessonQuestions as $idx => $q):
+                            $rdIsLastQuestion = ($idx === $rdQuizCount - 1);
+                        ?>
+                        <div class="card mb-4 lesson-page"
+                             data-page-kind="quiz"
+                             data-question-number="<?= $idx + 1 ?>"
+                             data-total-questions="<?= $rdQuizCount ?>"
+                             hidden
+                             role="region"
+                             aria-label="Quiz – fråga <?= $idx + 1 ?> av <?= $rdQuizCount ?>">
+                            <div class="card-header">
+                                <i class="bi bi-question-circle me-2"></i>
+                                Quiz <span class="badge bg-secondary ms-2">Fråga <?= $idx + 1 ?> av <?= $rdQuizCount ?></span>
+                            </div>
+                            <div class="card-body">
+                                <?= renderQuizQuestion($q, $idx + 1) ?>
+                                <?php if ($rdIsLastQuestion): ?>
+                                <div id="quizProgress" class="mt-3 small text-muted"></div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="bi bi-question-circle me-2"></i> Quiz
+                                <span class="badge bg-secondary ms-2"><?= count($lessonQuestions) ?> <?= count($lessonQuestions) === 1 ? 'fråga' : 'frågor' ?></span>
+                            </div>
+                            <div class="card-body">
                                 <?php foreach ($lessonQuestions as $idx => $q): ?>
                                     <?= renderQuizQuestion($q, $idx + 1) ?>
                                 <?php endforeach; ?>
-                            </form>
-                            <div id="quizProgress" class="mt-3 small text-muted"></div>
-                        <?php else: ?>
-                            <p class="text-muted mb-0">Inget quiz tillgängligt för denna lektion.</p>
-                        <?php endif; ?>
-                    </div>
-                </div>
+                                <div id="quizProgress" class="mt-3 small text-muted"></div>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+                </form>
                 <?php endif; /* info_page vs quiz */ ?>
 
                 <?php if ($rdMultiPage): ?>
@@ -1064,7 +1153,6 @@ function convertYoutubeUrl($url) {
                 <div class="py-5"></div>
             </main>
         </div>
-        <div class="col-lg-2 d-none d-lg-block"></div>
     </div>
 </div>
 
@@ -1277,6 +1365,12 @@ document.addEventListener('DOMContentLoaded', function() {
                             </div>
                         `;
 
+                        // Multipage: signalera till paginatorn att lektionen är klar
+                        // så Next-knappen längst ner blir "Nästa lektion →".
+                        if (typeof window.lessonPaginatorMarkCompleted === 'function') {
+                            window.lessonPaginatorMarkCompleted();
+                        }
+
                         // Visa konfetti vid framgång (bara i normalt läge)
                         setTimeout(() => {
                             try {
@@ -1399,6 +1493,118 @@ document.addEventListener('DOMContentLoaded', function() {
     if (total < 2) return;
     if (totalIndicator) totalIndicator.textContent = String(total);
 
+    // State från servern. Uppdateras dynamiskt när quiz/info-page slutförs.
+    var state = {
+        lessonCompleted: paginator.dataset.lessonCompleted === '1',
+        passMode: paginator.dataset.passMode || 'require_all_correct',
+        previewMode: paginator.dataset.previewMode === '1',
+        nextId: parseInt(paginator.dataset.nextId || '0', 10),
+        nextTitle: paginator.dataset.nextTitle || '',
+        nextAvailable: paginator.dataset.nextAvailable === '1'
+    };
+
+    // I preview-läget (admin/editor förhandsgranskar) ska alla gates släppas
+    // så hela lektionen går att bläddra igenom utan att svara på quiz.
+    if (state.previewMode) {
+        state.lessonCompleted = true;
+    }
+
+    // Publik API: gör state-uppdaterare tillgänglig för quiz-success / info-page
+    // continue så Next-knappen kan svänga om till "Nästa lektion" direkt utan reload.
+    window.lessonPaginatorMarkCompleted = function() {
+        state.lessonCompleted = true;
+        refreshNav();
+    };
+
+    function pageKind(idx) {
+        var p = pages[idx];
+        return p ? (p.getAttribute('data-page-kind') || 'content') : 'content';
+    }
+
+    function refreshNav() {
+        if (prevBtn) prevBtn.disabled = (current === 0);
+        if (!nextBtn) return;
+
+        var isLast = (current === total - 1);
+        var kind = pageKind(current);
+        var p = pages[current];
+        var qNum = p ? parseInt(p.getAttribute('data-question-number') || '0', 10) : 0;
+        var qTotal = p ? parseInt(p.getAttribute('data-total-questions') || '0', 10) : 0;
+        var isQuizPage = (kind === 'quiz' && qNum > 0);
+        var isLastQuizPage = (isQuizPage && qNum === qTotal);
+
+        // Reset attributes
+        nextBtn.classList.remove('is-finish', 'btn-go-next-lesson');
+        nextBtn.removeAttribute('data-go-next-lesson');
+        nextBtn.removeAttribute('data-submit-quiz');
+
+        if (state.lessonCompleted && isLast) {
+            // Lektionen är klar och vi är på sista sidan → "Nästa lektion"-flöde
+            if (state.nextId && state.nextAvailable) {
+                nextBtn.classList.add('btn-go-next-lesson');
+                nextBtn.setAttribute('data-go-next-lesson', '1');
+                nextBtn.disabled = false;
+                var title = state.nextTitle ? (': ' + state.nextTitle) : '';
+                nextBtn.innerHTML = '<span>Nästa lektion' + escapeHtmlSafe(title) + '</span> <i class="bi bi-arrow-right-circle-fill" aria-hidden="true"></i>';
+                nextBtn.setAttribute('aria-label', 'Gå till nästa lektion');
+            } else if (state.nextId && !state.nextAvailable) {
+                nextBtn.classList.add('is-finish');
+                nextBtn.disabled = true;
+                nextBtn.innerHTML = '<i class="bi bi-clock-history" aria-hidden="true"></i> <span>Nästa lektion låses upp senare</span>';
+                nextBtn.setAttribute('aria-label', 'Nästa lektion är inte upplåst ännu');
+            } else {
+                nextBtn.classList.add('is-finish');
+                nextBtn.disabled = true;
+                nextBtn.innerHTML = '<i class="bi bi-check-circle-fill" aria-hidden="true"></i> <span>Sista lektionen klar!</span>';
+                nextBtn.setAttribute('aria-label', 'Du har slutfört kursens sista lektion');
+            }
+        } else if (isQuizPage) {
+            // Quiz-fråga: Paginator-Next bläddrar bara — själva svaret tas
+            // emot av "Svara"-knappen INNE i frågan (quiz-client.js).
+            // Aktivera Next endast när frågan är godkänd (rätt vid
+            // require_all_correct, eller besvarad vid any_result).
+            var quizOk = isQuestionAnswerOk(p, state.passMode);
+            if (state.previewMode) quizOk = true; // preview: bläddra fritt
+            nextBtn.disabled = !quizOk;
+            if (isLastQuizPage) {
+                nextBtn.innerHTML = quizOk
+                    ? '<i class="bi bi-check-circle" aria-hidden="true"></i> <span>Klart — gå vidare</span>'
+                    : '<i class="bi bi-lock" aria-hidden="true"></i> <span>Svara på frågan för att gå vidare</span>';
+                nextBtn.setAttribute('aria-label', quizOk ? 'Klart — gå vidare' : 'Svara på frågan för att gå vidare');
+            } else {
+                nextBtn.innerHTML = quizOk
+                    ? '<span>Nästa fråga</span> <i class="bi bi-chevron-right" aria-hidden="true"></i>'
+                    : '<i class="bi bi-lock" aria-hidden="true"></i> <span>Svara på frågan för att gå vidare</span>';
+                nextBtn.setAttribute('aria-label', quizOk ? 'Nästa fråga' : 'Svara på frågan för att gå vidare');
+            }
+        } else if (kind === 'finish' && isLast) {
+            // Info-page finish-kort på sista sidan: vänta på "Fortsätt"-klick i kortet
+            nextBtn.classList.add('is-finish');
+            nextBtn.disabled = true;
+            nextBtn.innerHTML = '<i class="bi bi-lock" aria-hidden="true"></i> <span>Markera som klar för att gå vidare</span>';
+            nextBtn.setAttribute('aria-label', 'Markera sidan som klar');
+        } else if (isLast) {
+            // Sista sidan men lektionen är inte klar och ingen quiz/finish
+            nextBtn.classList.add('is-finish');
+            nextBtn.disabled = true;
+            nextBtn.innerHTML = '<i class="bi bi-check-circle" aria-hidden="true"></i> <span>Sista sidan</span>';
+            nextBtn.setAttribute('aria-label', 'Du är på sista sidan');
+        } else {
+            // Vanlig "Nästa"-knapp
+            nextBtn.disabled = false;
+            nextBtn.innerHTML = '<span>Nästa</span> <i class="bi bi-chevron-right" aria-hidden="true"></i>';
+            nextBtn.setAttribute('aria-label', 'Nästa sida');
+        }
+    }
+
+    function escapeHtmlSafe(s) {
+        var d = document.createElement('div');
+        d.textContent = String(s == null ? '' : s);
+        return d.innerHTML;
+    }
+
+    var contentCard = paginator.querySelector('.lesson-content-card');
+
     function show(idx) {
         if (idx < 0 || idx >= total) return;
         pages.forEach(function(p, i) {
@@ -1413,23 +1619,18 @@ document.addEventListener('DOMContentLoaded', function() {
         current = idx;
         if (indicator) indicator.textContent = String(idx + 1);
 
-        if (prevBtn) prevBtn.disabled = (idx === 0);
-
-        // Sista sidan: gör Nästa till "Avsluta"-look (bara visuellt — själva
-        // klar-markeringen sköts av infoPageContinueBtn / quiz-svar, oförändrat)
-        if (nextBtn) {
-            if (idx === total - 1) {
-                nextBtn.classList.add('is-finish');
-                nextBtn.disabled = true;
-                nextBtn.innerHTML = '<i class="bi bi-check-circle" aria-hidden="true"></i> <span>Sista sidan</span>';
-                nextBtn.setAttribute('aria-label', 'Du är på sista sidan');
+        // Göm hela lesson content card (titel + bild + content) när active
+        // page är något annat än content — annars skulle quiz/AI-chat/video
+        // få lektionens stora bild ovanför sig.
+        if (contentCard) {
+            if (pageKind(idx) === 'content') {
+                contentCard.removeAttribute('hidden');
             } else {
-                nextBtn.classList.remove('is-finish');
-                nextBtn.disabled = false;
-                nextBtn.innerHTML = '<span>Nästa</span> <i class="bi bi-chevron-right" aria-hidden="true"></i>';
-                nextBtn.setAttribute('aria-label', 'Nästa sida');
+                contentCard.setAttribute('hidden', '');
             }
         }
+
+        refreshNav();
 
         // Scrolla till toppen av paginatorn så ny sida börjar synligt
         try {
@@ -1441,7 +1642,93 @@ document.addEventListener('DOMContentLoaded', function() {
         if (current > 0) show(current - 1);
     });
 
+    // Spår av rätt-svarade frågor (per question-id). Fungerar oberoende av
+    // DOM-state så vi inte tappar info om en klass av nån anledning inte
+    // appliceras. Initieras från redan-satta border-success/danger-klasser
+    // ifall sidan reloadats med svar i session.
+    var quizAnswered = {};
+
+    function refreshQuizAnsweredFromDom() {
+        paginator.querySelectorAll('.lesson-page[data-page-kind="quiz"] .quiz-question').forEach(function(q) {
+            var qid = q.getAttribute('data-question-id');
+            if (!qid) return;
+            if (q.classList.contains('border-success')) {
+                quizAnswered[qid] = 'correct';
+            } else if (q.classList.contains('border-danger')) {
+                quizAnswered[qid] = 'wrong';
+            }
+        });
+    }
+    refreshQuizAnsweredFromDom();
+
+    // Avgör om aktuell quiz-fråga "går vidare-OK".
+    function isQuestionAnswerOk(card, passMode) {
+        if (!card) return false;
+        var q = card.querySelector('.quiz-question');
+        if (!q) return false;
+        // Direkt DOM-check (snabb path)
+        if (q.classList.contains('border-success')) return true;
+        if (passMode === 'any_result' && q.classList.contains('border-danger')) return true;
+        // Fallback via spår
+        var qid = q.getAttribute('data-question-id');
+        if (qid) {
+            if (quizAnswered[qid] === 'correct') return true;
+            if (passMode === 'any_result' && quizAnswered[qid] === 'wrong') return true;
+        }
+        return false;
+    }
+
+    // Lyssna på quiz-svar för att uppdatera Next-knappen direkt när
+    // användaren klickar "Svara" inom frågan. quiz-client.js skickar event
+    // 'quiz-question-graded' efter varje server-bedömning.
+    document.addEventListener('quiz-question-graded', function(ev) {
+        var d = (ev && ev.detail) || {};
+        if (d.questionId) {
+            quizAnswered[d.questionId] = d.correct ? 'correct' : 'wrong';
+        }
+        if (d.allDone) {
+            state.lessonCompleted = true;
+            if (d.nextLesson) {
+                state.nextId = parseInt(d.nextLesson.id, 10) || 0;
+                state.nextTitle = d.nextLesson.title || '';
+                state.nextAvailable = !!d.nextLesson.available;
+            }
+        }
+        refreshNav();
+    });
+
+    // Backup: observera class-ändringar på quiz-questions (om quiz-client.js
+    // skulle ändra klasser utan att dispatcha event av någon anledning).
+    if (typeof MutationObserver !== 'undefined') {
+        var quizObserver = new MutationObserver(function(mutations) {
+            var changed = false;
+            mutations.forEach(function(m) {
+                if (m.type === 'attributes' && m.attributeName === 'class') {
+                    var el = m.target;
+                    var qid = el.getAttribute && el.getAttribute('data-question-id');
+                    if (!qid) return;
+                    if (el.classList.contains('border-success')) {
+                        if (quizAnswered[qid] !== 'correct') { quizAnswered[qid] = 'correct'; changed = true; }
+                    } else if (el.classList.contains('border-danger')) {
+                        if (quizAnswered[qid] !== 'wrong') { quizAnswered[qid] = 'wrong'; changed = true; }
+                    }
+                }
+            });
+            if (changed) refreshNav();
+        });
+        paginator.querySelectorAll('.lesson-page[data-page-kind="quiz"] .quiz-question').forEach(function(q) {
+            quizObserver.observe(q, { attributes: true, attributeFilter: ['class'] });
+        });
+    }
+
     if (nextBtn) nextBtn.addEventListener('click', function() {
+        // "Nästa lektion" → navigera direkt. Preview behåller &preview=1.
+        if (nextBtn.getAttribute('data-go-next-lesson') === '1' && state.nextId) {
+            var url = 'lesson.php?id=' + encodeURIComponent(state.nextId);
+            if (state.previewMode) url += '&preview=1';
+            window.location.href = url;
+            return;
+        }
         if (current < total - 1) show(current + 1);
     });
 
@@ -1451,7 +1738,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (inField || e.target.isContentEditable) return;
         if (e.key === 'ArrowLeft' && current > 0) {
             show(current - 1);
-        } else if (e.key === 'ArrowRight' && current < total - 1) {
+        } else if (e.key === 'ArrowRight' && !nextBtn.disabled && current < total - 1) {
             show(current + 1);
         }
     });

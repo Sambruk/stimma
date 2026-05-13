@@ -380,7 +380,14 @@ if ($rdOrgInitials === '') $rdOrgInitials = mb_strtoupper(mb_substr($rdOrgName, 
                 <div class="kv"><span class="k">Lektioner klara</span><span class="v"><?= $lessonsCompleted ?></span></div>
                 <div class="kv"><span class="k">Längsta streak</span><span class="v"><?= $longestStreak ?> dagar</span></div>
                 <div class="kv"><span class="k">Totalt XP</span><span class="v"><?= number_format($xp) ?></span></div>
-                <div class="kv"><span class="k">Medlem sedan</span><span class="v"><?= date('Y-m-d', strtotime($user['created_at'])) ?></span></div>
+                <?php
+                    // Äldre konton (skapade innan created_at-kolumnen lades till)
+                    // kan ha NULL — visa "—" istället för att krascha eller skriva 1970-01-01.
+                    $memberSince = !empty($user['created_at'])
+                        ? date('Y-m-d', strtotime($user['created_at']))
+                        : '—';
+                ?>
+                <div class="kv"><span class="k">Medlem sedan</span><span class="v"><?= htmlspecialchars($memberSince) ?></span></div>
             </div>
         </div>
     </div>
