@@ -27,9 +27,11 @@ if (!isLoggedIn()) {
 }
 
 // Kontrollera om användaren har admin- eller redaktörsrättigheter
-$user = queryOne("SELECT is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE email = ?", [$_SESSION['user_email']]);
+$user = queryOne("SELECT is_admin, is_editor, role FROM " . DB_DATABASE . ".users WHERE email = ?", [$_SESSION['user_email']]);
 $isAdmin = $user && $user['is_admin'] == 1;
 $isEditor = $user && $user['is_editor'] == 1;
+$isSuperAdmin = $user && ($user['role'] ?? '') === 'super_admin';
+$orgScopeDomains = getOrgScopeDomains($_SESSION['user_email']);
 
 if (!$isAdmin && !$isEditor) {
     $_SESSION['message'] = 'Du har inte behörighet att radera kurser.';
@@ -66,15 +68,14 @@ if (!$course) {
     exit;
 }
 
-// Kontrollera om användaren har behörighet att radera kursen
-if (!$isAdmin) {
-    $isSpecificEditor = queryOne("SELECT 1 FROM " . DB_DATABASE . ".course_editors WHERE course_id = ? AND email = ?", [$courseId, $_SESSION['user_email']]);
-    if (!$isSpecificEditor) {
-        $_SESSION['message'] = 'Du har inte behörighet att radera denna kurs.';
-        $_SESSION['message_type'] = 'danger';
-        header('Location: courses.php');
-        exit;
-    }
+// Behörighetskontroll via userCanModifyCourse — täcker super_admin,
+// org-scopade admins och kurs-specifika redaktörer. Fixar IDOR-buggen
+// där alla admins (oavsett org) kunde radera vilken kurs som helst.
+if (!userCanModifyCourse($course)) {
+    $_SESSION['message'] = 'Du har inte behörighet att radera denna kurs.';
+    $_SESSION['message_type'] = 'danger';
+    header('Location: courses.php');
+    exit;
 }
 
 // Radera kursen och alla relaterade data

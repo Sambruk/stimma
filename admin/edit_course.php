@@ -44,16 +44,15 @@ if (isset($_GET['id'])) {
         exit;
     }
 
-    // Kontrollera om användaren har behörighet att redigera kursen
-    if (!$isAdmin) {
-        // Kontrollera om användaren är redaktör för denna specifika kurs
-        $isEditor = queryOne("SELECT 1 FROM " . DB_DATABASE . ".course_editors WHERE course_id = ? AND email = ?", [$courseId, $userEmail]);
-        if (!$isEditor) {
-            $_SESSION['message'] = 'Du har inte behörighet att redigera denna kurs.';
-            $_SESSION['message_type'] = 'danger';
-            header('Location: courses.php');
-            exit;
-        }
+    // Behörighetskontroll via userCanModifyCourse — täcker super_admin,
+    // org-scopade admins och kurs-specifika redaktörer. Fixar IDOR-buggen
+    // där alla admins (oavsett org) kunde editera vilken kurs som helst
+    // genom att manuellt ändra ?id= i URL:en.
+    if (!userCanModifyCourse($course)) {
+        $_SESSION['message'] = 'Du har inte behörighet att redigera denna kurs.';
+        $_SESSION['message_type'] = 'danger';
+        header('Location: courses.php');
+        exit;
     }
 
     // Hämta kursredaktörer

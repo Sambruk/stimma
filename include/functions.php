@@ -1064,6 +1064,52 @@ function getUserDomain($email) {
     return isset($parts[1]) ? strtolower($parts[1]) : '';
 }
 
+/**
+ * Avgör om inloggad användare får modifiera en kurs (edit/delete/manage editors).
+ *
+ * Behörighetsmodell (efter IDOR-fix 2026-05-13):
+ *   - super_admin: alla kurser
+ *   - is_admin:    bara kurser i sin egen org-scope (orgens domäner)
+ *   - course_editor: bara den specifika kursen (cross-org-delegering)
+ *   - annars: nej
+ *
+ * Använd istället för det gamla mönstret `if (!$isAdmin) { ... }` som
+ * släppte igenom alla admins oavsett vilken org kursen tillhörde.
+ *
+ * @param array $course  Rad från courses-tabellen (måste innehålla 'id' och 'organization_domain')
+ * @return bool
+ */
+function userCanModifyCourse(array $course) {
+    $userEmail = $_SESSION['user_email'] ?? null;
+    if (!$userEmail) return false;
+
+    $u = queryOne(
+        "SELECT is_admin, is_editor, role FROM " . DB_DATABASE . ".users WHERE email = ?",
+        [$userEmail]
+    );
+    if (!$u) return false;
+
+    if (($u['role'] ?? '') === 'super_admin') return true;
+
+    if (!empty($u['is_admin'])) {
+        $org = $course['organization_domain'] ?? '';
+        if ($org !== '') {
+            $scope = getOrgScopeDomains($userEmail);
+            if (in_array($org, $scope, true)) return true;
+        }
+    }
+
+    if (!empty($course['id'])) {
+        $isCE = queryOne(
+            "SELECT 1 FROM " . DB_DATABASE . ".course_editors WHERE course_id = ? AND email = ?",
+            [(int)$course['id'], $userEmail]
+        );
+        if ($isCE) return true;
+    }
+
+    return false;
+}
+
 // =============================================================================
 // Organisationsgruppering (migration 023)
 //

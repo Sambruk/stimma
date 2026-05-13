@@ -28,15 +28,21 @@ $courseId = (int)$_POST['course_id'];
 $email = $_POST['email'];
 $userEmail = $_SESSION['user_email'];
 
-// Kontrollera om användaren har behörighet att ta bort redaktörer
-$isAdmin = isAdmin($userEmail);
-if (!$isAdmin) {
-    // Kontrollera om användaren är redaktör för kursen
-    $isEditor = queryOne("SELECT 1 FROM " . DB_DATABASE . ".course_editors WHERE course_id = ? AND email = ?", [$courseId, $userEmail]);
-    if (!$isEditor) {
-        echo json_encode(['success' => false, 'message' => 'Du har inte behörighet att ta bort redaktörer från denna kurs.']);
-        exit;
-    }
+// Hämta kursen (måste finnas + ge organization_domain till userCanModifyCourse)
+$course = queryOne(
+    "SELECT id, organization_domain FROM " . DB_DATABASE . ".courses WHERE id = ?",
+    [$courseId]
+);
+if (!$course) {
+    echo json_encode(['success' => false, 'message' => 'Kursen hittades inte.']);
+    exit;
+}
+
+// IDOR-fixad behörighetskontroll: admins får bara modifiera kurser i sin
+// egen org. Tidigare släpptes alla admins igenom oavsett kursens org.
+if (!userCanModifyCourse($course)) {
+    echo json_encode(['success' => false, 'message' => 'Du har inte behörighet att ta bort redaktörer från denna kurs.']);
+    exit;
 }
 
 try {

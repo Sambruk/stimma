@@ -43,7 +43,10 @@ if (($page['lesson_type'] ?? 'lesson') !== 'info_page') {
     exit;
 }
 
-// Behörighet: admin eller kursens författare/redaktör
+// Behörighet via userCanModifyCourse (täcker super_admin, org-scopade admins
+// och kurs-specifika redaktörer). Plus extra: kursens författare får alltid
+// modifiera. Tidigare släpptes alla is_admin igenom oavsett kursens org —
+// klassisk IDOR.
 $course = queryOne(
     "SELECT id, author_id, organization_domain FROM " . DB_DATABASE . ".courses WHERE id = ?",
     [$page['course_id']]
@@ -52,16 +55,10 @@ if (!$course) {
     echo json_encode(['success' => false, 'message' => 'Kursen hittades inte.']);
     exit;
 }
-if (!$isAdmin) {
-    $isAuthor = ((int)$course['author_id'] === (int)$_SESSION['user_id']);
-    $isCourseEditor = queryOne(
-        "SELECT 1 FROM " . DB_DATABASE . ".course_editors WHERE course_id = ? AND email = ?",
-        [$course['id'], $_SESSION['user_email']]
-    );
-    if (!$isAuthor && !$isCourseEditor) {
-        echo json_encode(['success' => false, 'message' => 'Ingen behörighet till kursen.']);
-        exit;
-    }
+$isAuthor = ((int)$course['author_id'] === (int)$_SESSION['user_id']);
+if (!$isAuthor && !userCanModifyCourse($course)) {
+    echo json_encode(['success' => false, 'message' => 'Ingen behörighet till kursen.']);
+    exit;
 }
 
 // Hitta angränsande lektioner (med typ = 'lesson') i sort_order

@@ -27,19 +27,21 @@ if (!isset($_POST['course_id']) || !isset($_POST['email'])) {
 $courseId = (int)$_POST['course_id'];
 $newEditorEmail = trim($_POST['email']);
 
-// Kontrollera om användaren har behörighet att lägga till redaktörer
-if (!$isAdmin) {
-    $isEditor = queryOne("SELECT 1 FROM " . DB_DATABASE . ".course_editors WHERE course_id = ? AND email = ?", [$courseId, $userEmail]);
-    if (!$isEditor) {
-        echo json_encode(['success' => false, 'message' => 'Du har inte behörighet att lägga till redaktörer för denna kurs.']);
-        exit;
-    }
-}
-
-// Kontrollera om kursen finns
-$course = queryOne("SELECT 1 FROM " . DB_DATABASE . ".courses WHERE id = ?", [$courseId]);
+// Kontrollera om kursen finns (måste hämtas före behörighetscheck så att
+// userCanModifyCourse kan kolla organization_domain).
+$course = queryOne(
+    "SELECT id, organization_domain FROM " . DB_DATABASE . ".courses WHERE id = ?",
+    [$courseId]
+);
 if (!$course) {
     echo json_encode(['success' => false, 'message' => 'Kursen hittades inte.']);
+    exit;
+}
+
+// IDOR-fixad behörighetskontroll: admins får bara modifiera kurser i sin
+// egen org. Tidigare släpptes alla admins igenom oavsett kursens org.
+if (!userCanModifyCourse($course)) {
+    echo json_encode(['success' => false, 'message' => 'Du har inte behörighet att lägga till redaktörer för denna kurs.']);
     exit;
 }
 
