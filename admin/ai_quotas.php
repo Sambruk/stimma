@@ -11,6 +11,7 @@ require_once '../include/database.php';
 require_once '../include/functions.php';
 require_once '../include/auth.php';
 require_once '../include/ai_quota.php';
+require_once '../include/token_balance.php';
 require_once 'include/auth_check.php';
 
 $currentUser = queryOne("SELECT * FROM " . DB_DATABASE . ".users WHERE email = ?", [$_SESSION['user_email']]);
@@ -102,6 +103,10 @@ foreach ($existingQuotas as $i => $q) {
         ? (int)floor(($usage['total_tokens'] / $q['monthly_token_quota']) * 100)
         : 0;
     $existingQuotas[$i]['_label'] = $q['org_name'] ?: $q['domain'];
+    // Saldo finns bara per organisation (inte per ren domän).
+    $existingQuotas[$i]['_balance'] = $q['organization_id']
+        ? getOrgTokenBalance((int)$q['organization_id'])
+        : null;
 }
 
 $availableModels = listAvailableAiModels();
@@ -109,7 +114,7 @@ $currentModels = [
     'course_gen' => getModelForFeature('course_gen', 'gpt-4o'),
     'lesson_gen' => getModelForFeature('lesson_gen', 'gpt-4o'),
     'chat'       => getModelForFeature('chat',       'gpt-4o-mini'),
-    'image'      => getModelForFeature('image',      'dall-e-3'),
+    'image'      => getModelForFeature('image',      'gpt-image-1-mini'),
 ];
 
 $page_title = 'AI-kvoter & modellval';
@@ -152,22 +157,27 @@ require_once 'include/header.php';
 </div>
 
 <div class="card mb-4">
-    <div class="card-header"><strong>Befintliga kvoter</strong></div>
+    <div class="card-header">
+        <strong>Befintliga kvoter</strong>
+        <span class="text-muted small ms-2">
+            Saldo-läge: månatlig gratisbas fylls på 1:a varje månad och adderas till organisationens saldo.
+            AI-anrop blockeras först när <em>saldot</em> går till 0.
+        </span>
+    </div>
     <div class="table-responsive">
         <table class="table table-sm align-middle mb-0">
             <thead><tr>
                 <th>Scope</th>
-                <th class="text-end">Token-kvot</th>
-                <th class="text-end">Använt (denna månad)</th>
-                <th>%</th>
+                <th class="text-end">Aktuellt saldo</th>
+                <th class="text-end">Månatlig gratisbas</th>
+                <th class="text-end">Förbrukat (denna månad)</th>
                 <th>Larmtröskel</th>
-                <th>Beteende</th>
+                <th>Vid tomt saldo</th>
                 <th>Senast ändrad</th>
                 <th></th>
             </tr></thead>
             <tbody>
                 <?php foreach ((array)$existingQuotas as $q): ?>
-                    <?php $color = $q['_pct'] >= 100 ? 'bg-danger' : ($q['_pct'] >= 80 ? 'bg-warning' : 'bg-success'); ?>
                     <tr>
                         <td>
                             <strong><?= htmlspecialchars($q['_label']) ?></strong>
@@ -175,21 +185,27 @@ require_once 'include/header.php';
                                 <span class="badge bg-light text-muted ms-1">domän</span>
                             <?php endif; ?>
                         </td>
+                        <td class="text-end">
+                            <?php if ($q['_balance'] === null): ?>
+                                <span class="text-muted small">— (domän)</span>
+                            <?php else: ?>
+                                <?php
+                                    $bal = (int)$q['_balance'];
+                                    $low = (int)$q['monthly_token_quota'] > 0
+                                        && $bal < ((int)$q['monthly_token_quota'] * (int)$q['alert_threshold_pct'] / 100);
+                                    $cls = $bal <= 0 ? 'text-danger fw-bold' : ($low ? 'text-warning fw-semibold' : '');
+                                ?>
+                                <span class="<?= $cls ?>"><?= number_format($bal, 0, ',', ' ') ?></span>
+                            <?php endif; ?>
+                        </td>
                         <td class="text-end"><?= number_format($q['monthly_token_quota'], 0, ',', ' ') ?></td>
                         <td class="text-end"><?= number_format($q['_used'], 0, ',', ' ') ?></td>
-                        <td style="min-width:140px;">
-                            <div class="progress" style="height: 16px;">
-                                <div class="progress-bar <?= $color ?>" style="width: <?= min(100, $q['_pct']) ?>%;">
-                                    <?= $q['_pct'] ?>%
-                                </div>
-                            </div>
-                        </td>
                         <td><?= (int)$q['alert_threshold_pct'] ?>%</td>
                         <td>
                             <?php if ($q['behavior'] === 'block'): ?>
-                                <span class="badge bg-danger">block</span>
+                                <span class="badge bg-secondary" title="Inställning: AI-anrop blockeras när saldot når 0">Blockera anrop</span>
                             <?php else: ?>
-                                <span class="badge bg-warning text-dark">warn</span>
+                                <span class="badge bg-light text-dark border" title="Inställning: bara varning vid 0 saldo, anrop tillåts">Endast varna</span>
                             <?php endif; ?>
                         </td>
                         <td class="text-muted small">
@@ -220,7 +236,7 @@ require_once 'include/header.php';
                     </tr>
                 <?php endforeach; ?>
                 <?php if (empty($existingQuotas)): ?>
-                    <tr><td colspan="8" class="text-center text-muted py-3">Inga anpassade kvoter — alla scopes använder standardvärdet (<?= number_format(AI_QUOTA_DEFAULT_TOKENS, 0, ',', ' ') ?> tokens/månad).</td></tr>
+                    <tr><td colspan="8" class="text-center text-muted py-3">Inga anpassade kvoter — alla scopes använder standardvärdet (<?= number_format(AI_QUOTA_DEFAULT_TOKENS, 0, ',', ' ') ?> tokens/månad gratisbas).</td></tr>
                 <?php endif; ?>
             </tbody>
         </table>
@@ -263,21 +279,22 @@ require_once 'include/header.php';
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label">Token-kvot per månad</label>
+                    <label class="form-label">Månatlig gratisbas (tokens)</label>
                     <input type="number" name="monthly_token_quota" id="qm_tokens" class="form-control" min="0" step="10000" value="<?= (int)AI_QUOTA_DEFAULT_TOKENS ?>" required>
-                    <small class="text-muted">Räknas som summan prompt + completion tokens denna kalendermånad.</small>
+                    <small class="text-muted">Detta antal tokens läggs till saldot den 1:a varje månad. Adderas till ev. köpta paket.</small>
                 </div>
 
                 <div class="row g-3 mb-3">
                     <div class="col-6">
                         <label class="form-label">Larmtröskel (%)</label>
                         <input type="number" name="alert_threshold_pct" id="qm_threshold" class="form-control" min="1" max="99" value="80">
+                        <small class="text-muted">Banner visas när saldot understiger denna andel av gratisbasen.</small>
                     </div>
                     <div class="col-6">
-                        <label class="form-label">Beteende vid 100%</label>
+                        <label class="form-label">Vid tomt saldo</label>
                         <select name="behavior" id="qm_behavior" class="form-select">
-                            <option value="block">block — stoppa nya AI-anrop</option>
-                            <option value="warn">warn — bara logga (anrop går igenom)</option>
+                            <option value="block">Blockera anrop när saldo = 0</option>
+                            <option value="warn">Endast varna (anrop tillåts ändå)</option>
                         </select>
                     </div>
                 </div>

@@ -146,6 +146,15 @@ VIKTIGT FÖR LEKTIONSINNEHÅLL:
 - Gör innehållet engagerande och lätt att förstå
 - Avsluta varje lektion med en kort sammanfattning eller nyckelinsikter
 
+SIDBRYTNING (obligatoriskt):
+- Dela ALLTID upp varje lektion i flera bläddringsbara sidor istället för en
+  lång scroll-sida. Sätt in markören <!-- pagebreak --> mellan logiska
+  sektioner (mellan h3-rubriker och före sammanfattningen).
+- Skriv markören EXAKT som <!-- pagebreak --> (HTML-kommentar). Mål: 4-7
+  sidor per lektion, ca 80-180 ord per sida så ingen scroll behövs.
+- Lägg INTE sidbrytning inuti en lesson-intro/tip/info/example/warning/summary
+  -box — bryt mellan dem, inte inom dem.
+
 VIKTIGT FÖR QUIZ:
 För varje lektion ska du skapa ett quiz. VARIERA frågetyperna mellan lektionerna:
 - single_choice: Enkelval med 3-5 svarsalternativ (ett rätt svar)
@@ -514,7 +523,22 @@ KRAV på varje lektion:
 3. Minst en lesson-tip ELLER lesson-info ruta
 4. Minst ett lesson-example
 5. Avsluta med lesson-summary
-6. Använd <strong> för nyckelord, <ul>/<li> för listor';
+6. Använd <strong> för nyckelord, <ul>/<li> för listor
+
+SIDBRYTNING (obligatoriskt — flera sidor istället för en lång scroll):
+Dela ALLTID upp lektionen i flera bläddringsbara sidor. Varje sida ska få
+plats i webbläsarens viewport UTAN att deltagaren behöver scrolla.
+
+Sätt in markören <!-- pagebreak --> mellan logiska sektioner. Skriv den
+EXAKT så (HTML-kommentar med ett mellanslag på vardera sida om ordet
+pagebreak, inga andra tecken). Riktlinjer:
+  - Sida 1: lesson-intro + översikt
+  - Mellan varje h3-huvudsektion: <!-- pagebreak -->
+  - Före lesson-summary: <!-- pagebreak --> (sammanfattningen på sista sidan)
+  - Varje sida ska innehålla ungefär 80-180 ord
+  - Mål: 4-7 sidor totalt per lektion
+Lägg INTE sidbrytning INUTI en lesson-intro/tip/info/example/warning/summary-
+box — bryt mellan boxarna, inte inom dem.';
 
     // Appendera adminens kompletterande instruktioner även till fas 2.
     if ($adminSupplement !== '') {
@@ -925,93 +949,12 @@ function searchImage($query) {
 }
 
 /**
- * Generate AI image using DALL-E
- */
-function generateAIImage($lessonTitle, $courseName) {
-    // Use defined constant from config.php
-    $apiKey = defined('AI_API_KEY') ? AI_API_KEY : '';
-    $imageApiServer = 'https://api.openai.com/v1/images/generations';
-
-    if (empty($apiKey)) {
-        echo "  - No API key for image generation\n";
-        return null;
-    }
-
-    $prompt = "Educational illustration for a lesson about '{$lessonTitle}' in a course about '{$courseName}'. Clean, professional, minimalist style suitable for e-learning. No text in image.";
-
-    require_once __DIR__ . '/../../include/ai_quota.php';
-    $imageModel = getModelForFeature('image', 'dall-e-3');
-    $data = [
-        'model' => $imageModel,
-        'prompt' => $prompt,
-        'n' => 1,
-        'size' => '1024x1024',
-        'quality' => 'standard'
-    ];
-
-    echo "  - Generating DALL-E image for: {$lessonTitle}\n";
-
-    $ch = curl_init($imageApiServer);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json',
-        'Authorization: Bearer ' . $apiKey
-    ]);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 120);
-
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curlError = curl_error($ch);
-    curl_close($ch);
-
-    if ($curlError) {
-        echo "  - cURL error: {$curlError}\n";
-        return null;
-    }
-
-    if ($httpCode !== 200) {
-        $errorData = json_decode($response, true);
-        $errorMsg = $errorData['error']['message'] ?? 'Unknown error';
-        echo "  - DALL-E API error ({$httpCode}): {$errorMsg}\n";
-        return null;
-    }
-
-    $result = json_decode($response, true);
-
-    if (isset($result['data'][0]['url'])) {
-        // Download and save image locally
-        $imageUrl = $result['data'][0]['url'];
-        $imageContent = @file_get_contents($imageUrl);
-
-        if ($imageContent) {
-            $uploadDir = __DIR__ . '/../../upload/';
-
-            // Ensure upload directory exists
-            if (!is_dir($uploadDir)) {
-                mkdir($uploadDir, 0755, true);
-            }
-
-            $fileName = 'ai_' . uniqid() . '.png';
-            $filePath = $uploadDir . $fileName;
-
-            if (file_put_contents($filePath, $imageContent)) {
-                echo "  - Image saved: {$fileName}\n";
-                return $fileName;
-            } else {
-                echo "  - Failed to save image to: {$filePath}\n";
-            }
-        } else {
-            echo "  - Failed to download image from URL\n";
-        }
-    }
-
-    return null;
-}
-
-/**
- * Generate AI image using DALL-E with custom prompt and size
+ * Generate AI image using DALL-E with custom prompt and size.
+ *
+ * Tidigare fanns även en parameterlös variant `generateAIImage($lessonTitle,
+ * $courseName)` här. Den hade ingen kvot- eller usage-loggning och togs bort
+ * 2026-05-13 efter att utredning visat att den riskerade bli en framtida
+ * billing-bypass. All bildgenerering går nu via funktionen nedan.
  */
 function generateAIImageWithPrompt($prompt, $size = '1024x1024', array $context = []) {
     $apiKey = defined('AI_API_KEY') ? AI_API_KEY : '';
@@ -1023,15 +966,44 @@ function generateAIImageWithPrompt($prompt, $size = '1024x1024', array $context 
     }
 
     require_once __DIR__ . '/../../include/ai_quota.php';
-    if (!empty($context['user_email'])) {
-        try {
-            enforceAiQuotaForEmail($context['user_email']);
-        } catch (Exception $e) {
-            echo "  - AI quota exceeded, skipping image: {$e->getMessage()}\n";
-            logAiUsage($context, [], getModelForFeature('image', 'dall-e-3'), 'blocked');
-            return null;
-        }
+    require_once __DIR__ . '/../../include/ai_image_helper.php';
+
+    // Bestäm vilken e-post som ska scopa kvoten — fallback-kedja:
+    //   1. Explicit context['user_email']  (vanligt i cron)
+    //   2. Session-användaren (om vi körs från web-request)
+    //   3. Hämta från ai_course_jobs-raden om context['job_id'] finns
+    // Om INGEN e-post kan resolvas blockerar vi anropet helt — vi vägrar
+    // generera bilder utan ett spårbart scope (gammal logik tillät detta
+    // tyst, vilket var en effektiv billing-bypass).
+    $quotaEmail = $context['user_email'] ?? ($_SESSION['user_email'] ?? null);
+    if (!$quotaEmail && !empty($context['job_id'])) {
+        $jobRow = queryOne(
+            "SELECT u.email FROM " . DB_DATABASE . ".ai_course_jobs j
+              JOIN " . DB_DATABASE . ".users u ON u.id = j.user_id
+             WHERE j.id = ?",
+            [(int)$context['job_id']]
+        );
+        $quotaEmail = $jobRow['email'] ?? null;
+        if ($quotaEmail) $context['user_email'] = $quotaEmail;
     }
+
+    $imageModelForLog = getModelForFeature('image', 'gpt-image-1-mini');
+
+    if (!$quotaEmail) {
+        echo "  - Image generation refused: no user_email in context (job_id="
+            . ($context['job_id'] ?? '?') . ")\n";
+        logAiUsage($context, [], $imageModelForLog, 'blocked');
+        return null;
+    }
+
+    try {
+        enforceAiQuotaForEmail($quotaEmail);
+    } catch (Exception $e) {
+        echo "  - AI quota exceeded, skipping image: {$e->getMessage()}\n";
+        logAiUsage($context, [], $imageModelForLog, 'blocked');
+        return null;
+    }
+
     $context['feature'] = $context['feature'] ?? 'image';
     $context['is_image'] = true;
 
@@ -1041,16 +1013,10 @@ function generateAIImageWithPrompt($prompt, $size = '1024x1024', array $context 
         $size = '1024x1024';
     }
 
-    $imageModel = getModelForFeature('image', 'dall-e-3');
-    $data = [
-        'model' => $imageModel,
-        'prompt' => $prompt,
-        'n' => 1,
-        'size' => $size,
-        'quality' => 'standard'
-    ];
+    $imageModel = getModelForFeature('image', 'gpt-image-1-mini');
+    $data = aiImageBuildPayload($imageModel, $prompt, $size);
 
-    echo "  - Generating DALL-E image ({$size}): " . substr($prompt, 0, 80) . "...\n";
+    echo "  - Generating image ({$imageModel}, {$size}): " . substr($prompt, 0, 80) . "...\n";
 
     $ch = curl_init($imageApiServer);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -1075,38 +1041,32 @@ function generateAIImageWithPrompt($prompt, $size = '1024x1024', array $context 
     if ($httpCode !== 200) {
         $errorData = json_decode($response, true);
         $errorMsg = $errorData['error']['message'] ?? 'Unknown error';
-        echo "  - DALL-E API error ({$httpCode}): {$errorMsg}\n";
+        echo "  - Image API error ({$httpCode}): {$errorMsg}\n";
+        logAiUsage($context, [], $imageModel ?? 'gpt-image-1-mini', 'error');
         return null;
     }
 
     $result = json_decode($response, true);
+    $imageContent = aiImageExtractBytes(is_array($result) ? $result : []);
 
-    if (isset($result['data'][0]['url'])) {
-        $imageUrl = $result['data'][0]['url'];
-        $imageContent = @file_get_contents($imageUrl);
-
-        if ($imageContent) {
-            $uploadDir = __DIR__ . '/../../upload/';
-            if (!is_dir($uploadDir)) {
-                mkdir($uploadDir, 0755, true);
-            }
-
-            $fileName = 'ai_' . uniqid() . '.png';
-            $filePath = $uploadDir . $fileName;
-
-            if (file_put_contents($filePath, $imageContent)) {
-                echo "  - Image saved: {$fileName}\n";
-                logAiUsage($context, [], $imageModel ?? 'dall-e-3', 'ok');
-                return $fileName;
-            } else {
-                echo "  - Failed to save image to: {$filePath}\n";
-            }
-        } else {
-            echo "  - Failed to download image from URL\n";
+    if ($imageContent) {
+        $uploadDir = __DIR__ . '/../../upload/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true);
         }
+        $fileName = 'ai_' . uniqid() . '.png';
+        $filePath = $uploadDir . $fileName;
+        if (file_put_contents($filePath, $imageContent)) {
+            echo "  - Image saved: {$fileName}\n";
+            logAiUsage($context, [], $imageModel ?? 'gpt-image-1-mini', 'ok');
+            return $fileName;
+        }
+        echo "  - Failed to save image to: {$filePath}\n";
+    } else {
+        echo "  - No image bytes in API response\n";
     }
 
-    logAiUsage($context, [], $imageModel ?? 'dall-e-3', 'error');
+    logAiUsage($context, [], $imageModel ?? 'gpt-image-1-mini', 'error');
     return null;
 }
 

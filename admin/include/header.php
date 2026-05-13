@@ -119,7 +119,9 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <div class="sidebar d-flex flex-column h-100">
         <?php $headerOrgIconAdmin = getHeaderOrganizationIcon($_SESSION['user_id']); ?>
         <div class="px-3 mb-3 d-flex align-items-center justify-content-center gap-2">
-            <img src="../images/stimma-logo-transparent.png" alt="Stimma" height="<?= $headerOrgIconAdmin ? '50' : '60' ?>">
+            <a href="../index.php" title="Till användarvyn">
+                <img src="../images/stimma-logo-transparent.png" alt="Stimma — till användarvyn" height="<?= $headerOrgIconAdmin ? '50' : '60' ?>">
+            </a>
             <?php if ($headerOrgIconAdmin): ?>
             <div class="bg-white rounded px-2 py-1 d-inline-flex align-items-center" title="<?= htmlspecialchars($headerOrgIconAdmin['name']) ?>">
                 <img src="../upload/org_icons/<?= htmlspecialchars($headerOrgIconAdmin['url']) ?>"
@@ -205,6 +207,18 @@ $current_page = basename($_SERVER['PHP_SELF']);
                         <i class="bi bi-file-earmark-lock me-2"></i> PUB-dokument
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a href="ai_usage.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'ai_usage.php' ? 'active' : '' ?>">
+                        <i class="bi bi-graph-up me-2"></i> AI-användning
+                    </a>
+                </li>
+                <?php if ($isAdmin || $isSuperAdmin): ?>
+                <li class="nav-item">
+                    <a href="order_tokens.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'order_tokens.php' ? 'active' : '' ?>">
+                        <i class="bi bi-cart-plus me-2"></i> Beställ tokens
+                    </a>
+                </li>
+                <?php endif; ?>
                 <?php endif; ?>
                 <?php if ($isSuperAdmin): ?>
                 <li class="nav-item">
@@ -215,11 +229,6 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <li class="nav-item">
                     <a href="cron_jobs.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'cron_jobs.php' ? 'active' : '' ?>">
                         <i class="bi bi-gear me-2"></i> Cronjobb
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="ai_usage.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'ai_usage.php' ? 'active' : '' ?>">
-                        <i class="bi bi-graph-up me-2"></i> AI-användning
                     </a>
                 </li>
                 <?php endif; ?>
@@ -311,36 +320,58 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 renderAnnouncementModal((int)$_SESSION['user_id'], $_SESSION['csrf_token']);
             }
 
-            // AI-kvotbanner (visas för admin + editor)
+            // AI-saldobanner (visas för admin + editor)
             if ($isAdmin || $isEditor) {
                 require_once __DIR__ . '/../../include/ai_quota.php';
                 $aiQuotaScope = getAiScopeForEmail($_SESSION['user_email']);
                 $aiQuotaCheck = checkAiQuota($aiQuotaScope['organization_id'], $aiQuotaScope['domain']);
+                $orderLink = $isAdmin ? 'order_tokens.php' : null;
                 if ($aiQuotaCheck['level'] === 'block'):
             ?>
                 <div class="alert alert-danger d-flex align-items-start" role="alert">
                     <i class="bi bi-exclamation-octagon-fill me-2 mt-1 fs-5"></i>
                     <div>
-                        <strong>AI-kvoten är förbrukad denna månad</strong>
-                        — <?= number_format($aiQuotaCheck['tokens_used'], 0, ',', ' ') ?>
-                        / <?= number_format($aiQuotaCheck['tokens_quota'], 0, ',', ' ') ?> tokens använda
-                        (<?= $aiQuotaCheck['pct'] ?>%).
-                        Nya AI-anrop blockeras tills nästa kalendermånad.
-                        Behöver ni mer kvot? Kontakta
-                        <a href="mailto:hjalp@sambruksupport.se?subject=Ut%C3%B6kad%20AI-kvot%20f%C3%B6r%20<?= rawurlencode($aiQuotaScope['label']) ?>" class="alert-link">hjalp@sambruksupport.se</a>.
+                        <?php if ($aiQuotaCheck['mode'] === 'balance'): ?>
+                            <strong>Token-saldot är slut</strong>
+                            — saldo: <?= number_format(max(0, $aiQuotaCheck['tokens_balance']), 0, ',', ' ') ?> tokens.
+                            Nya AI-anrop blockeras tills saldot fylls på.
+                            <?php if ($orderLink): ?>
+                                <a href="<?= $orderLink ?>" class="alert-link">Beställ fler tokens</a>
+                                eller kontakta
+                                <a href="mailto:hjalp@sambruksupport.se" class="alert-link">hjalp@sambruksupport.se</a>.
+                            <?php else: ?>
+                                Be en administratör att beställa fler tokens.
+                            <?php endif; ?>
+                        <?php else: ?>
+                            <strong>AI-kvoten är förbrukad denna månad</strong>
+                            — <?= number_format($aiQuotaCheck['tokens_used'], 0, ',', ' ') ?>
+                            / <?= number_format($aiQuotaCheck['tokens_quota'], 0, ',', ' ') ?> tokens använda
+                            (<?= $aiQuotaCheck['pct'] ?>%).
+                            Nya AI-anrop blockeras tills nästa kalendermånad.
+                            Kontakta <a href="mailto:hjalp@sambruksupport.se" class="alert-link">hjalp@sambruksupport.se</a>.
+                        <?php endif; ?>
                     </div>
                 </div>
             <?php elseif ($aiQuotaCheck['level'] === 'warn'): ?>
                 <div class="alert alert-warning d-flex align-items-start" role="alert">
                     <i class="bi bi-exclamation-triangle-fill me-2 mt-1 fs-5"></i>
                     <div>
-                        <strong>AI-kvoten närmar sig sin gräns</strong>
-                        — <?= $aiQuotaCheck['pct'] ?>% använt denna månad
-                        (<?= number_format($aiQuotaCheck['tokens_used'], 0, ',', ' ') ?>
-                        / <?= number_format($aiQuotaCheck['tokens_quota'], 0, ',', ' ') ?> tokens).
-                        Vid 100% blockeras nya AI-anrop. Kontakta
-                        <a href="mailto:hjalp@sambruksupport.se?subject=Ut%C3%B6kad%20AI-kvot%20f%C3%B6r%20<?= rawurlencode($aiQuotaScope['label']) ?>" class="alert-link">hjalp@sambruksupport.se</a>
-                        om ni behöver mer.
+                        <?php if ($aiQuotaCheck['mode'] === 'balance'): ?>
+                            <strong>Token-saldot är lågt</strong>
+                            — saldo: <?= number_format($aiQuotaCheck['tokens_balance'], 0, ',', ' ') ?> tokens.
+                            När saldot når 0 blockeras nya AI-anrop.
+                            <?php if ($orderLink): ?>
+                                <a href="<?= $orderLink ?>" class="alert-link">Beställ fler tokens</a>.
+                            <?php else: ?>
+                                Be en administratör att beställa fler tokens.
+                            <?php endif; ?>
+                        <?php else: ?>
+                            <strong>AI-kvoten närmar sig sin gräns</strong>
+                            — <?= $aiQuotaCheck['pct'] ?>% använt denna månad
+                            (<?= number_format($aiQuotaCheck['tokens_used'], 0, ',', ' ') ?>
+                            / <?= number_format($aiQuotaCheck['tokens_quota'], 0, ',', ' ') ?> tokens).
+                            Kontakta <a href="mailto:hjalp@sambruksupport.se" class="alert-link">hjalp@sambruksupport.se</a>.
+                        <?php endif; ?>
                     </div>
                 </div>
             <?php

@@ -96,20 +96,26 @@ function generateAIImage($courseTitle, $courseDescription, $courseId = null) {
         return ['success' => false, 'error' => 'API-nyckel saknas.'];
     }
 
+    require_once __DIR__ . '/../../include/ai_image_helper.php';
+    require_once __DIR__ . '/../../include/ai_quota.php';
+
+    // Kvotkontroll innan bilden genereras — annars blir det en billing-bypass
+    // (vi skulle ändå logga via logAiUsage längre ned men kvoten skulle aldrig
+    // stoppa generering, vilket gör att en organisation kan skena iväg).
+    try {
+        enforceAiQuotaForCurrentSession();
+    } catch (Throwable $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+
     $context = ['feature' => 'image', 'course_id' => $courseId, 'is_image' => true];
-    $imageModel = getModelForFeature('image', 'dall-e-3');
+    $imageModel = getModelForFeature('image', 'gpt-image-1-mini');
 
     $prompt = "Educational course cover illustration for a course called '{$courseTitle}'" .
               ($courseDescription ? ". Course description: '{$courseDescription}'" : "") .
               ". Clean, professional, modern style suitable for e-learning platform. No text in image. Abstract or conceptual visualization.";
 
-    $data = [
-        'model' => $imageModel,
-        'prompt' => $prompt,
-        'n' => 1,
-        'size' => '1024x1024',
-        'quality' => 'standard'
-    ];
+    $data = aiImageBuildPayload($imageModel, $prompt, '1024x1024');
 
     $ch = curl_init($imageApiServer);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -127,27 +133,23 @@ function generateAIImage($courseTitle, $courseDescription, $courseId = null) {
     curl_close($ch);
 
     if ($curlError) {
+        logAiUsage($context, [], $imageModel, 'error');
         return ['success' => false, 'error' => 'Curl-fel: ' . $curlError];
     }
 
     if ($httpCode !== 200) {
+        logAiUsage($context, [], $imageModel, 'error');
         $errorResult = json_decode($response, true);
         $errorMessage = $errorResult['error']['message'] ?? 'HTTP-fel ' . $httpCode;
         return ['success' => false, 'error' => 'API-fel: ' . $errorMessage];
     }
 
     $result = json_decode($response, true);
-
-    if (!isset($result['data'][0]['url'])) {
-        return ['success' => false, 'error' => 'Ingen bild-URL i API-svaret.'];
-    }
-
-    // Download and save image locally
-    $imageUrl = $result['data'][0]['url'];
-    $imageContent = @file_get_contents($imageUrl);
+    $imageContent = aiImageExtractBytes(is_array($result) ? $result : []);
 
     if (!$imageContent) {
-        return ['success' => false, 'error' => 'Kunde inte ladda ner bilden från OpenAI.'];
+        logAiUsage($context, [], $imageModel, 'error');
+        return ['success' => false, 'error' => 'Inga bilddata i API-svaret.'];
     }
 
     $uploadDir = __DIR__ . '/../../upload/';

@@ -14,6 +14,7 @@ require_once '../include/database.php';
 require_once '../include/functions.php';
 require_once '../include/auth.php';
 require_once '../include/ai_quota.php';
+require_once '../include/token_balance.php';
 require_once 'include/auth_check.php';
 
 $currentUser = queryOne("SELECT * FROM " . DB_DATABASE . ".users WHERE email = ?", [$_SESSION['user_email']]);
@@ -203,9 +204,111 @@ if ($drillOrgId || $drillDomain !== '') {
     );
 }
 
+// --- Saldo-sektion (för admin med org-tillhörighet) ---------------------
+$balanceOrg = null;
+$balanceTokens = 0;
+$balanceTransactions = [];
+$balanceActiveRecurring = [];
+if (!$isSuperAdmin && $myOrg) {
+    $balanceOrg = $myOrg;
+} elseif ($isSuperAdmin) {
+    // Superadmin: visa sin egen org om den finns, annars hoppa över
+    $myDomainSuper = substr(strrchr($currentUser['email'], '@'), 1);
+    $balanceOrg = getOrganizationByDomain($myDomainSuper);
+}
+if ($balanceOrg) {
+    $balanceTokens = getOrgTokenBalance((int)$balanceOrg['id']);
+    $balanceTransactions = getOrgTokenTransactions((int)$balanceOrg['id'], 5);
+    $balanceOrders = getOrgTokenOrders((int)$balanceOrg['id'], 50);
+    $balanceActiveRecurring = array_values(array_filter(
+        $balanceOrders,
+        fn($o) => (int)$o['is_recurring'] === 1 && (int)$o['recurring_active'] === 1
+    ));
+}
+
 $page_title = 'AI-användning';
 require_once 'include/header.php';
 ?>
+
+<?php if ($balanceOrg): ?>
+<div class="card mb-4 border-primary">
+    <div class="card-body">
+        <div class="row align-items-center">
+            <div class="col-md-4">
+                <h6 class="text-muted text-uppercase small mb-1">Token-saldo</h6>
+                <div class="display-6 fw-bold">
+                    <?= number_format($balanceTokens, 0, ',', ' ') ?>
+                    <span class="fs-6 fw-normal text-muted">tokens</span>
+                </div>
+                <div class="small text-muted"><?= htmlspecialchars($balanceOrg['name']) ?></div>
+            </div>
+            <div class="col-md-5">
+                <?php if (!empty($balanceActiveRecurring)): ?>
+                    <h6 class="text-muted text-uppercase small mb-1">Aktiv auto-påfyllning</h6>
+                    <ul class="list-unstyled small mb-0">
+                        <?php foreach ($balanceActiveRecurring as $r): ?>
+                            <li>
+                                <i class="bi bi-arrow-repeat me-1"></i>
+                                <strong><?= htmlspecialchars($r['package_name']) ?></strong>:
+                                <?= number_format($r['tokens'], 0, ',', ' ') ?> tokens/mån
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php else: ?>
+                    <h6 class="text-muted text-uppercase small mb-1">Auto-påfyllning</h6>
+                    <p class="small text-muted mb-0">Ingen aktiv prenumeration.</p>
+                <?php endif; ?>
+            </div>
+            <div class="col-md-3 text-md-end">
+                <?php if ($isAdmin || $isSuperAdmin): ?>
+                    <a href="order_tokens.php" class="btn btn-primary">
+                        <i class="bi bi-cart-plus me-1"></i> Beställ tokens
+                    </a>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <?php if (!empty($balanceTransactions)): ?>
+            <hr class="my-3">
+            <h6 class="text-muted text-uppercase small mb-2">Senaste transaktioner</h6>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>Datum</th>
+                            <th>Typ</th>
+                            <th class="text-end">Tokens</th>
+                            <th class="text-end">Saldo efter</th>
+                            <th>Notering</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php
+                        $typeLabels = [
+                            'monthly_refill' => '<span class="badge bg-info text-dark">Gratisbas</span>',
+                            'purchase'       => '<span class="badge bg-success">Köp</span>',
+                            'recurring'      => '<span class="badge bg-primary">Auto-påfyllning</span>',
+                            'consume'        => '<span class="badge bg-secondary">Förbrukning</span>',
+                            'adjustment'     => '<span class="badge bg-warning text-dark">Justering</span>',
+                        ];
+                        foreach ($balanceTransactions as $t): ?>
+                            <tr>
+                                <td class="small"><?= htmlspecialchars($t['created_at']) ?></td>
+                                <td><?= $typeLabels[$t['type']] ?? htmlspecialchars($t['type']) ?></td>
+                                <td class="text-end <?= $t['tokens_delta'] < 0 ? 'text-danger' : 'text-success' ?>">
+                                    <?= $t['tokens_delta'] > 0 ? '+' : '' ?><?= number_format($t['tokens_delta'], 0, ',', ' ') ?>
+                                </td>
+                                <td class="text-end"><?= number_format($t['balance_after'], 0, ',', ' ') ?></td>
+                                <td class="small text-muted"><?= htmlspecialchars($t['note'] ?? '') ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+<?php endif; ?>
 
 <div class="card mb-4">
     <div class="card-body">

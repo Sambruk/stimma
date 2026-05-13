@@ -218,7 +218,11 @@ function aiLessonGenerateContent(array $opts): array {
     $lessonIdea       = trim($opts['lesson_idea'] ?? '');
     $lessonType       = ($opts['lesson_type'] ?? 'lesson') === 'info_page' ? 'info_page' : 'lesson';
     $includeQuiz      = ($lessonType === 'lesson') && !empty($opts['include_quiz']);
-    $generateMultipage = !empty($opts['generate_multipage']);
+    // Sidbrytning är default på — Stimma föredrar flersidiga, viewport-anpassade
+    // lektioner framför långa scroll-sidor. Skicka 'generate_multipage' => false
+    // explicit för att stänga av.
+    $generateMultipage = !array_key_exists('generate_multipage', $opts)
+        || !empty($opts['generate_multipage']);
     $textLength       = $opts['text_length']   ?? 'medium';
     $tone             = $opts['tone']          ?? 'pedagogical';
     $languageStyle    = $opts['language_style'] ?? 'formal';
@@ -484,25 +488,21 @@ function aiGenerateLessonImage(string $lessonTitle, ?string $courseName, ?int $c
         return ['success' => false, 'error' => $e->getMessage()];
     }
 
+    require_once __DIR__ . '/ai_image_helper.php';
+
     $context = [
         'feature'    => 'image',
         'course_id'  => $courseId,
         'is_image'   => true,
         'user_email' => $userEmail,
     ];
-    $imageModel = getModelForFeature('image', 'dall-e-3');
+    $imageModel = getModelForFeature('image', 'gpt-image-1-mini');
 
     $prompt = "Educational illustration for a lesson about '{$lessonTitle}'" .
               ($courseName ? " in a course about '{$courseName}'" : "") .
               ". Clean, professional, minimalist style suitable for e-learning. No text in image.";
 
-    $data = [
-        'model'   => $imageModel,
-        'prompt'  => $prompt,
-        'n'       => 1,
-        'size'    => '1024x1024',
-        'quality' => 'standard',
-    ];
+    $data = aiImageBuildPayload($imageModel, $prompt, '1024x1024');
 
     $ch = curl_init('https://api.openai.com/v1/images/generations');
     curl_setopt_array($ch, [
@@ -532,15 +532,10 @@ function aiGenerateLessonImage(string $lessonTitle, ?string $courseName, ?int $c
     }
 
     $result = json_decode($response, true);
-    if (!isset($result['data'][0]['url'])) {
-        logAiUsage($context, [], $imageModel, 'error');
-        return ['success' => false, 'error' => 'Ingen bild-URL i API-svaret.'];
-    }
-
-    $imageContent = @file_get_contents($result['data'][0]['url']);
+    $imageContent = aiImageExtractBytes(is_array($result) ? $result : []);
     if (!$imageContent) {
         logAiUsage($context, [], $imageModel, 'error');
-        return ['success' => false, 'error' => 'Kunde inte ladda ner bilden från OpenAI.'];
+        return ['success' => false, 'error' => 'Inga bilddata i API-svaret.'];
     }
 
     $uploadDir = __DIR__ . '/../upload/';

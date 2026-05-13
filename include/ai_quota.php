@@ -146,12 +146,22 @@ function getMonthlyAiUsage($organizationId, $domain, $year = null, $month = null
  * Kontrollerar kvot för ett scope. Returnerar status för bannerlogik och
  * avgör om nästa anrop ska tillåtas.
  *
+ * Saldo-baserat sedan migration 040: när scopet har en organization_id används
+ * organization_token_balance.balance som primär budget. Saldot fylls på den
+ * 1:a varje månad med monthly_token_quota (gratisbas) + ev. aktiva recurring
+ * orders, och kan toppas upp via admin-beställning av paket.
+ *
+ * Domän-scopes (utan org) faller tillbaka på den gamla månadskvotlogiken
+ * eftersom saldosystemet kräver organization_id.
+ *
  * @return array {
  *   allowed: bool,
- *   pct: int,                 // 0..100+ — kan vara > 100 om redan över
+ *   pct: int,                 // 0..100+ — % av gratisbasen som är förbrukat
  *   level: 'ok'|'warn'|'block',
- *   tokens_used: int,
- *   tokens_quota: int,
+ *   mode: 'balance'|'monthly_quota',
+ *   tokens_balance: int,      // -1 om mode=monthly_quota
+ *   tokens_used: int,         // månadsförbrukning (statistik)
+ *   tokens_quota: int,        // månatlig gratisbas
  *   behavior: string,
  *   organization_id: ?int,
  *   domain: ?string,
@@ -164,30 +174,70 @@ function checkAiQuota($organizationId, $domain) {
 
     $tokensQuota = max(1, (int)$quota['monthly_token_quota']);
     $tokensUsed = (int)$usage['total_tokens'];
-    $pct = (int)floor(($tokensUsed / $tokensQuota) * 100);
     $threshold = (int)$quota['alert_threshold_pct'];
     $behavior = $quota['behavior'];
 
     $level = 'ok';
     $allowed = true;
     $reason = null;
+    $mode = 'monthly_quota';
+    $balance = -1;
+    $pct = 0;
 
-    if ($tokensUsed >= $tokensQuota) {
-        if ($behavior === 'block') {
-            $level = 'block';
-            $allowed = false;
-            $reason = 'monthly_quota_exceeded';
-        } else {
+    if ($organizationId) {
+        // Saldo-läge: ladda saldo-helpern lazyt (undviker cirkulär include).
+        if (!function_exists('getOrgTokenBalance')) {
+            require_once __DIR__ . '/token_balance.php';
+        }
+        $mode = 'balance';
+
+        // Skilj på "ej initialiserad" (ingen rad → ge gratisbas direkt) och
+        // "förbrukat" (rad med 0). Annars hade alla orgs blockerats första
+        // gången de träffar systemet, trots att de inte förbrukat något.
+        if (!hasOrgTokenBalance($organizationId)) {
+            bootstrapOrgTokenBalance($organizationId, $tokensQuota);
+        }
+
+        $balance = getOrgTokenBalance($organizationId);
+        // pct = hur mycket av gratisbasen som "saknas" i saldot — gör att
+        // bannerlogiken (warn vid threshold) fortfarande fungerar utan att
+        // ändra header.php-mallen.
+        $consumedFromBase = max(0, $tokensQuota - $balance);
+        $pct = (int)floor(($consumedFromBase / $tokensQuota) * 100);
+
+        if ($balance <= 0) {
+            if ($behavior === 'block') {
+                $level = 'block';
+                $allowed = false;
+                $reason = 'token_balance_empty';
+            } else {
+                $level = 'warn';
+            }
+        } elseif ($pct >= $threshold) {
             $level = 'warn';
         }
-    } elseif ($pct >= $threshold) {
-        $level = 'warn';
+    } else {
+        // Fallback för domän-scopes utan org — gammal månadskvotlogik.
+        $pct = (int)floor(($tokensUsed / $tokensQuota) * 100);
+        if ($tokensUsed >= $tokensQuota) {
+            if ($behavior === 'block') {
+                $level = 'block';
+                $allowed = false;
+                $reason = 'monthly_quota_exceeded';
+            } else {
+                $level = 'warn';
+            }
+        } elseif ($pct >= $threshold) {
+            $level = 'warn';
+        }
     }
 
     return [
         'allowed' => $allowed,
         'pct' => $pct,
         'level' => $level,
+        'mode' => $mode,
+        'tokens_balance' => $balance,
         'tokens_used' => $tokensUsed,
         'tokens_quota' => $tokensQuota,
         'behavior' => $behavior,
@@ -203,7 +253,7 @@ function checkAiQuota($organizationId, $domain) {
  *
  * @param string $feature  course_gen | lesson_gen | chat | image
  * @param string $default  Modell att använda om ingen rad finns
- * @return string Modell-id (t.ex. 'gpt-4o', 'gpt-4o-mini', 'dall-e-3')
+ * @return string Modell-id (t.ex. 'gpt-4o', 'gpt-4o-mini', 'gpt-image-1-mini')
  */
 function getModelForFeature($feature, $default) {
     static $cache = null;
@@ -324,7 +374,7 @@ function logAiUsage(array $context, array $usage, $model, $status = 'ok') {
         }
         $costCents = calculateAiCostCents($model, $promptT, $completionT, $isImage);
 
-        execute(
+        $usageLogId = execute(
             "INSERT INTO " . DB_DATABASE . ".ai_usage_log
              (organization_id, domain, user_email, course_id, feature, model,
               prompt_tokens, completion_tokens, total_tokens, cost_cents, status)
@@ -343,6 +393,22 @@ function logAiUsage(array $context, array $usage, $model, $status = 'ok') {
                 $status,
             ]
         );
+
+        // Dra från saldot om scopet har en organisation och anropet faktiskt
+        // gick igenom (status='ok'). 'blocked'/'error' ska inte belasta saldot.
+        if ($status === 'ok' && $scope['organization_id'] && $totalT > 0) {
+            if (!function_exists('consumeTokensFromBalance')) {
+                require_once __DIR__ . '/token_balance.php';
+            }
+            consumeTokensFromBalance(
+                (int)$scope['organization_id'],
+                (int)$totalT,
+                [
+                    'related_usage_log_id' => $usageLogId ? (int)$usageLogId : null,
+                    'note' => $feature . ' / ' . $model,
+                ]
+            );
+        }
     } catch (Throwable $e) {
         error_log('logAiUsage misslyckades: ' . $e->getMessage());
     }
@@ -374,6 +440,13 @@ function enforceAiQuotaForEmail($email) {
     }
     $check = checkAiQuota($scope['organization_id'], $scope['domain']);
     if (!$check['allowed']) {
+        if ($check['reason'] === 'token_balance_empty') {
+            throw new Exception(
+                'Token-saldot för ' . $scope['label'] . ' är slut. '
+                . 'En administratör kan beställa fler tokens under '
+                . 'Adminpanelen → AI-användning.'
+            );
+        }
         throw new Exception(
             'AI-kvoten för ' . $scope['label'] . ' är förbrukad denna månad. '
             . 'Kontakta hjalp@sambruksupport.se för att utöka kvoten.'

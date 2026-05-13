@@ -396,8 +396,18 @@ function sendOpenAIRequest($messages, array $context = []) {
     $maxTokens = (int)(getenv('AI_MAX_COMPLETION_TOKENS') ?: 4096);
     $temperature = (float)(getenv('AI_TEMPERATURE') ?: 0.7);
     $topP = (float)(getenv('AI_TOP_P') ?: 0.9);
-    $maxRetries = 3;
-    $timeout = 30; // sekunder
+    // Retry-policy (uppdaterad 2026-05-13):
+    //   - Max 1 retry (= 2 anropsförsök totalt). Tidigare 3 → vid OpenAI-
+    //     timeouts kunde vi konsumera tokens 3 gånger utan att räknas i
+    //     statistiken; det bidrog till missrapportering i förhållande
+    //     till OpenAI:s billing.
+    //   - Vi retry:ar bara på cURL-fel (nätverksstörning) och HTTP 429/5xx.
+    //     4xx-fel som 400/401/403 retry:as INTE — de är klientfel och
+    //     fixas inte av att försöka igen.
+    //   - Timeout höjs från 30 s → 120 s. 30 s räcker inte för stora chat-
+    //     anrop (4096+ tokens output), vilket triggade onödiga retries.
+    $maxRetries = 1;
+    $timeout = 120; // sekunder
 
     if (empty($apiKey)) {
         throw new Exception('API-nyckel saknas i konfigurationen.');
@@ -432,27 +442,23 @@ function sendOpenAIRequest($messages, array $context = []) {
     $userId = $_SESSION['user_id'] ?? 'ingen_användar_id';
     $userEmail = $_SESSION['user_email'] ?? 'okänd användare';
 
-    // Hantera återförsök
+    // Retry bara på transient fel: cURL-fel (timeout/nätverk) + HTTP 429/5xx.
+    // 4xx-fel (utom 429) är klientfel och fixas inte av retry.
     $attempts = 0;
+    $maxAttempts = $maxRetries + 1; // 1 ursprung + N retries
     $lastError = '';
-    
-    while ($attempts < $maxRetries) {
+
+    while ($attempts < $maxAttempts) {
         $attempts++;
-        
-        // Anropa API
+
         $ch = curl_init($apiServer);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($requestData));
-        
-        // Sätt headers baserat på API-typ
-        $headers = [
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Content-Type: application/json',
-            'Authorization: Bearer ' . $apiKey
-        ];
-        
-        
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+            'Authorization: Bearer ' . $apiKey,
+        ]);
         curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
 
         $response = curl_exec($ch);
@@ -460,7 +466,6 @@ function sendOpenAIRequest($messages, array $context = []) {
         $error = curl_error($ch);
         curl_close($ch);
 
-        // Om vi fick ett giltigt svar, returnera det
         if ($httpCode === 200 && empty($error)) {
             $responseData = json_decode($response, true);
             if (json_last_error() === JSON_ERROR_NONE) {
@@ -483,14 +488,25 @@ function sendOpenAIRequest($messages, array $context = []) {
             }
         }
 
-        // Om vi inte fick ett giltigt svar, spara felet och försök igen
         $lastError = "HTTP $httpCode: " . ($error ?: $response);
-        sleep(1); // Vänta en sekund innan nästa försök
+
+        // Bedöm om felet är värt en retry. Klientfel (400/401/403/404) och
+        // 200-OK utan giltigt content blir omedelbart 'error' — retry skulle
+        // bara förbränna tokens. Vi retry:ar bara nätverksfel och OpenAI-
+        // serverfel.
+        $isTransient = !empty($error)                  // cURL-fel (timeout, conn reset, dns…)
+                    || $httpCode === 429              // rate limit
+                    || ($httpCode >= 500 && $httpCode < 600);
+
+        if (!$isTransient || $attempts >= $maxAttempts) {
+            break;
+        }
+
+        sleep(1); // backoff innan retry
     }
 
-    // Om vi har nått max antal försök, kasta ett undantag
     logAiUsage($context, [], $model, 'error');
-    throw new Exception("Kunde inte få svar från AI efter $maxRetries försök. Senaste fel: $lastError");
+    throw new Exception("Kunde inte få svar från AI efter $attempts försök. Senaste fel: $lastError");
 }
 
 /**

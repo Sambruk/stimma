@@ -664,7 +664,7 @@ require_once 'include/header.php';
                 </h2>
                 <div id="aiFeatures" class="accordion-collapse collapse" data-bs-parent="#editorAccordion">
                     <div class="accordion-body">
-                        <p>Du kan generera AI-bilder med DALL-E 3 på flera ställen:</p>
+                        <p>Du kan generera AI-bilder med OpenAI:s bildmodell (default: gpt-image-1-mini) på flera ställen:</p>
                         <div class="row g-4">
                             <div class="col-md-4">
                                 <div class="mini-card">

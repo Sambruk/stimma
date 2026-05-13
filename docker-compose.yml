@@ -23,6 +23,9 @@ services:
       # Allmänna påminnelser (icke-stegvisa kurser): kl 09:00 varje dag
       ofelia.job-exec.stimma-reminders.schedule: "0 0 9 * * *"
       ofelia.job-exec.stimma-reminders.command: "php /var/www/html/cron/send_reminders.php"
+      # Månatlig token-påfyllning: kl 00:05 den 1:a varje månad
+      ofelia.job-exec.stimma-token-refill.schedule: "0 5 0 1 * *"
+      ofelia.job-exec.stimma-token-refill.command: "php /var/www/html/cron/monthly_token_refill.php"
     depends_on:
       db:
         condition: service_healthy
