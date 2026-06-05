@@ -153,8 +153,9 @@ $rdGreeting = $rdHour < 5  ? 'God natt'
             : ($rdHour < 13 ? 'Hej'
             : ($rdHour < 18 ? 'God eftermiddag'
             : 'God kväll')));
+$rdEmail = $user['email'] ?? $_SESSION['user_email'] ?? '';
 $rdFirstName = !empty($user['name']) ? strtok($user['name'], ' ')
-             : strstr($user['email'], '@', true);
+             : (!empty($rdEmail) ? strstr($rdEmail, '@', true) : 'användare');
 
 $rdOrgName = $headerOrganization['name'] ?? $userDomain;
 $rdOrgInitials = '';

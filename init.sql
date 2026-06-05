@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS `lessons` (
   `estimated_duration` int(11) DEFAULT 5,
   `image_url` varchar(255) DEFAULT NULL,
   `video_url` varchar(255) DEFAULT NULL,
+  `video_position` enum('top','bottom') NOT NULL DEFAULT 'bottom',
   `content` text DEFAULT NULL,
   `resource_links` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`resource_links`)),
   `tags` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`tags`)),

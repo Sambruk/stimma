@@ -433,3 +433,49 @@ function gradeAllQuizQuestions($lessonId, array $post) {
         'total' => $total,
     ];
 }
+
+/**
+ * Extrahera deltagarens råa svar för en fråga från POST-arrayen.
+ * Returnerar en sträng (typiskt JSON för strukturerade svar) som lagras i
+ * quiz_answers.answer. Format spelar ingen roll för statistiken — den drivs
+ * av is_correct — men sparas för transparens/forensik.
+ */
+function extractQuizAnswerForStorage(array $q, array $post) {
+    $pre = 'q' . (int)$q['id'] . '_';
+    $picked = [];
+    foreach ($post as $key => $val) {
+        if (strpos($key, $pre) === 0) {
+            $picked[substr($key, strlen($pre))] = $val;
+        }
+    }
+    return json_encode($picked, JSON_UNESCAPED_UNICODE);
+}
+
+/**
+ * Upserta deltagarens svar på en specifik fråga. Senaste svaret vinner via
+ * UNIQUE (user_id, lesson_id, question_id) — used för "% rätt"-beräkning.
+ */
+function recordQuizAnswer($userId, $lessonId, $questionId, $answerText, $isCorrect) {
+    execute(
+        "INSERT INTO " . DB_DATABASE . ".quiz_answers
+           (user_id, lesson_id, question_id, answer, is_correct)
+         VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           answer = VALUES(answer),
+           is_correct = VALUES(is_correct)",
+        [(int)$userId, (int)$lessonId, (int)$questionId, $answerText, $isCorrect ? 1 : 0]
+    );
+}
+
+/**
+ * Har deltagaren redan svarat på denna fråga? Används för att blockera
+ * omtag när kursens allow_quiz_retry = 0.
+ */
+function hasAnsweredQuizQuestion($userId, $lessonId, $questionId) {
+    $row = queryOne(
+        "SELECT 1 FROM " . DB_DATABASE . ".quiz_answers
+         WHERE user_id = ? AND lesson_id = ? AND question_id = ? LIMIT 1",
+        [(int)$userId, (int)$lessonId, (int)$questionId]
+    );
+    return !empty($row);
+}

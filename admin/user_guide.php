@@ -1409,6 +1409,53 @@ require_once 'include/header.php';
             </div>
         </div>
 
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 pt-4 pb-0 px-4">
+                <h5><i class="bi bi-diagram-3 me-2 text-primary"></i>Räckvidd: gäller avtalet organisationen eller domänen?</h5>
+                <p class="text-muted mb-0">Ett tecknat PUB-avtal gäller antingen en hel organisation eller en enskild e-postdomän — beroende på hur domänen är upplagd.</p>
+            </div>
+            <div class="card-body p-4">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="mini-card h-100">
+                            <h6><i class="bi bi-building me-2 text-success"></i>Grupperad domän → hela organisationen</h6>
+                            <p class="small text-muted mb-0">Om e-postdomänen är kopplad till en organisation (en superadmin grupperar domäner under <strong>Organisationer</strong>) lyfts PUB-avtalet till <strong>organisationsnivå</strong>. Då gäller <strong>en enda signering för samtliga domäner</strong> i organisationen — ingen domän behöver teckna separat.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mini-card h-100">
+                            <h6><i class="bi bi-globe me-2 text-secondary"></i>Ogrupperad domän → bara domänen</h6>
+                            <p class="small text-muted mb-0">Om domänen inte tillhör någon organisation gäller avtalet <strong>endast den domänen</strong>. Varje fristående domän måste i så fall teckna sitt eget PUB-avtal.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tip-box mt-3">
+                    <div class="tip-icon"><i class="bi bi-lightbulb-fill"></i></div>
+                    <div class="tip-content">
+                        <strong>Exempel — kommun med flera maildomäner</strong>
+                        <p class="mb-0 mt-1">En kommun som använder t.ex. <code>kommun.se</code> och <code>utbildning.kommun.se</code> kan gruppera båda under en organisation. Då räcker det att en behörig person tecknar PUB-avtalet en gång, och det gäller automatiskt för alla användare på samtliga domäner i organisationen.</p>
+                    </div>
+                </div>
+
+                <div class="tip-box mt-3">
+                    <div class="tip-icon"><i class="bi bi-shield-check"></i></div>
+                    <div class="tip-content">
+                        <strong>Spårbarhet</strong>
+                        <p class="mb-0 mt-1">Oavsett räckvidd sparas alltid ett signeringsbevis som knyts till <strong>både</strong> domänen som tecknade och organisationen. Beviset innehåller undertecknare, tidsstämpel, IP-adress, SMS-verifiering och en SHA-256-hash av det signerade PDF-dokumentet.</p>
+                    </div>
+                </div>
+
+                <div class="tip-box warning mt-3">
+                    <div class="tip-icon"><i class="bi bi-info-circle-fill"></i></div>
+                    <div class="tip-content">
+                        <strong>Domän som hade PUB innan den grupperades</strong>
+                        <p class="mb-0 mt-1">Om en domän tecknade PUB-avtal innan den lades in i en organisation fortsätter avtalet att gälla. Systemet känner igen detta och kräver ingen ny signering.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white border-0 pt-4 pb-0 px-4">
                 <h5><i class="bi bi-pencil-square me-2 text-primary"></i>Teckna PUB-avtal - steg för steg</h5>

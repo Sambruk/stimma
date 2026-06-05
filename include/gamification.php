@@ -269,6 +269,19 @@ function checkAndCompleteCourse($userId, $courseId) {
         return ['is_complete' => false];
     }
 
+    // Lektionerna är klara — utvärdera diplom-kriterier (% rätt etc.).
+    // Tom lista = inga kriterier satta = utfärda som tidigare.
+    $criteria = evaluateCourseCriteria($userId, $courseId);
+    if (!$criteria['passed']) {
+        return [
+            'is_complete' => true,
+            'criteria_passed' => false,
+            'criteria_failures' => $criteria['failures'],
+            'certificate_number' => null,
+            'complete_url' => 'course_complete.php?id=' . (int)$courseId,
+        ];
+    }
+
     $res = recordCourseCompletion($userId, $courseId);
     $certNumber = $res['certificate_number'] ?? null;
     if (!$certNumber) {
@@ -282,8 +295,120 @@ function checkAndCompleteCourse($userId, $courseId) {
 
     return [
         'is_complete' => true,
+        'criteria_passed' => true,
         'certificate_number' => $certNumber,
         'complete_url' => 'course_complete.php?id=' . (int)$courseId
+    ];
+}
+
+/**
+ * Utvärdera diplom-kriterier (utöver "alla lektioner klara") för en
+ * användares completion av en kurs.
+ *
+ * Returnerar:
+ *   - passed (bool)    — alla kriterier uppfyllda? Tom kriterielista = true.
+ *   - failures (array) — list av kriterier som ej uppfylldes. Varje element:
+ *       ['type' => string, 'threshold' => int, 'actual' => mixed,
+ *        'message' => 'Du har 65 % rätt men behöver minst 80 %.']
+ *   - details (array)  — per-kriterie-info för UI/debugging.
+ *
+ * Grandfathering: historiska completions utan rader i quiz_answers räknas
+ * som "okänt antal frågor svarade". I detta fall passerar % rätt-kriteriet
+ * automatiskt — vi straffar inte deltagare vars completion skedde innan
+ * kriterier sattes.
+ */
+function evaluateCourseCriteria($userId, $courseId) {
+    $criteria = query(
+        "SELECT criterion_type, threshold_value FROM " . DB_DATABASE . ".course_completion_criteria
+         WHERE course_id = ?",
+        [$courseId]
+    );
+
+    if (empty($criteria)) {
+        return ['passed' => true, 'failures' => [], 'details' => []];
+    }
+
+    $failures = [];
+    $details = [];
+
+    foreach ($criteria as $c) {
+        switch ($c['criterion_type']) {
+            case 'min_quiz_percentage': {
+                $threshold = (int)$c['threshold_value'];
+                $stats = computeUserCourseQuizStats($userId, $courseId);
+                $details[] = [
+                    'type' => 'min_quiz_percentage',
+                    'threshold' => $threshold,
+                    'percentage' => $stats['percentage'],
+                    'correct' => $stats['correct'],
+                    'answered' => $stats['answered'],
+                    'total_questions' => $stats['total_questions'],
+                ];
+                // Grandfathering: deltagaren har inga sparade svar (historisk completion)
+                if ($stats['answered'] === 0) break;
+                // För få besvarade frågor — räkna som ej uppfyllt
+                if ($stats['percentage'] < $threshold) {
+                    $failures[] = [
+                        'type' => 'min_quiz_percentage',
+                        'threshold' => $threshold,
+                        'actual' => $stats['percentage'],
+                        'message' => sprintf(
+                            'Du har %d %% rätt (%d av %d svar) men behöver minst %d %% för att få diplom.',
+                            $stats['percentage'],
+                            $stats['correct'],
+                            $stats['answered'],
+                            $threshold
+                        ),
+                    ];
+                }
+                break;
+            }
+        }
+    }
+
+    return [
+        'passed' => empty($failures),
+        'failures' => $failures,
+        'details' => $details,
+    ];
+}
+
+/**
+ * Räkna ihop % rätt för en användare över alla aktiva quiz-frågor i en kurs.
+ * Baseras på senaste svaret per (user, lesson, question) i quiz_answers.
+ *
+ * Returnerar:
+ *   - correct        (int)
+ *   - answered       (int) — antal frågor med sparat svar
+ *   - total_questions(int) — totalt antal frågor i kursens aktiva lektioner
+ *   - percentage     (int) — correct / answered, eller 0 om answered = 0
+ */
+function computeUserCourseQuizStats($userId, $courseId) {
+    $row = queryOne(
+        "SELECT
+            SUM(qa.is_correct) AS correct,
+            COUNT(qa.id) AS answered
+         FROM " . DB_DATABASE . ".quiz_answers qa
+         JOIN " . DB_DATABASE . ".lessons l ON l.id = qa.lesson_id
+         WHERE qa.user_id = ? AND l.course_id = ? AND l.status = 'active'",
+        [$userId, $courseId]
+    );
+    $totalRow = queryOne(
+        "SELECT COUNT(qq.id) AS total
+         FROM " . DB_DATABASE . ".quiz_questions qq
+         JOIN " . DB_DATABASE . ".lessons l ON l.id = qq.lesson_id
+         WHERE l.course_id = ? AND l.status = 'active'",
+        [$courseId]
+    );
+    $correct = (int)($row['correct'] ?? 0);
+    $answered = (int)($row['answered'] ?? 0);
+    $total = (int)($totalRow['total'] ?? 0);
+    $pct = $answered > 0 ? (int)floor($correct * 100 / $answered) : 0;
+    return [
+        'correct' => $correct,
+        'answered' => $answered,
+        'total_questions' => $total,
+        'percentage' => $pct,
     ];
 }
 

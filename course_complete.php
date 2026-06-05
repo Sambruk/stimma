@@ -57,17 +57,22 @@ if (!$isComplete) {
 }
 
 // Säkerställ att diplom finns (backfill: vid gamla slutföranden kan det saknas).
+// checkAndCompleteCourse respekterar diplom-kriterier (% rätt etc.) — om
+// kriterier ej uppfylls returneras criteria_failures istället för cert.
 $cert = queryOne(
     "SELECT * FROM " . DB_DATABASE . ".certificates WHERE user_id = ? AND course_id = ? LIMIT 1",
     [$userId, $courseId]
 );
+$criteriaFailures = [];
 if (!$cert) {
-    $res = recordCourseCompletion($userId, $courseId);
+    $res = checkAndCompleteCourse($userId, $courseId);
     if (!empty($res['certificate_number'])) {
         $cert = queryOne(
             "SELECT * FROM " . DB_DATABASE . ".certificates WHERE certificate_number = ?",
             [$res['certificate_number']]
         );
+    } elseif (!empty($res['criteria_failures'])) {
+        $criteriaFailures = $res['criteria_failures'];
     }
 }
 
@@ -161,6 +166,32 @@ $headerText = getHeaderText($userId);
             </div>
         </div>
         <div class="col-lg-4">
+            <?php if (!$cert && !empty($criteriaFailures)):
+                // Hämta retry-flagga för deltagar-info
+                $allowRetryRow = queryOne(
+                    "SELECT allow_quiz_retry FROM " . DB_DATABASE . ".courses WHERE id = ?",
+                    [(int)$course['id']]
+                );
+                $allowRetry = $allowRetryRow ? (int)$allowRetryRow['allow_quiz_retry'] === 1 : true;
+            ?>
+            <div class="diploma-box mb-3" style="background: #fdecea; border-color: #b03a2e;">
+                <i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 3rem;"></i>
+                <h5 class="mt-2 mb-1">Diplom inte utfärdat ännu</h5>
+                <p class="text-muted small mb-3">Du har klarat alla lektioner men följande krav kvarstår:</p>
+                <ul class="text-start small mb-3 ps-3">
+                    <?php foreach ($criteriaFailures as $f): ?>
+                    <li><?= htmlspecialchars($f['message']) ?></li>
+                    <?php endforeach; ?>
+                </ul>
+                <?php if ($allowRetry): ?>
+                <a href="course.php?id=<?= (int)$course['id'] ?>" class="btn btn-warning w-100">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>Gör om quiz för att förbättra resultatet
+                </a>
+                <?php else: ?>
+                <p class="text-muted small mb-0"><em>Kursen tillåter inte omtag — kontakta din kursadministratör.</em></p>
+                <?php endif; ?>
+            </div>
+            <?php else: ?>
             <div class="diploma-box mb-3">
                 <i class="bi bi-award-fill text-warning" style="font-size: 3rem;"></i>
                 <h5 class="mt-2 mb-1">Ditt diplom är klart</h5>
@@ -176,6 +207,7 @@ $headerText = getHeaderText($userId);
                 <p class="text-muted small">Diplomet skapas inom kort.</p>
                 <?php endif; ?>
             </div>
+            <?php endif; ?>
             <a href="course.php?id=<?= (int)$course['id'] ?>" class="btn btn-outline-secondary w-100 mb-2">
                 <i class="bi bi-arrow-left me-1"></i>Tillbaka till kursen
             </a>

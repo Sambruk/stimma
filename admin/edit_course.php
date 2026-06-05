@@ -33,9 +33,19 @@ $tagDomClause = buildDomainInClause($orgScopeDomains, 'organization_domain');
 // Hämta kursdata om vi redigerar en befintlig kurs
 $course = null;
 $courseTags = [];
+// Diplom-kriterium: min_quiz_percentage. Tomt = inget krav.
+$courseMinQuizPct = '';
 if (isset($_GET['id'])) {
     $courseId = (int)$_GET['id'];
     $course = queryOne("SELECT * FROM " . DB_DATABASE . ".courses WHERE id = ?", [$courseId]);
+    $critRow = queryOne(
+        "SELECT threshold_value FROM " . DB_DATABASE . ".course_completion_criteria
+         WHERE course_id = ? AND criterion_type = 'min_quiz_percentage' LIMIT 1",
+        [$courseId]
+    );
+    if ($critRow && $critRow['threshold_value'] !== null) {
+        $courseMinQuizPct = (int)$critRow['threshold_value'];
+    }
 
     if (!$course) {
         $_SESSION['message'] = 'Kursen hittades inte.';
@@ -130,6 +140,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $seqReminderBody = trim($_POST['seq_reminder_body'] ?? '') ?: null;
     $enrollmentType = ($_POST['enrollment_type'] ?? 'bulk_start') === 'rolling' ? 'rolling' : 'bulk_start';
 
+    // Diplom-kriterier + retry-flagga (nya 2026-06-05).
+    // allow_quiz_retry: checkbox → 1 om markerad, annars 0
+    $allowQuizRetry = isset($_POST['allow_quiz_retry']) ? 1 : 0;
+    // min_quiz_percentage: tomt fält = inget krav (NULL i kriterie-tabellen)
+    $minQuizPct = null;
+    if (isset($_POST['min_quiz_percentage']) && $_POST['min_quiz_percentage'] !== '') {
+        $minQuizPct = max(0, min(100, (int)$_POST['min_quiz_percentage']));
+    }
+
     // Global synlighet — endast superadmin får sätta. För icke-superadmin
     // bevaras befintligt värde (eller 0 vid create).
     if ($isSuperAdmin) {
@@ -223,6 +242,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         WHERE id = ?",
                         [$title, $description, $completionContent, $status, $deadline, $startDate, $sequentialMode, $sequentialIntervalDays, $sequentialReminderDelayDays, $seqNewLessonSubject, $seqNewLessonBody, $seqReminderSubject, $seqReminderBody, $sequentialStatus, $enrollmentType, $imageUrl, $isGlobal, $_GET['id']]);
 
+                // Diplom-kriterier + retry-flagga
+                execute("UPDATE " . DB_DATABASE . ".courses SET allow_quiz_retry = ? WHERE id = ?",
+                        [$allowQuizRetry, $_GET['id']]);
+                execute("DELETE FROM " . DB_DATABASE . ".course_completion_criteria WHERE course_id = ? AND criterion_type = 'min_quiz_percentage'",
+                        [$_GET['id']]);
+                if ($minQuizPct !== null) {
+                    execute("INSERT INTO " . DB_DATABASE . ".course_completion_criteria (course_id, criterion_type, threshold_value) VALUES (?, 'min_quiz_percentage', ?)",
+                            [$_GET['id'], $minQuizPct]);
+                }
+
                 // Uppdatera kursens taggar
                 // Ta bort befintliga taggar
                 execute("DELETE FROM " . DB_DATABASE . ".course_tags WHERE course_id = ?", [$_GET['id']]);
@@ -292,6 +321,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 // Hämta det nya kurs-ID:t
                 $newCourseId = getDb()->lastInsertId();
+
+                // Diplom-kriterier + retry-flagga för ny kurs
+                execute("UPDATE " . DB_DATABASE . ".courses SET allow_quiz_retry = ? WHERE id = ?",
+                        [$allowQuizRetry, $newCourseId]);
+                if ($minQuizPct !== null) {
+                    execute("INSERT INTO " . DB_DATABASE . ".course_completion_criteria (course_id, criterion_type, threshold_value) VALUES (?, 'min_quiz_percentage', ?)",
+                            [$newCourseId, $minQuizPct]);
+                }
 
                 // Lägg till skaparen som redaktör för kursen
                 execute("INSERT INTO " . DB_DATABASE . ".course_editors
@@ -647,6 +684,40 @@ require_once 'include/header.php';
                                 Visas för kursdeltagaren när sista lektionen är avklarad — tillsammans med länk till diplomet. Lämna tomt för att använda standardtexten.
                             </div>
                             <?php require_once 'include/editor.php'; renderEditor($course['completion_content'] ?? '', 'completion_content', 'completionEditor', true); ?>
+                        </div>
+
+                        <!-- Diplom-kriterier (utöver att lektionerna ska vara klara) -->
+                        <div class="mb-3 p-3 border rounded bg-light">
+                            <label class="form-label fw-semibold"><i class="bi bi-award me-1 text-secondary"></i>Diplom-kriterier</label>
+                            <div class="form-text mb-3">
+                                Här kan du ställa krav som måste vara uppfyllda — utöver att alla lektioner ska vara avklarade — innan diplomet utfärdas.
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="min_quiz_percentage" class="form-label">Minsta andel rätt svar (%)</label>
+                                <div class="input-group" style="max-width: 220px;">
+                                    <input type="number" min="0" max="100" step="1"
+                                           class="form-control" id="min_quiz_percentage" name="min_quiz_percentage"
+                                           value="<?= htmlspecialchars((string)$courseMinQuizPct) ?>"
+                                           placeholder="t.ex. 80">
+                                    <span class="input-group-text">%</span>
+                                </div>
+                                <div class="form-text">
+                                    Räknas över <strong>senaste svaret</strong> per fråga på alla quiz i kursens aktiva lektioner. Lämna tomt för inget procentkrav.
+                                </div>
+                            </div>
+
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch"
+                                       id="allow_quiz_retry" name="allow_quiz_retry"
+                                       <?= (!isset($course['allow_quiz_retry']) || (int)$course['allow_quiz_retry'] === 1) ? 'checked' : '' ?>>
+                                <label class="form-check-label" for="allow_quiz_retry">
+                                    Tillåt deltagare att svara om på samma fråga
+                                </label>
+                                <div class="form-text">
+                                    Av: varje fråga kan besvaras en gång — sista chansen för deltagaren. På (default): deltagaren kan göra om quiz och svaren skrivs över med senaste resultatet.
+                                </div>
+                            </div>
                         </div>
 
                             </div><!-- /.card-body Kursens innehåll -->
@@ -1188,32 +1259,6 @@ require_once 'include/header.php';
                         </div>
                         <?php endif; ?>
 
-                        <?php if (!empty($availableOrgTags)): ?>
-                        <?php
-                        // Sortera i bokstavsordning
-                        $sortedOrgTags = $availableOrgTags;
-                        usort($sortedOrgTags, function($a, $b) { return strcasecmp($a['tag'], $b['tag']); });
-
-                        // Dela upp i 5 kolumner, jämnt fördelade
-                        $colCount = 5;
-                        $totalTags = count($sortedOrgTags);
-                        $perCol = (int)ceil($totalTags / $colCount);
-                        $columns = [];
-                        for ($i = 0; $i < $colCount; $i++) {
-                            $columns[$i] = array_slice($sortedOrgTags, $i * $perCol, $perCol);
-                        }
-                        // Beräkna bokstavsetikett per kolumn
-                        $colLabels = [];
-                        foreach ($columns as $ci => $colTags) {
-                            if (empty($colTags)) {
-                                $colLabels[$ci] = '';
-                                continue;
-                            }
-                            $first = mb_strtoupper(mb_substr($colTags[0]['tag'], 0, 1));
-                            $last = mb_strtoupper(mb_substr(end($colTags)['tag'], 0, 1));
-                            $colLabels[$ci] = ($first === $last) ? $first : $first . '–' . $last;
-                        }
-                        ?>
                         <!-- Domän-delning (primär mekanism för att begränsa inom org) -->
                         <?php
                         // Hämta användarens org + alla orgens domäner
@@ -1226,6 +1271,8 @@ require_once 'include/header.php';
                         }
                         $courseSharedDomains = !empty($course['id']) ? getCourseSharedDomains($course['id']) : [];
                         $shareMode = empty($courseSharedDomains) ? 'whole_org' : 'specific_domains';
+                        // Default: alla domäner markerade när inget explicit val finns (ny kurs / hela org)
+                        $prefillAllDomains = ($shareMode === 'whole_org');
                         ?>
                         <div class="mb-4 p-3 border rounded bg-light">
                             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
@@ -1273,7 +1320,7 @@ require_once 'include/header.php';
                                         <div class="form-check">
                                             <input class="form-check-input share-domain-check" type="checkbox" name="shared_domains[]"
                                                    id="share_dom_<?= htmlspecialchars(md5($dom)) ?>" value="<?= htmlspecialchars($dom) ?>"
-                                                   <?= in_array($dom, $courseSharedDomains, true) ? 'checked' : '' ?>>
+                                                   <?= ($prefillAllDomains || in_array($dom, $courseSharedDomains, true)) ? 'checked' : '' ?>>
                                             <label class="form-check-label font-monospace small" for="share_dom_<?= htmlspecialchars(md5($dom)) ?>">
                                                 <?= htmlspecialchars($dom) ?>
                                             </label>
@@ -1304,6 +1351,32 @@ require_once 'include/header.php';
                         })();
                         </script>
 
+                        <?php if (!empty($availableOrgTags)): ?>
+                        <?php
+                        // Sortera i bokstavsordning
+                        $sortedOrgTags = $availableOrgTags;
+                        usort($sortedOrgTags, function($a, $b) { return strcasecmp($a['tag'], $b['tag']); });
+
+                        // Dela upp i 5 kolumner, jämnt fördelade
+                        $colCount = 5;
+                        $totalTags = count($sortedOrgTags);
+                        $perCol = (int)ceil($totalTags / $colCount);
+                        $columns = [];
+                        for ($i = 0; $i < $colCount; $i++) {
+                            $columns[$i] = array_slice($sortedOrgTags, $i * $perCol, $perCol);
+                        }
+                        // Beräkna bokstavsetikett per kolumn
+                        $colLabels = [];
+                        foreach ($columns as $ci => $colTags) {
+                            if (empty($colTags)) {
+                                $colLabels[$ci] = '';
+                                continue;
+                            }
+                            $first = mb_strtoupper(mb_substr($colTags[0]['tag'], 0, 1));
+                            $last = mb_strtoupper(mb_substr(end($colTags)['tag'], 0, 1));
+                            $colLabels[$ci] = ($first === $last) ? $first : $first . '–' . $last;
+                        }
+                        ?>
                         <div class="mb-3">
                             <label class="form-label">Organisationstaggar</label>
                             <div class="form-text mb-2">

@@ -72,7 +72,7 @@ function initStimmaEditor(selector, fullToolbar) {
             ? [
                 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | forecolor backcolor',
                 'alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | lineheight',
-                'link image table | lessonblocks pagebreak | removeformat fullscreen code'
+                'link image table | lessonblocks videohere pagebreak | removeformat fullscreen code'
               ]
             : 'undo redo | bold italic | bullist numlist | removeformat',
 
@@ -171,6 +171,18 @@ function initStimmaEditor(selector, fullToolbar) {
         link_assume_external_targets: 'https',
 
         setup: function(editor) {
+            // "Video här"-knapp: infogar markören [video] på egen rad. Lektionsplayern
+            // (lesson.php) ersätter markören med den uppladdade videon på exakt den
+            // platsen. Markören står i egen <p> så HTML:en förblir balanserad.
+            editor.ui.registry.addButton('videohere', {
+                text: 'Video här',
+                icon: 'embed',
+                tooltip: 'Infoga lektionens video på denna plats',
+                onAction: function() {
+                    editor.insertContent('<p>[video]</p>');
+                }
+            });
+
             // Innehållsblock dropdown-meny
             editor.ui.registry.addMenuButton('lessonblocks', {
                 text: 'Innehållsblock',

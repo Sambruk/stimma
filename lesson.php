@@ -68,7 +68,8 @@ if ($isPreviewMode) {
 
 // Fetch lesson information including course details
 $lesson = queryOne("
-    SELECT l.*, c.title as course_title, c.status as course_status, c.sequential_mode
+    SELECT l.*, c.title as course_title, c.status as course_status, c.sequential_mode,
+           c.allow_quiz_retry as course_allow_quiz_retry
     FROM " . DB_DATABASE . ".lessons l
     JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
     WHERE l.id = ?
@@ -279,6 +280,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['answer_question_id'])
         exit;
     }
     $questionRow['data'] = !empty($questionRow['quiz_data']) ? (json_decode($questionRow['quiz_data'], true) ?: []) : [];
+
+    // Blockera omtag om kursen har stängt av detta OCH deltagaren redan
+    // har ett sparat svar på frågan. Admin/editor i preview-läge undantas.
+    if (!$isPreviewMode
+        && isset($lesson['course_allow_quiz_retry'])
+        && (int)$lesson['course_allow_quiz_retry'] === 0
+        && hasAnsweredQuizQuestion($userId, $lessonId, $qid)) {
+        echo json_encode([
+            'success' => false,
+            'already_answered' => true,
+            'message' => 'Du har redan svarat på den här frågan och kursen tillåter inte omtag.',
+        ]);
+        exit;
+    }
+
     $g = gradeQuizQuestion($questionRow, $_POST);
 
     // I förhandsgranskningsläge: bara returnera resultat, spara inget
@@ -286,6 +302,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['answer_question_id'])
         echo json_encode(['success' => true, 'correct' => $g['correct'], 'preview' => true]);
         exit;
     }
+
+    // Spara svaret i quiz_answers (senaste vinner via UNIQUE-constraint).
+    // Behövs för "% rätt"-kriterier och retry-koll.
+    recordQuizAnswer(
+        $userId,
+        $lessonId,
+        $qid,
+        extractQuizAnswerForStorage($questionRow, $_POST),
+        $g['correct']
+    );
 
     // Lektionens pass-läge: 'require_all_correct' (default) eller 'any_result'
     $lessonPassMode = $lesson['quiz_pass_mode'] ?? 'require_all_correct';
@@ -452,10 +478,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasQuizAnswer($_POST) && !$isPrevie
         exit;
     }
 
+    // Blockera omtag om kursen har stängt av detta OCH deltagaren redan
+    // har sparade svar på lektionen. Vi kollar mot quiz_answers istället
+    // för progress för att hantera fall där en lektion svarats men inte
+    // markerats completed (delvis besvarad).
+    if (isset($lesson['course_allow_quiz_retry']) && (int)$lesson['course_allow_quiz_retry'] === 0) {
+        $existing = queryOne(
+            "SELECT 1 FROM " . DB_DATABASE . ".quiz_answers
+             WHERE user_id = ? AND lesson_id = ? LIMIT 1",
+            [$userId, $lessonId]
+        );
+        if ($existing) {
+            if (isAjaxRequest()) {
+                header('Content-Type: application/json');
+                echo json_encode(['success' => false, 'already_answered' => true, 'message' => 'Kursen tillåter inte omtag av quiz.']);
+                exit;
+            }
+            $_SESSION['flash_message'] = 'Kursen tillåter inte omtag av quiz.';
+            $_SESSION['flash_type'] = 'warning';
+            redirect("lesson.php?id=$lessonId");
+            exit;
+        }
+    }
+
     // Check if ALL quiz answers are correct (använder nya multi-question-modulen)
     $grade = gradeLessonQuiz($lessonId, $_POST);
     $isCorrect = $grade['all_correct'];
-    
+
+    // Spara per-fråge-svar i quiz_answers (senaste vinner). Drivs för
+    // "% rätt"-kriterier och retry-blockering.
+    $allQuestionsForRecord = getQuizQuestionsForLesson($lessonId);
+    foreach ($allQuestionsForRecord as $qForRecord) {
+        recordQuizAnswer(
+            $userId,
+            $lessonId,
+            (int)$qForRecord['id'],
+            extractQuizAnswerForStorage($qForRecord, $_POST),
+            !empty($grade['results'][$qForRecord['id']])
+        );
+    }
+
     // Check if all previous lessons in the course are completed
     $previousLessons = query("SELECT id FROM " . DB_DATABASE . ".lessons 
                             WHERE course_id = ? 
@@ -832,10 +894,99 @@ function convertYoutubeUrl($url) {
                 // räknas som egna sidor även när content bara har en sida — annars
                 // skulle quiz visas direkt under innehållet istället för på egen
                 // bläddringsbar sida.
-                $rdExtraPages = ($rdHasVideo ? 1 : 0)
+                // Videomarkör: om författaren skrivit [video] i innehållet renderas
+                // videospelaren inline på exakt den platsen istället för som ett eget
+                // kort/sida. Då räknas videon inte som en egen sida och det separata
+                // videokortet (top/bottom) hoppas över. Markören splittas bort INNAN
+                // cleanHtml (samma princip som <!-- pagebreak -->), och spelaren
+                // injiceras EFTER cleanHtml så ingen rå iframe passerar saneringen.
+                $rdContentHasVideoMarker = (bool)preg_match('/\[video\]/i', $rdRawContent);
+                $rdInlineVideo = $rdHasVideo && $rdContentHasVideoMarker;
+
+                $rdExtraPages = (($rdHasVideo && !$rdInlineVideo) ? 1 : 0)
                               + ($rdHasAiChat ? 1 : 0)
                               + ($rdHasQuizCard ? 1 : 0);
                 $rdMultiPage = ($rdContentPageCount + $rdExtraPages) > 1;
+
+                // Videoplacering (fallback när ingen [video]-markör används):
+                // 'top' = videosidan visas FÖRE innehållet, 'bottom' = efter (default).
+                $rdVideoPos = (($lesson['video_position'] ?? 'bottom') === 'top') ? 'top' : 'bottom';
+                $rdVideoFirst = $rdHasVideo && !$rdInlineVideo && $rdVideoPos === 'top';
+
+                // Själva videospelaren (ratio-block med <video> eller YouTube-iframe).
+                // Byggs en gång och återanvänds av både det separata kortet och
+                // inline-placeringen.
+                $rdVideoPlayerHtml = '';
+                if ($rdHasVideo) {
+                    $rdVideoIsLocal = (($lesson['video_type'] ?? '') === 'local');
+                    ob_start();
+                    if ($rdVideoIsLocal):
+                        $videoFile = basename($lesson['video_url']);
+                        $videoExt = strtolower(pathinfo($videoFile, PATHINFO_EXTENSION));
+                        $videoMime = $videoExt === 'webm' ? 'video/webm' : 'video/mp4';
+                    ?>
+                    <div class="ratio ratio-16x9">
+                        <video controls preload="metadata">
+                            <source src="upload/videos/<?= htmlspecialchars($videoFile) ?>" type="<?= $videoMime ?>">
+                            Din webbläsare stöder inte videouppspelning.
+                        </video>
+                    </div>
+                    <?php else: ?>
+                    <div class="ratio ratio-16x9">
+                        <iframe
+                            src="<?= htmlspecialchars(convertYoutubeUrl($lesson['video_url'])) ?>"
+                            title="Lesson video"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowfullscreen
+                            loading="lazy">
+                        </iframe>
+                    </div>
+                    <?php endif;
+                    $rdVideoPlayerHtml = ob_get_clean();
+                }
+
+                // Renderar det separata videokortet (används när ingen [video]-markör
+                // finns). $isActivePage styr initialt synlig sida i multipage-läget.
+                $rdRenderVideoCard = function (bool $isActivePage = false) use ($lesson, $rdMultiPage, $rdVideoPlayerHtml) {
+                    if (empty($lesson['video_url'])) return '';
+                    $isLocal = (($lesson['video_type'] ?? '') === 'local');
+                    ob_start();
+                    ?>
+                    <div class="card mb-4<?= $rdMultiPage ? ' lesson-page' : '' ?><?= ($rdMultiPage && $isActivePage) ? ' active' : '' ?>"<?php if ($rdMultiPage): ?> data-page-kind="video"<?php if (!$isActivePage): ?> hidden<?php endif; ?> role="region" aria-label="Video"<?php endif; ?>>
+                        <div class="card-header">
+                            <?php if ($isLocal): ?>
+                                <i class="bi bi-camera-video me-2"></i> Video
+                            <?php else: ?>
+                                <i class="bi bi-youtube me-2"></i> Video
+                            <?php endif; ?>
+                        </div>
+                        <div class="card-body">
+                            <?= $rdVideoPlayerHtml ?>
+                        </div>
+                    </div>
+                    <?php
+                    return ob_get_clean();
+                };
+
+                // Renderar en content-slice: saneras med cleanHtml, men om [video]-
+                // markören finns i slicen splittas den och videospelaren injiceras
+                // inline på markörens plats. Markören tas alltid bort (visas aldrig
+                // som literal text), även om ingen video är kopplad.
+                $rdRenderContentSlice = function (string $rawSlice) use ($rdContentHasVideoMarker, $rdHasVideo, $rdVideoPlayerHtml) {
+                    if (!$rdContentHasVideoMarker) {
+                        return cleanHtml($rawSlice);
+                    }
+                    // Konsumerar ett ev. omslutande <p> så HTML:en förblir balanserad
+                    // när markören står på egen rad (vanligaste fallet via knappen).
+                    $parts = preg_split('/(?:<p>\s*)?\[video\](?:\s*<\/p>)?/i', $rawSlice, 2);
+                    if (count($parts) < 2) {
+                        return cleanHtml($rawSlice);
+                    }
+                    $inject = $rdHasVideo
+                        ? '<div class="lesson-inline-video mb-4">' . $rdVideoPlayerHtml . '</div>'
+                        : '';
+                    return cleanHtml($parts[0]) . $inject . cleanHtml($parts[1]);
+                };
                 ?>
                 <?php if ($rdMultiPage):
                     // Skicka över nästa-lektion-status och completed-flag till paginator-JS
@@ -867,10 +1018,18 @@ function convertYoutubeUrl($url) {
                      data-next-available="<?= (int)$rdNextLessonAvailable ?>">
                 <?php endif; ?>
 
+                <!-- Video först: videosidan renderas före innehållskortet och är
+                     paginatorns initialt synliga sida. Innehållskortet göms då
+                     initialt (paginator-JS visar det när man bläddrar till en
+                     content-sida). -->
+                <?php if ($rdVideoFirst): ?>
+                <?= $rdRenderVideoCard(true) ?>
+                <?php endif; ?>
+
                 <!-- Lesson content card. I multipage-läge gömmer paginator-JS
                      hela kortet när active page inte är "content" — annars
                      skulle lektionens titel + bild visas ovanför quiz/AI-chat/video. -->
-                <div class="card mb-4 lesson-content-card"<?php if (!empty($lesson['background_color'])): ?> style="background-color: <?= htmlspecialchars($lesson['background_color']) ?>"<?php endif; ?>>
+                <div class="card mb-4 lesson-content-card"<?php if ($rdVideoFirst): ?> hidden<?php endif; ?><?php if (!empty($lesson['background_color'])): ?> style="background-color: <?= htmlspecialchars($lesson['background_color']) ?>"<?php endif; ?>>
                     <div class="card-body">
                         <!-- Flash message display -->
                         <?php if (isset($_SESSION['flash_message']) && $_SESSION['flash_type'] !== 'danger'): ?>
@@ -913,20 +1072,25 @@ function convertYoutubeUrl($url) {
                             
                             <div class="<?= !empty($lesson['image_url']) ? 'col-md-8' : 'col-12' ?>">
                                 <?php if ($rdMultiPage): ?>
-                                    <?php foreach ($rdPages as $idx => $rdPageHtml): ?>
-                                    <section class="lesson-page <?= $idx === 0 ? 'active' : '' ?>"
+                                    <?php foreach ($rdPages as $idx => $rdPageHtml):
+                                        // När videon ligger först är videosidan paginatorns
+                                        // aktiva startsida — då ska ingen content-sida vara
+                                        // aktiv/synlig initialt.
+                                        $rdContentActive = ($idx === 0 && !$rdVideoFirst);
+                                    ?>
+                                    <section class="lesson-page <?= $rdContentActive ? 'active' : '' ?>"
                                              data-page-kind="content"
                                              role="region"
                                              aria-label="Innehållssida <?= $idx + 1 ?>"
-                                             <?= $idx === 0 ? '' : 'hidden' ?>>
+                                             <?= $rdContentActive ? '' : 'hidden' ?>>
                                         <div class="content clearfix">
-                                            <?= cleanHtml($rdPageHtml) ?>
+                                            <?= $rdRenderContentSlice($rdPageHtml) ?>
                                         </div>
                                     </section>
                                     <?php endforeach; ?>
                                 <?php else: ?>
                                 <div class="content clearfix">
-                                    <?= cleanHtml($rdRawContent) ?>
+                                    <?= $rdRenderContentSlice($rdRawContent) ?>
                                 </div>
                                 <?php endif; ?>
                             </div>
@@ -934,42 +1098,12 @@ function convertYoutubeUrl($url) {
                     </div>
                 </div>
 
-                <!-- Video Section -->
-                <?php if (!empty($lesson['video_url'])): ?>
-                <div class="card mb-4 <?= $rdMultiPage ? 'lesson-page' : '' ?>" <?php if ($rdMultiPage): ?>data-page-kind="video" hidden role="region" aria-label="Video"<?php endif; ?>>
-                    <div class="card-header">
-                        <?php if (($lesson['video_type'] ?? '') === 'local'): ?>
-                            <i class="bi bi-camera-video me-2"></i> Video
-                        <?php else: ?>
-                            <i class="bi bi-youtube me-2"></i> Video
-                        <?php endif; ?>
-                    </div>
-                    <div class="card-body">
-                        <?php if (($lesson['video_type'] ?? '') === 'local'): ?>
-                        <?php
-                            $videoFile = basename($lesson['video_url']);
-                            $videoExt = strtolower(pathinfo($videoFile, PATHINFO_EXTENSION));
-                            $videoMime = $videoExt === 'webm' ? 'video/webm' : 'video/mp4';
-                        ?>
-                        <div class="ratio ratio-16x9">
-                            <video controls preload="metadata">
-                                <source src="upload/videos/<?= htmlspecialchars($videoFile) ?>" type="<?= $videoMime ?>">
-                                Din webbläsare stöder inte videouppspelning.
-                            </video>
-                        </div>
-                        <?php else: ?>
-                        <div class="ratio ratio-16x9">
-                            <iframe
-                                src="<?= htmlspecialchars(convertYoutubeUrl($lesson['video_url'])) ?>"
-                                title="Lesson video"
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                allowfullscreen
-                                loading="lazy">
-                            </iframe>
-                        </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
+                <!-- Video Section (separat kort). Renderas bara när videon INTE är
+                     inline via videomarkören. Vid 'top' renderas videosidan istället
+                     före innehållskortet ovan via $rdRenderVideoCard(true); 'bottom'
+                     (default) renderas här efter innehållet. -->
+                <?php if (!empty($lesson['video_url']) && !$rdVideoFirst && !$rdInlineVideo): ?>
+                <?= $rdRenderVideoCard(false) ?>
                 <?php endif; ?>
 
                 <!-- Audio card (tillgänglighetsalternativ / pedagogiskt ljud) -->

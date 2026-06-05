@@ -154,11 +154,6 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="statistics.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'statistics.php' ? 'active' : '' ?>">
-                        <i class="bi bi-bar-chart me-2"></i> Statistik
-                    </a>
-                </li>
-                <li class="nav-item">
                     <a href="course_stats.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'course_stats.php' ? 'active' : '' ?>">
                         <i class="bi bi-diagram-3 me-2"></i> Kursstatistik
                     </a>

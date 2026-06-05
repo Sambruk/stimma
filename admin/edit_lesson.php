@@ -185,6 +185,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $video_type = 'youtube';
     }
 
+    // Placering av videon i lektionen: 'top' (före innehållet) eller 'bottom' (efter, default)
+    $video_position = ($_POST['video_position'] ?? 'bottom') === 'top' ? 'top' : 'bottom';
+
     // Om vi byter från local till annat: radera gammal videofil
     if (isset($lesson) && ($lesson['video_type'] ?? '') === 'local' && !empty($lesson['video_url'])) {
         if ($video_type !== 'local' || $video_url !== $lesson['video_url']) {
@@ -242,6 +245,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     image_url = ?,
                     video_url = ?,
                     video_type = ?,
+                    video_position = ?,
                     audio_url = ?,
                     status = ?,
                     ai_instruction = ?,
@@ -251,7 +255,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     updated_at = NOW()
                     WHERE id = ?",
                     [$title, $content, $background_color ?: null, $course_id, $lesson_type, $belongs_to_lesson_id,
-                     $image_url, $video_url, $video_type, $audio_url, $status,
+                     $image_url, $video_url, $video_type, $video_position, $audio_url, $status,
                      $ai_instruction, $ai_prompt, $ai_chat_enabled, $quiz_pass_mode, $_GET['id']]);
             
             // Logga ändringen
@@ -269,11 +273,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Skapa ny lektion (quiz hanteras separat via edit_quiz.php efter att lektionen är sparad)
             execute("INSERT INTO " . DB_DATABASE . ".lessons
                     (title, content, background_color, course_id, lesson_type, belongs_to_lesson_id,
-                     image_url, video_url, video_type, audio_url, status,
+                     image_url, video_url, video_type, video_position, audio_url, status,
                      ai_instruction, ai_prompt, ai_chat_enabled, quiz_pass_mode, sort_order, author_id, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
                     [$title, $content, $background_color ?: null, $course_id, $lesson_type, $belongs_to_lesson_id,
-                     $image_url, $video_url, $video_type, $audio_url, $status,
+                     $image_url, $video_url, $video_type, $video_position, $audio_url, $status,
                      $ai_instruction, $ai_prompt, $ai_chat_enabled, $quiz_pass_mode, $maxOrder + 1, $authorId]);
             
             $newId = getDb()->lastInsertId();
@@ -299,6 +303,7 @@ $courseId = null;
 $imageUrl = '';
 $videoUrl = '';
 $videoType = '';
+$videoPosition = 'bottom';
 $audioUrl = '';
 $aiInstruction = '';
 $aiPrompt = '';
@@ -329,6 +334,7 @@ if (isset($_GET['id']) && is_numeric($_GET['id'])) {
         $imageUrl = $lesson['image_url'] ?? '';
         $videoUrl = $lesson['video_url'] ?? '';
         $videoType = $lesson['video_type'] ?? '';
+        $videoPosition = ($lesson['video_position'] ?? 'bottom') === 'top' ? 'top' : 'bottom';
         $audioUrl = $lesson['audio_url'] ?? '';
         $aiInstruction = $lesson['ai_instruction'] ?? '';
         $aiPrompt = $lesson['ai_prompt'] ?? '';
@@ -728,6 +734,29 @@ if ($isAdmin) {
                                         </div>
                                         <small id="video-upload-status" class="text-muted mt-1 d-block"></small>
                                     </div>
+                                </div>
+                            </div>
+
+                            <!-- Placering av videon i lektionen -->
+                            <div class="mt-3">
+                                <label class="form-label fw-normal d-block mb-2">Var ska videon visas i lektionen?</label>
+                                <div class="alert alert-info py-2 px-3 small mb-2">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Vill du placera videon exakt? Sätt markören i lektionstexten där du vill ha den och klicka
+                                    <strong>Video här</strong> i verktygsfältet (infogar <code>[video]</code>). Videon visas då på den platsen.
+                                    Annars används valet nedan.
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="video_position" id="video_position_bottom" value="bottom" <?= $videoPosition !== 'top' ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="video_position_bottom">
+                                        Sist i lektionen <span class="text-muted">(efter innehållet, före ev. quiz)</span>
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="video_position" id="video_position_top" value="top" <?= $videoPosition === 'top' ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="video_position_top">
+                                        Först i lektionen <span class="text-muted">(efter rubriken, före innehållet)</span>
+                                    </label>
                                 </div>
                             </div>
                         </div>

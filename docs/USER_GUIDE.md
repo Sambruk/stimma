@@ -40,6 +40,10 @@ Denna handbok beskriver hur du använder Stimma e-learning plattform. Stimma är
    - [AI-leverantörskonfiguration](#ai-leverantörskonfiguration)
    - [Testa AI-anslutning](#testa-ai-anslutning)
    - [Inställningar för stegvisa kurser](#inställningar-för-stegvisa-kurser)
+   - [Domänhantering](#domänhantering)
+7. [PUB-avtal (Personuppgiftsbiträdesavtal)](#pub-avtal-personuppgiftsbiträdesavtal)
+   - [Räckvidd: organisation eller domän?](#räckvidd-organisation-eller-domän)
+   - [Teckna PUB-avtal](#teckna-pub-avtal)
 
 ---
 
@@ -819,6 +823,39 @@ Hantera vilka e-postdomäner som får tillgång till systemet:
 4. Ta bort domäner som inte längre ska ha tillgång
 
 **Tips:** Endast användare med e-postadresser från tillåtna domäner kan logga in.
+
+---
+
+## PUB-avtal (Personuppgiftsbiträdesavtal)
+
+Ett PUB-avtal reglerar hur personuppgifter behandlas mellan en organisation och Sambruk. Enligt GDPR krävs avtalet innan personuppgifter behandlas i systemet. Organisationer utan tecknat avtal ser en varningsruta i gränssnittet, och PUB-status visas som en badge i sidhuvudet (✅ tecknat / ⚠️ saknas).
+
+### Räckvidd: organisation eller domän?
+
+Ett tecknat PUB-avtal gäller antingen en **hel organisation** eller en **enskild e-postdomän** — beroende på hur domänen är upplagd:
+
+| Situation | Vad avtalet gäller |
+|---|---|
+| **Domänen är grupperad i en organisation** | Avtalet lyfts till organisationsnivå. **En enda signering gäller för samtliga domäner** i organisationen — ingen domän behöver teckna separat. |
+| **Domänen är ogrupperad** | Avtalet gäller **endast den domänen**. Varje fristående domän tecknar sitt eget avtal. |
+
+En superadmin grupperar domäner under en organisation via **Organisationer** i adminmenyn.
+
+**Exempel:** En kommun som använder både `kommun.se` och `utbildning.kommun.se` kan gruppera båda under en organisation. Då räcker det att en behörig person tecknar avtalet en gång, och det gäller automatiskt för alla användare på samtliga domäner.
+
+**Legacy-fall:** Om en domän tecknade PUB-avtal *innan* den lades in i en organisation fortsätter avtalet att gälla — systemet känner igen detta och kräver ingen ny signering.
+
+### Teckna PUB-avtal
+
+En behörig person i organisationen tecknar avtalet digitalt:
+
+1. **Granska avtalet** — läs igenom PUB-avtalets PDF. Avtalet måste först vara kontrasignerat av Sambruk.
+2. **Fyll i uppgifter och verifiera med SMS** — ange namn, titel och e-post, verifiera identiteten med en 6-siffrig SMS-kod och intyga behörighet att teckna avtal för organisationen.
+3. **Ange organisationsuppgifter och signera** — fyll i organisationsnamn och organisationsnummer och signera. Ett stämplat PDF-avtal skapas och skickas per e-post.
+
+Efter signering skickas det stämplade avtalet automatiskt till undertecknaren, organisationens registrator och Sambruk.
+
+**Spårbarhet:** Oavsett räckvidd sparas ett signeringsbevis som knyts till **både** domänen som tecknade och organisationen. Beviset innehåller undertecknare, tidsstämpel, IP-adress, SMS-verifiering och en SHA-256-hash av det signerade PDF-dokumentet.
 
 ---
 
