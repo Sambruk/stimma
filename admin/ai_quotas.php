@@ -81,17 +81,105 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // --- Hämta data till sidan -------------------------------------------------
 $orgs = query("SELECT id, name FROM " . DB_DATABASE . ".organizations ORDER BY name");
-$existingQuotas = query(
-    "SELECT q.*, o.name AS org_name
-       FROM " . DB_DATABASE . ".ai_quotas q
-       LEFT JOIN " . DB_DATABASE . ".organizations o ON o.id = q.organization_id
-       ORDER BY COALESCE(o.name, q.domain)"
-);
 
-// Berika med aktuell förbrukning
+// Filter: visa alla scopes (default) eller bara de med anpassad kvota
+$showFilter = ($_GET['filter'] ?? 'all') === 'custom' ? 'custom' : 'all';
+
+// Indexera befintliga quotas
+$quotaByOrg = [];
+$quotaByDomain = [];
+foreach (query("SELECT * FROM " . DB_DATABASE . ".ai_quotas") as $q) {
+    if (!empty($q['organization_id'])) {
+        $quotaByOrg[(int)$q['organization_id']] = $q;
+    } elseif (!empty($q['domain'])) {
+        $quotaByDomain[mb_strtolower($q['domain'])] = $q;
+    }
+}
+
+// Organisationernas medlemsdomäner — används för att undvika dubbletter
+// (en domän som tillhör en org listas inte separat i fri-domän-listan).
+$orgMemberDomains = [];
+$orgDomainCounts = [];
+foreach (query("SELECT organization_id, domain FROM " . DB_DATABASE . ".organization_domains") as $od) {
+    $orgMemberDomains[mb_strtolower($od['domain'])] = (int)$od['organization_id'];
+    $oid = (int)$od['organization_id'];
+    $orgDomainCounts[$oid] = ($orgDomainCounts[$oid] ?? 0) + 1;
+}
+
+// Läs in allowed_domains.txt (källan med 177 vitlistade domäner)
+$allowedDomainsFile = __DIR__ . '/../allowed_domains.txt';
+$allowedDomains = [];
+if (file_exists($allowedDomainsFile)) {
+    foreach (file($allowedDomainsFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        $line = trim($line);
+        if ($line !== '' && $line[0] !== '#') {
+            $allowedDomains[] = $line;
+        }
+    }
+    $allowedDomains = array_values(array_unique($allowedDomains));
+    sort($allowedDomains);
+}
+
+// Bygg en samlad scope-lista: alla organisationer + alla fria domäner.
+// För scopes utan egen quota fylls default-värden i; de markeras med
+// _is_default = true så UI:t kan skilja dem från anpassade rader.
+$existingQuotas = [];
+
+$defaultRowTemplate = [
+    'id' => null,
+    'monthly_token_quota' => AI_QUOTA_DEFAULT_TOKENS,
+    'alert_threshold_pct' => AI_QUOTA_DEFAULT_THRESHOLD_PCT,
+    'behavior' => AI_QUOTA_DEFAULT_BEHAVIOR,
+    'notes' => null,
+    'updated_at' => null,
+    'updated_by' => null,
+];
+
+foreach ($orgs as $o) {
+    $oid = (int)$o['id'];
+    $hasQuota = isset($quotaByOrg[$oid]);
+    $q = $hasQuota ? $quotaByOrg[$oid] : array_merge($defaultRowTemplate, [
+        'organization_id' => $oid, 'domain' => null, 'org_name' => $o['name'],
+    ]);
+    $q['org_name'] = $o['name'];
+    $q['_is_default'] = !$hasQuota;
+    $q['_scope_type'] = 'org';
+    $q['_member_count'] = $orgDomainCounts[$oid] ?? 0;
+    $existingQuotas[] = $q;
+}
+
+foreach ($allowedDomains as $dom) {
+    if (isset($orgMemberDomains[mb_strtolower($dom)])) continue;
+    $hasQuota = isset($quotaByDomain[mb_strtolower($dom)]);
+    $q = $hasQuota ? $quotaByDomain[mb_strtolower($dom)] : array_merge($defaultRowTemplate, [
+        'organization_id' => null, 'domain' => $dom,
+    ]);
+    $q['org_name'] = null;
+    $q['_is_default'] = !$hasQuota;
+    $q['_scope_type'] = 'domain';
+    $existingQuotas[] = $q;
+}
+
+// Sortera: org först (alfabetiskt), sedan domäner (alfabetiskt)
+usort($existingQuotas, function($a, $b) {
+    if ($a['_scope_type'] !== $b['_scope_type']) {
+        return $a['_scope_type'] === 'org' ? -1 : 1;
+    }
+    $la = mb_strtolower($a['org_name'] ?? $a['domain'] ?? '');
+    $lb = mb_strtolower($b['org_name'] ?? $b['domain'] ?? '');
+    return strcmp($la, $lb);
+});
+
+// Filtrera om användaren bara vill se anpassade
+if ($showFilter === 'custom') {
+    $existingQuotas = array_values(array_filter($existingQuotas, function($q) {
+        return empty($q['_is_default']);
+    }));
+}
+
+// Berika med aktuell förbrukning + saldo + visningslabel
 $year = (int)date('Y');
 $month = (int)date('n');
-if (!is_array($existingQuotas)) $existingQuotas = [];
 foreach ($existingQuotas as $i => $q) {
     $usage = getMonthlyAiUsage(
         $q['organization_id'] ? (int)$q['organization_id'] : null,
@@ -108,6 +196,11 @@ foreach ($existingQuotas as $i => $q) {
         ? getOrgTokenBalance((int)$q['organization_id'])
         : null;
 }
+
+$totalScopeCount = count($orgs) + count(array_filter($allowedDomains, function($d) use ($orgMemberDomains) {
+    return !isset($orgMemberDomains[mb_strtolower($d)]);
+}));
+$customCount = count($quotaByOrg) + count($quotaByDomain);
 
 $availableModels = listAvailableAiModels();
 $currentModels = [
@@ -157,12 +250,22 @@ require_once 'include/header.php';
 </div>
 
 <div class="card mb-4">
-    <div class="card-header">
-        <strong>Befintliga kvoter</strong>
-        <span class="text-muted small ms-2">
-            Saldo-läge: månatlig gratisbas fylls på 1:a varje månad och adderas till organisationens saldo.
-            AI-anrop blockeras först när <em>saldot</em> går till 0.
-        </span>
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <strong>Kvoter</strong>
+            <span class="text-muted small ms-2">
+                Saldo-läge: månatlig gratisbas fylls på 1:a varje månad och adderas till organisationens saldo.
+                AI-anrop blockeras först när <em>saldot</em> går till 0.
+            </span>
+        </div>
+        <div class="btn-group btn-group-sm" role="group">
+            <a href="ai_quotas.php" class="btn <?= $showFilter === 'all' ? 'btn-primary' : 'btn-outline-primary' ?>">
+                Alla (<?= (int)$totalScopeCount ?>)
+            </a>
+            <a href="ai_quotas.php?filter=custom" class="btn <?= $showFilter === 'custom' ? 'btn-primary' : 'btn-outline-primary' ?>">
+                Endast anpassade (<?= (int)$customCount ?>)
+            </a>
+        </div>
     </div>
     <div class="table-responsive">
         <table class="table table-sm align-middle mb-0">
@@ -178,11 +281,16 @@ require_once 'include/header.php';
             </tr></thead>
             <tbody>
                 <?php foreach ((array)$existingQuotas as $q): ?>
-                    <tr>
+                    <tr<?= !empty($q['_is_default']) ? ' class="table-light text-muted"' : '' ?>>
                         <td>
                             <strong><?= htmlspecialchars($q['_label']) ?></strong>
                             <?php if (!$q['organization_id']): ?>
                                 <span class="badge bg-light text-muted ms-1">domän</span>
+                            <?php else: ?>
+                                <span class="badge bg-light text-muted ms-1">org · <?= (int)($q['_member_count'] ?? 0) ?> domäner</span>
+                            <?php endif; ?>
+                            <?php if (!empty($q['_is_default'])): ?>
+                                <span class="badge bg-warning text-dark ms-1">default</span>
                             <?php endif; ?>
                         </td>
                         <td class="text-end">
@@ -215,7 +323,7 @@ require_once 'include/header.php';
                             <?php endif; ?>
                         </td>
                         <td class="text-end">
-                            <button class="btn btn-sm btn-outline-primary"
+                            <button class="btn btn-sm <?= !empty($q['_is_default']) ? 'btn-outline-success' : 'btn-outline-primary' ?>"
                                     data-bs-toggle="modal" data-bs-target="#quotaModal"
                                     data-org-id="<?= (int)$q['organization_id'] ?>"
                                     data-domain="<?= htmlspecialchars($q['domain'] ?? '') ?>"
@@ -224,14 +332,16 @@ require_once 'include/header.php';
                                     data-behavior="<?= htmlspecialchars($q['behavior']) ?>"
                                     data-notes="<?= htmlspecialchars($q['notes'] ?? '') ?>"
                                     data-label="<?= htmlspecialchars($q['_label']) ?>">
-                                Redigera
+                                <?= !empty($q['_is_default']) ? 'Sätt egen quota' : 'Redigera' ?>
                             </button>
+                            <?php if (empty($q['_is_default'])): ?>
                             <form method="post" class="d-inline" onsubmit="return confirm('Ta bort kvotinställningen för <?= htmlspecialchars($q['_label']) ?>? (Återgår till standardvärde.)');">
                                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                                 <input type="hidden" name="action" value="delete_quota">
                                 <input type="hidden" name="id" value="<?= (int)$q['id'] ?>">
                                 <button type="submit" class="btn btn-sm btn-outline-danger">Ta bort</button>
                             </form>
+                            <?php endif; ?>
                         </td>
                     </tr>
                 <?php endforeach; ?>
