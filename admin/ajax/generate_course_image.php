@@ -52,6 +52,15 @@ if ($courseId <= 0) {
     exit;
 }
 
+// IDOR-skydd: verifiera att användaren får modifiera just denna kurs innan
+// vi genererar (och debiterar AI-kvot) och skriver image_url. Generell
+// admin/editor-behörighet räcker inte — ägarskap måste kontrolleras.
+$courseRow = queryOne("SELECT id, organization_domain FROM " . DB_DATABASE . ".courses WHERE id = ?", [$courseId]);
+if (!$courseRow || !userCanModifyCourse($courseRow)) {
+    echo json_encode(['success' => false, 'message' => 'Du har inte behörighet att ändra denna kurs.']);
+    exit;
+}
+
 if (empty($courseTitle)) {
     echo json_encode(['success' => false, 'message' => 'Kursnamn saknas.']);
     exit;

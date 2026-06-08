@@ -38,10 +38,20 @@ try {
         throw new Exception('Invalid data format');
     }
     
-    // Uppdatera ordningen för varje kurs
+    // Uppdatera ordningen för varje kurs — men bara kurser användaren faktiskt
+    // får modifiera. Utan denna check kan vilken inloggad redaktör som helst
+    // skriva sort_order på godtyckliga kurs-ID (IDOR).
     foreach ($courses as $course) {
-        execute("UPDATE " . DB_DATABASE . ".courses SET sort_order = ? WHERE id = ?", 
-                [$course['order'], $course['id']]);
+        $cid = (int)($course['id'] ?? 0);
+        if ($cid <= 0) {
+            continue;
+        }
+        $courseRow = queryOne("SELECT id, organization_domain FROM " . DB_DATABASE . ".courses WHERE id = ?", [$cid]);
+        if (!$courseRow || !userCanModifyCourse($courseRow)) {
+            continue; // hoppa över kurser användaren inte äger
+        }
+        execute("UPDATE " . DB_DATABASE . ".courses SET sort_order = ? WHERE id = ?",
+                [(int)($course['order'] ?? 0), $cid]);
     }
     
     header('Content-Type: application/json');

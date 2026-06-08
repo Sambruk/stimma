@@ -47,7 +47,13 @@ try {
     if (!$course) {
         throw new Exception('Course not found');
     }
-    
+
+    // IDOR-skydd: verifiera att användaren får modifiera just denna kurs.
+    // Annars kan vilken redaktör som helst sortera om lektioner i valfri kurs.
+    if (!userCanModifyCourse($course)) {
+        throw new Exception('Du har inte behörighet att ändra denna kurs.');
+    }
+
     // Börja en transaktion
     execute("START TRANSACTION");
     

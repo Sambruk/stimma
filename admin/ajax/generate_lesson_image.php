@@ -52,6 +52,21 @@ if ($lessonId <= 0) {
     exit;
 }
 
+// IDOR-skydd: verifiera ägarskap av lektionens kurs innan vi genererar
+// (och debiterar AI-kvot) och skriver image_url. Generell admin/editor-
+// behörighet räcker inte.
+$lessonOwn = queryOne(
+    "SELECT l.course_id, c.organization_domain
+     FROM " . DB_DATABASE . ".lessons l
+     JOIN " . DB_DATABASE . ".courses c ON c.id = l.course_id
+     WHERE l.id = ?",
+    [$lessonId]
+);
+if (!$lessonOwn || !userCanModifyCourse(['id' => (int)$lessonOwn['course_id'], 'organization_domain' => $lessonOwn['organization_domain']])) {
+    echo json_encode(['success' => false, 'message' => 'Du har inte behörighet att ändra denna lektion.']);
+    exit;
+}
+
 if (empty($lessonTitle)) {
     echo json_encode(['success' => false, 'message' => 'Lektionsnamn saknas.']);
     exit;

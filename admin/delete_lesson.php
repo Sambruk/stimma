@@ -66,16 +66,17 @@ if (!$lesson) {
     exit;
 }
 
-// Kontrollera behörigheter för redaktörer
-if (!$isAdmin && $isEditor) {
-    $isSpecificEditor = queryOne("SELECT 1 FROM " . DB_DATABASE . ".course_editors WHERE course_id = ? AND email = ?",
-                              [$lesson['course_id'], $_SESSION['user_email']]);
-    if (!$isSpecificEditor) {
-        $_SESSION['message'] = 'Du har inte behörighet att radera lektioner i denna kurs.';
-        $_SESSION['message_type'] = 'danger';
-        header('Location: courses.php');
-        exit;
-    }
+// Behörighet: verifiera att användaren får modifiera lektionens kurs.
+// userCanModifyCourse täcker super_admin, org-scopade admins OCH kurs-
+// specifika redaktörer. Tidigare kontrollerades bara redaktörer mot
+// course_editors medan admins släpptes igenom för alla kurser i alla
+// organisationer (IDOR/cross-org).
+$lessonCourse = queryOne("SELECT id, organization_domain FROM " . DB_DATABASE . ".courses WHERE id = ?", [$lesson['course_id']]);
+if (!$lessonCourse || !userCanModifyCourse($lessonCourse)) {
+    $_SESSION['message'] = 'Du har inte behörighet att radera lektioner i denna kurs.';
+    $_SESSION['message_type'] = 'danger';
+    header('Location: courses.php');
+    exit;
 }
 
 try {
