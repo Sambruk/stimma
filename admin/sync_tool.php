@@ -219,8 +219,8 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
                     <div class="mb-3">
                         <label for="userRole" class="form-label">Roll</label>
                         <select id="userRole" class="form-select form-select-sm">
-                            <option value="student">Student</option>
-                            <option value="teacher">Lärare</option>
+                            <option value="student">Användare</option>
+                            <option value="teacher">Redaktör</option>
                             <option value="admin">Admin</option>
                         </select>
                     </div>
@@ -404,10 +404,10 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
         userTableBody.closest('.table-responsive').style.display = users.length === 0 ? 'none' : '';
 
         const roleBadge = (role) => ({
-            student: '<span class="badge badge-role-student">Student</span>',
-            teacher: '<span class="badge badge-role-teacher">Lärare</span>',
+            student: '<span class="badge badge-role-student">Användare</span>',
+            teacher: '<span class="badge badge-role-teacher">Redaktör</span>',
             admin: '<span class="badge badge-role-admin">Admin</span>'
-        }[role] || '<span class="badge badge-role-student">Student</span>');
+        }[role] || '<span class="badge badge-role-student">Användare</span>');
 
         userTableBody.innerHTML = filtered.map(u => `
             <tr data-idx="${u._idx}" class="${parseInt(editIndexInput.value) === u._idx ? 'user-row-editing' : ''}">
@@ -606,7 +606,9 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
 
     function normalizeRole(r) {
         r = r.toLowerCase().trim();
-        if (r === 'lärare' || r === 'teacher' || r === 'larare') return 'teacher';
+        // Acceptera både nya etiketter (redaktör/användare) och äldre (lärare/student)
+        // samt de tekniska API-värdena vid CSV-import.
+        if (r === 'redaktör' || r === 'redaktor' || r === 'lärare' || r === 'larare' || r === 'teacher') return 'teacher';
         if (r === 'admin' || r === 'administrator') return 'admin';
         return 'student';
     }

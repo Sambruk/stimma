@@ -118,7 +118,7 @@ fputcsv($output, [
 $roleLabels = [
     'super_admin' => 'Superadmin',
     'admin' => 'Admin',
-    'teacher' => 'Lärare',
+    'teacher' => 'Redaktör',
     'student' => 'Användare'
 ];
 

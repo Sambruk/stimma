@@ -1752,7 +1752,7 @@ Content-Type: application/json
                         <tbody>
                             <tr><td><code>email</code></td><td>Obligatoriskt</td><td>Måste tillhöra nyckelns domän</td></tr>
                             <tr><td><code>name</code></td><td>Obligatoriskt</td><td>För- och efternamn</td></tr>
-                            <tr><td><code>role</code></td><td>Valfritt</td><td><code>student</code> (standard), <code>teacher</code>, <code>admin</code></td></tr>
+                            <tr><td><code>role</code></td><td>Valfritt</td><td><code>student</code> = Användare (standard), <code>teacher</code> = Redaktör, <code>admin</code></td></tr>
                             <tr><td><code>organization</code></td><td>Valfritt</td><td>Skapar org-taggar; dela nivåer med <code>/</code></td></tr>
                         </tbody>
                     </table>

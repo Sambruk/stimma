@@ -485,7 +485,7 @@ require_once 'include/header.php';
                                                 $roleLabels = [
                                                     'super_admin' => ['text' => 'Superadmin', 'class' => 'bg-danger'],
                                                     'admin' => ['text' => 'Admin', 'class' => 'bg-primary'],
-                                                    'teacher' => ['text' => 'Lärare', 'class' => 'bg-info'],
+                                                    'teacher' => ['text' => 'Redaktör', 'class' => 'bg-info'],
                                                     'student' => ['text' => 'Användare', 'class' => 'bg-secondary']
                                                 ];
                                                 $role = $user['role'] ?? 'student';

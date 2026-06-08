@@ -10,7 +10,7 @@ Denna handbok beskriver hur du använder Stimma e-learning plattform. Stimma är
 2. [Organisation, domäner och scope](#organisation-domäner-och-scope)
 3. [Kom igång - Logga in](#kom-igång---logga-in)
    - [Hur länge är jag inloggad?](#hur-länge-är-jag-inloggad)
-3. [Guide för studenter](#guide-för-studenter)
+3. [Guide för användare](#guide-för-användare)
    - [Din dashboard](#din-dashboard)
    - [Gamification - XP och nivåer](#gamification---xp-och-nivåer)
    - [Diplom](#diplom)
@@ -55,7 +55,7 @@ Stimma har fyra användarroller med olika behörigheter:
 
 | Roll | Beskrivning |
 |------|-------------|
-| **Student** | Kan ta kurser och spåra sin progress |
+| **Användare** | Kan ta kurser och spåra sin progress. Standardrollen för alla inloggade |
 | **Redaktör** | Kan skapa och redigera kurser som tilldelats dem |
 | **Admin** | Kan hantera alla kurser, användare och inställningar inom sin organisation |
 | **Superadmin** | Fullständig systemåtkomst inklusive AI-inställningar |
@@ -128,7 +128,7 @@ Hur länge du förblir inloggad beror på om du kryssar i **"Kom ihåg mig"** vi
 
 ---
 
-## Guide för studenter
+## Guide för användare
 
 ### Hitta kurser
 
@@ -479,7 +479,7 @@ Skapa den precis som en vanlig informationssida:
 
 ### Förhandsgranska lektioner
 
-Innan du publicerar kan du förhandsgranska hur en lektion ser ut för studenter:
+Innan du publicerar kan du förhandsgranska hur en lektion ser ut för användare:
 
 1. Gå till **Kurser** och välj en kurs
 2. I lektionslistan, klicka på **ögon-ikonen** (👁️) bredvid lektionen
@@ -491,7 +491,7 @@ Innan du publicerar kan du förhandsgranska hur en lektion ser ut för studenter
 **Tips:** Använd förhandsgranskning för att:
 - Kontrollera att quiz fungerar korrekt
 - Verifiera att videolänkar fungerar
-- Se hur innehållet presenteras för studenter
+- Se hur innehållet presenteras för användare
 - Testa AI-tutorn om den är aktiverad
 
 ### Skapa AI-genererad kurs
@@ -667,7 +667,7 @@ Content-Type: application/json
 |---|---|---|
 | `email` | Obligatoriskt | Måste tillhöra **nyckelns domän** |
 | `name` | Obligatoriskt | För- och efternamn |
-| `role` | Valfritt | `student` (standard), `teacher` eller `admin` |
+| `role` | Valfritt | `student` = Användare (standard), `teacher` = Redaktör, `admin` |
 
 **Övriga inställningar:**
 
@@ -998,7 +998,7 @@ Efter signering skickas det stämplade avtalet automatiskt till undertecknaren, 
 
 ## Tips och bästa praxis
 
-### För studenter
+### För användare
 - Ta en lektion i taget - microlearning fungerar bäst i korta pass
 - Använd AI-tutorn aktivt om du fastnar
 - Repetera lektioner vid behov

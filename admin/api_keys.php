@@ -585,7 +585,7 @@ Authorization: Bearer stm_din_api_nyckel_har</code></pre>
                     <tbody>
                         <tr><td><code>email</code></td><td>string</td><td>Ja</td><td>E-postadress (måste matcha domänen)</td></tr>
                         <tr><td><code>name</code></td><td>string</td><td>Ja</td><td>Användarens namn</td></tr>
-                        <tr><td><code>role</code></td><td>string</td><td>Nej</td><td>student, teacher eller admin (standard: student)</td></tr>
+                        <tr><td><code>role</code></td><td>string</td><td>Nej</td><td><code>student</code> = Användare (standard), <code>teacher</code> = Redaktör, <code>admin</code></td></tr>
                         <tr><td><code>organization</code></td><td>string</td><td>Nej</td><td>Organisationshierarki separerad med / (t.ex. "Kommun/Förvaltning/Avdelning")</td></tr>
                     </tbody>
                 </table>
