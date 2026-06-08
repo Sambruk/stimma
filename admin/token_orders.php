@@ -30,6 +30,45 @@ if (!$isSuperAdmin) {
     exit;
 }
 
+// CSV-export av ej debiterade beställningar (måste ske före HTML-utskrift) --
+if (($_GET['export'] ?? '') === 'unbilled') {
+    $rows = getAllTokenOrders('unbilled', 100000);
+    logActivity($_SESSION['user_email'], 'Exporterade ej debiterade tokenbeställningar (' . count($rows) . ' st)');
+
+    $filename = 'stimma-ej-debiterade-tokenbestallningar-' . date('Y-m-d') . '.csv';
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    echo "\xEF\xBB\xBF"; // BOM för korrekt UTF-8 i Excel
+
+    $out = fopen('php://output', 'w');
+    fputcsv($out, [
+        'Order-ID', 'Datum', 'Organisation', 'Org.nr', 'Beställd av',
+        'Paket', 'Tokens', 'Belopp (kr ex moms)', 'Återkommande',
+        'Fakturakontakt', 'Faktura-e-post', 'GLN', 'PEPPOL', 'Fakturaadress'
+    ], ';');
+    foreach ($rows as $o) {
+        fputcsv($out, [
+            $o['id'],
+            substr((string)$o['created_at'], 0, 16),
+            $o['organization_name'] ?? ('Org #' . $o['organization_id']),
+            $o['org_number'] ?? '',
+            $o['created_by'] ?? '',
+            $o['package_name'],
+            $o['tokens'],
+            number_format($o['price_sek_cents'] / 100, 2, ',', ''),
+            !empty($o['is_recurring']) ? (!empty($o['recurring_active']) ? 'Ja (aktiv)' : 'Ja (avslutad)') : 'Nej',
+            $o['billing_contact_name'] ?? '',
+            $o['billing_email'] ?? '',
+            $o['billing_gln'] ?? '',
+            $o['billing_peppol'] ?? '',
+            // Platta ut ev. radbrytningar i adressen så cellen håller ihop
+            trim(preg_replace('/\s*\R\s*/u', ', ', (string)($o['billing_address'] ?? ''))),
+        ], ';');
+    }
+    fclose($out);
+    exit;
+}
+
 // POST: växla debiteringsstatus -------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
@@ -80,6 +119,12 @@ require_once 'include/header.php';
     <div>
         <h1 class="h3 mb-1"><i class="bi bi-receipt me-2"></i>Tokenbeställningar</h1>
         <p class="text-muted mb-0">Alla inkomna tokenbeställningar från samtliga organisationer. Markera varje beställning som debiterad när den fakturerats.</p>
+    </div>
+    <div>
+        <a href="token_orders.php?export=unbilled" class="btn btn-outline-success"
+           <?= $summary['unbilled_count'] === 0 ? 'aria-disabled="true" tabindex="-1" style="pointer-events:none;opacity:.5;"' : '' ?>>
+            <i class="bi bi-filetype-csv me-1"></i> Exportera ej debiterade (CSV)
+        </a>
     </div>
 </div>
 
