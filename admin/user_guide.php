@@ -1728,6 +1728,46 @@ Content-Type: application/json
 
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-body p-4">
+                <h5><i class="bi bi-list-check me-2 text-primary"></i>Fält och beteende</h5>
+                <p class="text-muted">Synken jämför listan mot befintliga användare på domänen och agerar per användare:</p>
+                <div class="table-responsive mb-3">
+                    <table class="table table-sm align-middle">
+                        <thead class="table-light">
+                            <tr><th>Fält</th><th>Krav</th><th>Värden</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td><code>email</code></td><td>Obligatoriskt</td><td>Måste tillhöra nyckelns domän</td></tr>
+                            <tr><td><code>name</code></td><td>Obligatoriskt</td><td>För- och efternamn</td></tr>
+                            <tr><td><code>role</code></td><td>Valfritt</td><td><code>student</code> (standard), <code>teacher</code>, <code>admin</code></td></tr>
+                            <tr><td><code>organization</code></td><td>Valfritt</td><td>Skapar org-taggar; dela nivåer med <code>/</code></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead class="table-light">
+                            <tr><th>Situation</th><th>Resultat</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Finns i listan, ny användare</td><td>Skapas som aktiv</td></tr>
+                            <tr><td>Finns i listan, fanns redan</td><td>Uppdateras (namn, roll), sätts aktiv</td></tr>
+                            <tr><td>Fanns inaktiv, nu med i listan</td><td>Återaktiveras</td></tr>
+                            <tr><td>Saknas i listan (<code>deactivate_missing=true</code>)</td><td>Markeras inaktiv</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="tip-box info mt-3">
+                    <div class="tip-icon"><i class="bi bi-info-circle-fill"></i></div>
+                    <div class="tip-content">
+                        <strong>Inloggning påverkas aldrig</strong>
+                        <p class="mb-0 mt-1">Även en inaktiverad användare kan fortfarande logga in med magic link — <code>sync_status</code> styr bara synkstatusen, inte åtkomsten. Superadmins roll ändras aldrig av en synk.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
                 <h5><i class="bi bi-check-circle me-2 text-success"></i>Kursstatus-endpoint</h5>
                 <p class="text-muted"><code>GET /api/course_status.php?email=...&amp;course_id=...</code> – kontrollera om en användare har slutfört en kurs.</p>
 
@@ -1774,7 +1814,9 @@ Authorization: Bearer stm_din_nyckel_här</code></pre>
             <div class="tip-content">
                 <strong>Begränsningar</strong>
                 <ul class="mb-0 mt-2">
-                    <li>Max 10 anrop per timme per API-nyckel</li>
+                    <li>Max 10 anrop per timme per API-nyckel (annars svar <code>429</code>)</li>
+                    <li>Max 10 000 användare per anrop</li>
+                    <li>En aktiv nyckel per domän — regenerering inaktiverar den gamla direkt</li>
                     <li>E-postadressens domän måste matcha API-nyckelns domän</li>
                     <li>Synkronisering måste vara aktiverad för domänen</li>
                 </ul>

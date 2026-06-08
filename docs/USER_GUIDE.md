@@ -37,6 +37,7 @@ Denna handbok beskriver hur du använder Stimma e-learning plattform. Stimma är
    - [E-postlogg för stegvisa kurser](#e-postlogg-för-stegvisa-kurser)
    - [Påminnelseinställningar](#påminnelseinställningar)
    - [Skicka testmail](#skicka-testmail)
+   - [Användarsynkronisering](#användarsynkronisering)
 6. [Guide för superadministratörer](#guide-för-superadministratörer)
    - [AI-leverantörskonfiguration](#ai-leverantörskonfiguration)
    - [Testa AI-anslutning](#testa-ai-anslutning)
@@ -617,6 +618,107 @@ Som admin har du utökade behörigheter inom din organisation.
 3. Sök efter användare med e-post
 4. Klicka **"Lägg till"** för att tilldela dem
 5. Redaktörer kan nu redigera just den kursen
+
+### Användarsynkronisering
+
+Istället för att lägga till användare manuellt kan du synka en komplett
+användarlista per domän — antingen automatiskt från ett externt system
+(HR, katalogtjänst/AD, elevregister) via REST-API, eller manuellt via det
+inbyggda synkverktyget.
+
+Synk skapar och uppdaterar användare automatiskt och kan markera de som
+inte längre finns med i listan som inaktiva. **Inloggning påverkas aldrig** —
+även en inaktiv användare kan fortfarande logga in med magic link.
+
+#### Steg 1 – Aktivera synk och skapa API-nyckel
+
+1. Gå till **API-nycklar** i adminmenyn.
+2. I sektionen **Synkronisering per domän** högst upp: klicka **Aktivera synk**
+   för den domän du vill synka. (API-anrop avvisas om synk inte är aktiverad.)
+3. Klicka **Skapa ny nyckel**, ange en beskrivning (t.ex. "AD-synk") och välj
+   domän. Vanlig admin ser sin egen domän; superadmin kan välja valfri.
+4. Nyckeln visas **bara en gång** i ett popup-fönster — kopiera den direkt och
+   lägg in den i ditt externa system. Tappar du bort den får du regenerera en ny.
+   - Nyckeln har formatet `stm_` följt av 60 tecken.
+   - **En aktiv nyckel per domän.** *Regenerera* skapar en ny och inaktiverar
+     den gamla omedelbart; *Inaktivera* pausar utan att radera; *Radera* tar bort.
+
+#### Steg 2 – Anropa synk-API:t
+
+Det externa systemet skickar hela användarlistan med ett `POST`-anrop:
+
+```
+POST https://stimma.sambruk.se/api/sync_users.php
+Authorization: Bearer stm_din_nyckel_här
+Content-Type: application/json
+
+{
+  "users": [
+    { "email": "anna@dindoman.se", "name": "Anna Andersson", "role": "student" },
+    { "email": "bo@dindoman.se",   "name": "Bo Bengtsson",   "role": "teacher" }
+  ],
+  "deactivate_missing": true
+}
+```
+
+**Fält per användare:**
+
+| Fält | Krav | Värden |
+|---|---|---|
+| `email` | Obligatoriskt | Måste tillhöra **nyckelns domän** |
+| `name` | Obligatoriskt | För- och efternamn |
+| `role` | Valfritt | `student` (standard), `teacher` eller `admin` |
+
+**Övriga inställningar:**
+
+- `deactivate_missing` (standard `true`): synkade användare som **saknas** i
+  listan markeras som inaktiva. Sätt `false` för att enbart skapa/uppdatera
+  utan att inaktivera någon.
+- Max **10 000** användare per anrop.
+- Max **10 anrop per timme** per nyckel (annars svar `429`).
+
+**Vad händer med användarna:**
+
+| Situation | Resultat |
+|---|---|
+| Finns i listan, ny | Skapas som aktiv |
+| Finns i listan, fanns redan | Uppdateras (namn, roll), sätts aktiv |
+| Fanns inaktiv, nu med i listan | Återaktiveras |
+| Saknas i listan (och `deactivate_missing=true`) | Markeras inaktiv |
+
+Superadmin-användares roll ändras aldrig av en synk.
+
+**Svar vid lyckad synk:**
+
+```json
+{
+  "success": true,
+  "sync_id": 123,
+  "summary": { "total_in_payload": 250, "created": 4, "updated": 245, "deactivated": 1, "reactivated": 0 }
+}
+```
+
+#### Manuell synk via Synkverktyget
+
+Behöver du inte automatisera kan du använda **Synkverktyg** i adminmenyn:
+
+1. Lägg till användare en i taget, eller **importera en CSV-fil** (välj
+   avgränsare `;`, `,` eller tab — förhandsvisning visas).
+2. Listan sparas i din webbläsare mellan besök; du kan söka, exportera till CSV
+   och ta bort markerade rader.
+3. Välj om **Inaktivera saknade** ska vara på (av som standard = säkert läge,
+   inga användare inaktiveras).
+4. Klicka **Synka nu**. Resultatet (skapade/uppdaterade/inaktiverade/
+   reaktiverade) visas direkt.
+
+Synkverktyget kräver ingen API-nyckel och har ingen timgräns. Vanlig admin kan
+bara synka om de tillhör organisationens huvuddomän; superadmin kan alltid synka.
+
+#### Följa upp synkar
+
+Under **Synkloggar** i adminmenyn ser du historiken: tidpunkt, domän,
+nyckel-prefix, antal i listan, antal skapade/uppdaterade/inaktiverade/
+reaktiverade, status (OK/Delvis/Fel), körtid och käll-IP.
 
 ### Diplomhantering
 
