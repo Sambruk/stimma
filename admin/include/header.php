@@ -217,6 +217,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <?php endif; ?>
                 <?php if ($isSuperAdmin): ?>
                 <li class="nav-item">
+                    <a href="token_orders.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'token_orders.php' ? 'active' : '' ?>">
+                        <i class="bi bi-receipt me-2"></i> Tokenbeställningar
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a href="logs.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'logs.php' ? 'active' : '' ?>">
                         <i class="bi bi-clipboard-data me-2"></i> Loggar
                     </a>

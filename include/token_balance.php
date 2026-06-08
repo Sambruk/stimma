@@ -433,3 +433,83 @@ function markRecurringRefilled($orderId) {
         [(int)$orderId]
     );
 }
+
+/**
+ * Lista ALLA tokenbeställningar i systemet (superadmin-översikt), senaste först.
+ * Joinar med organisationsnamn och paket. Kan filtreras på debiteringsstatus.
+ *
+ * @param string $billingFilter 'all' | 'unbilled' | 'billed'
+ * @param int    $limit
+ * @return array
+ */
+function getAllTokenOrders($billingFilter = 'all', $limit = 500) {
+    $where = '';
+    if ($billingFilter === 'unbilled') {
+        $where = 'WHERE o.billed_at IS NULL';
+    } elseif ($billingFilter === 'billed') {
+        $where = 'WHERE o.billed_at IS NOT NULL';
+    }
+    return query(
+        "SELECT o.*, p.name AS package_name, p.code AS package_code,
+                org.name AS organization_name, org.org_number
+           FROM " . DB_DATABASE . ".token_orders o
+           JOIN " . DB_DATABASE . ".token_packages p ON p.id = o.package_id
+           LEFT JOIN " . DB_DATABASE . ".organizations org ON org.id = o.organization_id
+           $where
+          ORDER BY o.created_at DESC
+          LIMIT " . (int)$limit
+    );
+}
+
+/**
+ * Sammanfattning av debiteringsläget för översiktens nyckeltal.
+ * Returnerar antal och summerat belopp (öre) för ej debiterade resp. debiterade.
+ *
+ * @return array{unbilled_count:int,unbilled_cents:int,billed_count:int,billed_cents:int}
+ */
+function getTokenOrdersBillingSummary() {
+    $row = queryOne(
+        "SELECT
+            SUM(CASE WHEN billed_at IS NULL THEN 1 ELSE 0 END) AS unbilled_count,
+            COALESCE(SUM(CASE WHEN billed_at IS NULL THEN price_sek_cents ELSE 0 END), 0) AS unbilled_cents,
+            SUM(CASE WHEN billed_at IS NOT NULL THEN 1 ELSE 0 END) AS billed_count,
+            COALESCE(SUM(CASE WHEN billed_at IS NOT NULL THEN price_sek_cents ELSE 0 END), 0) AS billed_cents
+         FROM " . DB_DATABASE . ".token_orders"
+    );
+    return [
+        'unbilled_count' => (int)($row['unbilled_count'] ?? 0),
+        'unbilled_cents' => (int)($row['unbilled_cents'] ?? 0),
+        'billed_count'   => (int)($row['billed_count'] ?? 0),
+        'billed_cents'   => (int)($row['billed_cents'] ?? 0),
+    ];
+}
+
+/**
+ * Sätt eller nollställ debiteringsstatus på en beställning (superadmin).
+ *
+ * @param int    $orderId
+ * @param bool   $billed     true = markera debiterad (sätter billed_at=NOW),
+ *                           false = markera ej debiterad (nollar billed_at)
+ * @param string $adminEmail Superadminens e-post (sparas i billed_by)
+ * @return bool
+ */
+function setOrderBilled($orderId, $billed, $adminEmail) {
+    $orderId = (int)$orderId;
+    if ($orderId <= 0) return false;
+    if ($billed) {
+        execute(
+            "UPDATE " . DB_DATABASE . ".token_orders
+                SET billed_at = NOW(), billed_by = ?
+              WHERE id = ?",
+            [$adminEmail, $orderId]
+        );
+    } else {
+        execute(
+            "UPDATE " . DB_DATABASE . ".token_orders
+                SET billed_at = NULL, billed_by = NULL
+              WHERE id = ?",
+            [$orderId]
+        );
+    }
+    return true;
+}
