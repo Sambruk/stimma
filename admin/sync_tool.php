@@ -151,6 +151,9 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
                         <button class="btn btn-outline-secondary" id="exportCsvBtn" title="Exportera CSV">
                             <i class="bi bi-download"></i> CSV
                         </button>
+                        <button class="btn btn-outline-secondary" id="sampleCsvBtn" title="Ladda ner en exempelfil med instruktioner">
+                            <i class="bi bi-file-earmark-text"></i> Exempelfil
+                        </button>
                     </div>
                 </div>
             </div>
@@ -269,7 +272,10 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
             <div class="modal-body">
                 <div class="alert alert-info">
                     <strong>CSV-format:</strong> email, namn, roll, organisation<br>
-                    <small>Första raden hoppas över om den innehåller rubriker.</small>
+                    <small>Första raden hoppas över om den innehåller rubriker. Flera organisationstaggar separeras med snedstreck <code>/</code> (t.ex. <code>Kommun/IT-avdelningen/Support</code>).</small>
+                    <div class="mt-2">
+                        <a href="#" id="sampleCsvLink"><i class="bi bi-file-earmark-text me-1"></i>Ladda ner exempelfil med instruktioner</a>
+                    </div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Välj CSV-fil</label>
@@ -372,6 +378,8 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
     deleteSelectedBtn.addEventListener('click', deleteSelected);
     $('#importCsvBtn').addEventListener('click', () => new bootstrap.Modal($('#csvImportModal')).show());
     $('#exportCsvBtn').addEventListener('click', exportCsv);
+    $('#sampleCsvBtn').addEventListener('click', downloadSampleCsv);
+    $('#sampleCsvLink').addEventListener('click', (e) => { e.preventDefault(); downloadSampleCsv(); });
     $('#csvFileInput').addEventListener('change', handleCsvFile);
     $('#csvDelimiter').addEventListener('change', () => { if (csvParsedData) previewCsv(); });
     $('#csvImportConfirmBtn').addEventListener('click', confirmCsvImport);
@@ -611,6 +619,44 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
         if (r === 'redaktör' || r === 'redaktor' || r === 'lärare' || r === 'larare' || r === 'teacher') return 'teacher';
         if (r === 'admin' || r === 'administrator') return 'admin';
         return 'student';
+    }
+
+    function downloadSampleCsv() {
+        // Kommenterad exempelfil. Instruktionsraderna inleds med # och ska tas
+        // bort före import — importen läser kolumnerna email;namn;roll;organisation
+        // och hoppar bara över den första (rubrik)raden.
+        const lines = [
+            '# Stimma – exempelfil för användarimport',
+            '# ------------------------------------------------------------------',
+            '# En användare per rad. Fälten separeras med semikolon ( ; ):',
+            '#   1. email        – e-postadress (måste tillhöra er organisations domän)',
+            '#   2. namn         – för- och efternamn',
+            '#   3. roll         – anvandare, redaktor eller admin (standard: anvandare)',
+            '#   4. organisation – en eller flera organisationstaggar',
+            '#',
+            '# FLERA ORGANISATIONSTAGGAR:',
+            '#   Separera taggarna med snedstreck  /  . Varje del blir en egen tagg.',
+            '#   Exempel:  Kommun/IT-avdelningen/Support',
+            '#             ger taggarna  Kommun ,  IT-avdelningen  och  Support',
+            '#   Tomma delar ignoreras och blanksteg runt varje tagg tas bort.',
+            '#',
+            '# FÖRE IMPORT: ta bort alla rader som börjar med # (inklusive denna text).',
+            '# Spara filen som CSV med semikolon som avgränsare.',
+            '#',
+            'email;namn;roll;organisation',
+            'anna.andersson@dindoman.se;Anna Andersson;anvandare;Kommun/Skolförvaltningen/Lindskolan',
+            'bo.bengtsson@dindoman.se;Bo Bengtsson;redaktor;Kommun/IT-avdelningen',
+            'carin.carlsson@dindoman.se;Carin Carlsson;admin;Kommun'
+        ];
+        const csv = lines.join('\r\n') + '\r\n';
+
+        const blob = new Blob(['\uFEFF' + csv], {type: 'text/csv;charset=utf-8;'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'stimma_exempel_anvandarimport.csv';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        addLogEntry('info', 'Laddade ner exempelfil för CSV-import');
     }
 
     function exportCsv() {
