@@ -1643,11 +1643,25 @@ require_once 'include/header.php';
 </div>
 
 <!-- REST API & Användarsynk -->
+<?php
+// Full bas-URL för API-exempel — härleds från aktuell domän så den alltid
+// stämmer oavsett vilken miljö guiden visas i.
+$apiScheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$apiBaseUrl = $apiScheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'stimma.sambruk.se');
+?>
 <div class="row mb-5" id="api">
     <div class="col-12">
         <div class="section-header">
             <span class="section-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"><i class="bi bi-cloud-arrow-up"></i></span>
             <h2>REST API &amp; Användarsynk</h2>
+        </div>
+
+        <div class="tip-box info mb-4">
+            <div class="tip-icon"><i class="bi bi-link-45deg"></i></div>
+            <div class="tip-content">
+                <strong>Bas-URL för API:t</strong>
+                <p class="mb-0 mt-1"><code><?= htmlspecialchars($apiBaseUrl) ?></code> — alla endpoints nedan ligger under <code><?= htmlspecialchars($apiBaseUrl) ?>/api/</code>.</p>
+            </div>
         </div>
 
         <div class="card border-0 shadow-sm mb-4">
@@ -1687,12 +1701,12 @@ require_once 'include/header.php';
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-body p-4">
                 <h5><i class="bi bi-people me-2 text-primary"></i>Användarsynk-endpoint</h5>
-                <p class="text-muted"><code>POST /api/sync_users.php</code> – synkronisera en komplett användarlista per domän.</p>
+                <p class="text-muted"><code>POST <?= htmlspecialchars($apiBaseUrl) ?>/api/sync_users.php</code> – synkronisera en komplett användarlista per domän.</p>
 
                 <div class="row">
                     <div class="col-lg-6">
                         <h6 class="mb-3">Request</h6>
-<pre class="bg-dark text-light p-3 rounded" style="font-size: 0.85rem;"><code>POST /api/sync_users.php
+<pre class="bg-dark text-light p-3 rounded" style="font-size: 0.85rem;"><code>POST <?= htmlspecialchars($apiBaseUrl) ?>/api/sync_users.php
 Authorization: Bearer stm_din_nyckel_här
 Content-Type: application/json
 
@@ -1769,7 +1783,7 @@ Content-Type: application/json
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-body p-4">
                 <h5><i class="bi bi-check-circle me-2 text-success"></i>Kursstatus-endpoint</h5>
-                <p class="text-muted"><code>GET /api/course_status.php?email=...&amp;course_id=...</code> – kontrollera om en användare har slutfört en kurs.</p>
+                <p class="text-muted"><code>GET <?= htmlspecialchars($apiBaseUrl) ?>/api/course_status.php?email=...&amp;course_id=...</code> – kontrollera om en användare har slutfört en kurs.</p>
 
                 <div class="tip-box info mb-3">
                     <div class="tip-icon"><i class="bi bi-info-circle-fill"></i></div>
@@ -1782,7 +1796,7 @@ Content-Type: application/json
                 <div class="row">
                     <div class="col-lg-6">
                         <h6 class="mb-3">Request</h6>
-<pre class="bg-dark text-light p-3 rounded" style="font-size: 0.85rem;"><code>GET /api/course_status.php?email=anna@example.se&amp;course_id=25
+<pre class="bg-dark text-light p-3 rounded" style="font-size: 0.85rem;"><code>GET <?= htmlspecialchars($apiBaseUrl) ?>/api/course_status.php?email=anna@example.se&amp;course_id=25
 Authorization: Bearer stm_din_nyckel_här</code></pre>
                     </div>
                     <div class="col-lg-6">
