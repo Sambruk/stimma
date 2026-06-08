@@ -698,21 +698,47 @@ Superadmin-användares roll ändras aldrig av en synk.
 }
 ```
 
-#### Manuell synk via Synkverktyget
+#### Synkverktyget (manuell synk)
 
-Behöver du inte automatisera kan du använda **Synkverktyg** i adminmenyn:
+Behöver du inte automatisera kan du använda **Synkverktyg** i adminmenyn. Det är
+ett grafiskt gränssnitt för att bygga upp en användarlista och köra synken direkt
+mot databasen — **ingen API-nyckel behövs och det finns ingen timgräns**.
 
-1. Lägg till användare en i taget, eller **importera en CSV-fil** (välj
-   avgränsare `;`, `,` eller tab — förhandsvisning visas).
-2. Listan sparas i din webbläsare mellan besök; du kan söka, exportera till CSV
-   och ta bort markerade rader.
-3. Välj om **Inaktivera saknade** ska vara på (av som standard = säkert läge,
-   inga användare inaktiveras).
-4. Klicka **Synka nu**. Resultatet (skapade/uppdaterade/inaktiverade/
-   reaktiverade) visas direkt.
+**Vem kan använda det?**
+- En **admin på organisationens huvuddomän** kan synka till *alla* domäner i
+  organisationen i ett enda anrop.
+- En **superadmin** kan synka mot alla organisationers domäner.
+- En admin på en **underdomän** kan inte använda verktyget (blockeras).
 
-Synkverktyget kräver ingen API-nyckel och har ingen timgräns. Vanlig admin kan
-bara synka om de tillhör organisationens huvuddomän; superadmin kan alltid synka.
+**Bygga listan:**
+
+1. **Lägg till en i taget** — fyll i e-post, namn, roll (Användare/Redaktör/Admin)
+   och organisation, eller
+2. **Importera en CSV-fil** — klicka **CSV** (import), välj fil och avgränsare
+   (`;`, `,` eller tab). En förhandsvisning visas innan import, och du kan välja
+   att *ersätta* listan eller *lägga till*.
+3. Vet du inte hur filen ska se ut? Klicka **Exempelfil** — den laddar ner en
+   färdig CSV med instruktioner och exempelrader (se nedan om organisationstaggar).
+4. Listan **sparas i din webbläsare** mellan besök. Du kan söka, redigera rader,
+   markera och ta bort flera, samt **exportera** den aktuella listan till CSV.
+
+**Flera organisationstaggar:** i organisations-kolumnen anger du en eller flera
+taggar separerade med snedstreck `/`. Varje del blir en egen tagg — t.ex.
+`Kommun/IT-avdelningen/Support` ger de tre taggarna *Kommun*, *IT-avdelningen* och
+*Support*. Tomma delar ignoreras och blanksteg trimmas bort.
+
+**Köra synken:**
+
+5. Välj om **Inaktivera saknade** ska vara på. Av som standard (säkert läge —
+   inga användare inaktiveras); på = användare som inte finns i listan markeras
+   inaktiva (se beteendetabellen ovan).
+6. Klicka **Synka nu**. Resultatet (skapade/uppdaterade/inaktiverade/
+   reaktiverade) visas direkt i loggen.
+
+**Domänspärr:** verktyget synkar bara e-postadresser vars domän tillhör din
+organisation (för superadmin: någon registrerad organisationsdomän). Adresser med
+andra domäner **hoppas över** och redovisas som överhoppade — du kan alltså inte
+av misstag skapa användare på en domän du inte har behörighet till.
 
 #### Följa upp synkar
 

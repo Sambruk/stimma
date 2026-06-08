@@ -1678,8 +1678,52 @@ $apiBaseUrl = $apiScheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'stimma.sambruk.se'
                 <div class="tip-box info mt-3">
                     <div class="tip-icon"><i class="bi bi-gear-fill"></i></div>
                     <div class="tip-content">
-                        <strong>Synkverktyg för manuell kör</strong>
-                        <p class="mb-0 mt-1">För punktvis import eller felsökning finns <strong>Admin → Synkverktyg</strong> — ett gränssnitt där du kan klistra in JSON eller ladda upp en fil och köra synken interaktivt utan att behöva bygga en integration.</p>
+                        <strong>Synkverktyg för manuell körning</strong>
+                        <p class="mb-0 mt-1">Behöver du inte automatisera finns <strong>Admin → Synkverktyg</strong> — se kortet nedan. Där bygger du listan manuellt eller via CSV och kör synken direkt, utan API-nyckel.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-ui-checks-grid me-2 text-primary"></i>Synkverktyget (manuell synk)</h5>
+                <p class="text-muted"><strong>Admin → Synkverktyg</strong> är ett grafiskt gränssnitt för att bygga en användarlista och köra synken direkt mot databasen — ingen API-nyckel behövs och det finns ingen timgräns.</p>
+
+                <h6 class="mt-3 mb-2"><i class="bi bi-person-check me-1"></i>Vem kan använda det?</h6>
+                <ul>
+                    <li>En <strong>admin på organisationens huvuddomän</strong> synkar till alla domäner i organisationen i ett anrop.</li>
+                    <li>En <strong>superadmin</strong> synkar mot alla organisationers domäner.</li>
+                    <li>En admin på en <strong>underdomän</strong> kan inte använda verktyget.</li>
+                </ul>
+
+                <h6 class="mt-3 mb-2"><i class="bi bi-list-task me-1"></i>Bygga listan</h6>
+                <ul>
+                    <li><strong>Lägg till</strong> användare en i taget (e-post, namn, roll, organisation), eller</li>
+                    <li><strong>Importera CSV</strong> — välj fil och avgränsare (<code>;</code>, <code>,</code> eller tab); en förhandsvisning visas och du kan ersätta eller lägga till i listan.</li>
+                    <li><strong>Exempelfil</strong> — laddar ner en färdig CSV med instruktioner och exempelrader.</li>
+                    <li>Listan sparas i din webbläsare mellan besök. Du kan söka, redigera, ta bort markerade rader och exportera listan till CSV.</li>
+                </ul>
+
+                <div class="tip-box info my-3">
+                    <div class="tip-icon"><i class="bi bi-tags-fill"></i></div>
+                    <div class="tip-content">
+                        <strong>Flera organisationstaggar</strong>
+                        <p class="mb-0 mt-1">Ange en eller flera taggar i organisations-kolumnen, separerade med snedstreck <code>/</code>. Varje del blir en egen tagg — t.ex. <code>Kommun/IT-avdelningen/Support</code> ger taggarna <em>Kommun</em>, <em>IT-avdelningen</em> och <em>Support</em>. Tomma delar ignoreras och blanksteg trimmas bort.</p>
+                    </div>
+                </div>
+
+                <h6 class="mt-3 mb-2"><i class="bi bi-play-circle me-1"></i>Köra synken</h6>
+                <ul>
+                    <li><strong>Inaktivera saknade</strong>: av som standard (säkert läge). På = användare som inte finns i listan markeras inaktiva.</li>
+                    <li>Klicka <strong>Synka nu</strong> — resultatet (skapade/uppdaterade/inaktiverade/reaktiverade) visas direkt i loggen.</li>
+                </ul>
+
+                <div class="tip-box warning mb-0">
+                    <div class="tip-icon"><i class="bi bi-shield-check"></i></div>
+                    <div class="tip-content">
+                        <strong>Domänspärr</strong>
+                        <p class="mb-0 mt-1">Endast e-postadresser vars domän tillhör din organisation synkas (för superadmin: någon registrerad organisationsdomän). Adresser med andra domäner hoppas över och redovisas — du kan inte av misstag skapa användare på en domän du saknar behörighet till.</p>
                     </div>
                 </div>
             </div>
