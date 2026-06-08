@@ -33,8 +33,8 @@ if (!$isAdmin && !$isEditor) {
 
 $selectedCourseId = isset($_GET['course_id']) ? (int)$_GET['course_id'] : null;
 
-// Org-scope: alla domäner i adminens organisation
-$orgScopeDomains = getOrgScopeDomains($userEmail);
+// Scope: huvuddomän-admins ser hela orgen; sub-domän bara sin egen domän.
+$orgScopeDomains = getEffectiveOrgScopeDomains($userEmail);
 $courseDomClause = buildDomainInClause($orgScopeDomains, 'c.organization_domain');
 
 // Hämta kurser baserat på behörighet

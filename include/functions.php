@@ -1206,6 +1206,42 @@ function getOrgScopeDomains($email) {
 }
 
 /**
+ * Är användarens domän satt som primär domän (huvuddomän) för en
+ * organisation? Används för att avgöra om en admin/redaktör ska ha
+ * org-omspännande rättigheter eller bara dom-omspännande.
+ *
+ * Returnerar false för användare som inte tillhör någon org.
+ */
+function isUserOnPrimaryOrgDomain($email) {
+    $domain = getUserDomain($email);
+    if (empty($domain)) return false;
+    $row = queryOne(
+        "SELECT 1 FROM " . DB_DATABASE . ".organization_domains
+         WHERE domain = ? AND is_primary = 1 LIMIT 1",
+        [$domain]
+    );
+    return !empty($row);
+}
+
+/**
+ * Som getOrgScopeDomains() men respekterar huvuddomän-modellen:
+ * - Användare på orgens primary-domän → alla orgens domäner (full org-scope)
+ * - Användare på sub-domän → bara sin egen domän (begränsad scope)
+ * - Användare utan org → bara sin egen domän
+ *
+ * Används för admin-sidor (kurslistor, taggar, statistik, användare) där
+ * sub-domän-admins inte ska se andra sub-domäners resurser.
+ */
+function getEffectiveOrgScopeDomains($email) {
+    $domain = getUserDomain($email);
+    if (empty($domain)) return [];
+    if (isUserOnPrimaryOrgDomain($email)) {
+        return getOrgScopeDomains($email);
+    }
+    return [$domain];
+}
+
+/**
  * Bygg en parametriserad IN-klausul för en kolumn baserat på en lista av domäner.
  *
  * Returnerar ['fragment' => "col IN (?, ?, ?)", 'params' => [...]].

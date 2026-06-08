@@ -25,9 +25,12 @@ $currentUser = queryOne("SELECT * FROM " . DB_DATABASE . ".users WHERE email = ?
 $userDomain = $currentUser ? substr(strrchr($currentUser['email'], "@"), 1) : '';
 $isSuperAdmin = $currentUser && ($currentUser['role'] ?? '') === 'super_admin';
 
-// Org-scope: alla domäner i adminens organisation. Tag-listor och tag-validering
-// hämtas från hela orgen så adminer på olika domäner ser samma uppsättning taggar.
-$orgScopeDomains = getOrgScopeDomains($userEmail);
+// Scope: huvuddomän-admins ser hela orgens taggar/synlighet; sub-domän
+// bara sin egen domäns. Sharing-controls (Delas med hela org / specifika
+// domäner) är endast tillgängliga för huvuddomän — sub-domän kan bara
+// publicera på sin egen domän.
+$orgScopeDomains = getEffectiveOrgScopeDomains($userEmail);
+$isOnPrimaryDomain = $isSuperAdmin || isUserOnPrimaryOrgDomain($userEmail);
 $tagDomClause = buildDomainInClause($orgScopeDomains, 'organization_domain');
 
 // Hämta kursdata om vi redigerar en befintlig kurs
@@ -289,16 +292,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // alla, 'specific_domains' sparar bara de rutade. Validerar att
                 // domänen faktiskt tillhör användarens organisation för att
                 // förhindra att admin begränsar till en främmande domän.
-                $shareMode = $_POST['share_mode'] ?? 'whole_org';
-                if ($shareMode === 'specific_domains') {
-                    $userOrgRow2 = getOrganizationByDomain(substr(strrchr($_SESSION['user_email'], '@'), 1));
-                    $allowedDomainList = $userOrgRow2 ? getOrganizationDomains($userOrgRow2['id']) : [];
-                    $submittedDomains = array_values(array_filter((array)($_POST['shared_domains'] ?? [])));
-                    $filtered = array_intersect($submittedDomains, $allowedDomainList);
-                    setCourseSharedDomains((int)$_GET['id'], $filtered);
-                } else {
-                    // Hela organisationen — rensa alla
-                    setCourseSharedDomains((int)$_GET['id'], []);
+                // Endast huvuddomän-admins får ändra synlighet — sub-domän-
+                // användares POST ignoreras helt (befintligt värde behålls).
+                if ($isOnPrimaryDomain) {
+                    $shareMode = $_POST['share_mode'] ?? 'whole_org';
+                    if ($shareMode === 'specific_domains') {
+                        $userOrgRow2 = getOrganizationByDomain(substr(strrchr($_SESSION['user_email'], '@'), 1));
+                        $allowedDomainList = $userOrgRow2 ? getOrganizationDomains($userOrgRow2['id']) : [];
+                        $submittedDomains = array_values(array_filter((array)($_POST['shared_domains'] ?? [])));
+                        $filtered = array_intersect($submittedDomains, $allowedDomainList);
+                        setCourseSharedDomains((int)$_GET['id'], $filtered);
+                    } else {
+                        // Hela organisationen — rensa alla
+                        setCourseSharedDomains((int)$_GET['id'], []);
+                    }
                 }
 
                 $_SESSION['message'] = 'Kursen har uppdaterats.';
@@ -365,13 +372,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 // Delade domäner för ny kurs
-                $shareMode = $_POST['share_mode'] ?? 'whole_org';
-                if ($shareMode === 'specific_domains') {
-                    $userOrgRow2 = getOrganizationByDomain(substr(strrchr($_SESSION['user_email'], '@'), 1));
-                    $allowedDomainList = $userOrgRow2 ? getOrganizationDomains($userOrgRow2['id']) : [];
-                    $submittedDomains = array_values(array_filter((array)($_POST['shared_domains'] ?? [])));
-                    $filtered = array_intersect($submittedDomains, $allowedDomainList);
-                    setCourseSharedDomains((int)$newCourseId, $filtered);
+                if ($isOnPrimaryDomain) {
+                    // Huvuddomän får välja som vanligt
+                    $shareMode = $_POST['share_mode'] ?? 'whole_org';
+                    if ($shareMode === 'specific_domains') {
+                        $userOrgRow2 = getOrganizationByDomain(substr(strrchr($_SESSION['user_email'], '@'), 1));
+                        $allowedDomainList = $userOrgRow2 ? getOrganizationDomains($userOrgRow2['id']) : [];
+                        $submittedDomains = array_values(array_filter((array)($_POST['shared_domains'] ?? [])));
+                        $filtered = array_intersect($submittedDomains, $allowedDomainList);
+                        setCourseSharedDomains((int)$newCourseId, $filtered);
+                    }
+                } elseif (!empty($organizationDomain)) {
+                    // Sub-domän: begränsa automatiskt till skaparens egen domän
+                    // så kursen inte syns för andra sub-domäner i orgen.
+                    setCourseSharedDomains((int)$newCourseId, [$organizationDomain]);
                 }
 
                 $_SESSION['message'] = 'Kursen har skapats.';
@@ -1274,6 +1288,7 @@ require_once 'include/header.php';
                         // Default: alla domäner markerade när inget explicit val finns (ny kurs / hela org)
                         $prefillAllDomains = ($shareMode === 'whole_org');
                         ?>
+                        <?php if ($isOnPrimaryDomain): ?>
                         <div class="mb-4 p-3 border rounded bg-light">
                             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
                                 <label class="form-label fw-semibold mb-0"><i class="bi bi-eye me-1 text-secondary"></i>Synlighet — vem ska se kursen i sin kurskatalog?</label>
@@ -1350,6 +1365,12 @@ require_once 'include/header.php';
                             });
                         })();
                         </script>
+                        <?php else: ?>
+                        <div class="alert alert-secondary py-2 small mb-4">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Synlighet styrs av administratör på organisationens huvuddomän. Kursen blir synlig för användare på din egen domän.
+                        </div>
+                        <?php endif; ?>
 
                         <?php if (!empty($availableOrgTags)): ?>
                         <?php

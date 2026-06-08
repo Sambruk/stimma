@@ -29,21 +29,33 @@ $user = queryOne("SELECT id, is_admin, is_editor FROM " . DB_DATABASE . ".users 
 $isAdmin = $user && $user['is_admin'] == 1;
 $userId = $user['id'] ?? 0;
 
-// Org-scope: alla domäner i användarens organisation
-$orgScopeDomains = getOrgScopeDomains($userEmail);
-$courseDomClause = buildDomainInClause($orgScopeDomains, 'c.organization_domain');
+// Scope: huvuddomän-admins ser alla orgens domäner; sub-domän-admins bara
+// sin egen. En kurs är synlig om dess organization_domain finns i scope
+// ELLER om den explicit delats med en scope-domän via course_shared_domains.
+$scopeDomains = getEffectiveOrgScopeDomains($userEmail);
+$courseDomClause = buildDomainInClause($scopeDomains, 'c.organization_domain');
+$sharedDomClause = buildDomainInClause($scopeDomains, 'csd.domain');
+$visibilityFragment = "(
+    {$courseDomClause['fragment']}
+    OR EXISTS (
+        SELECT 1 FROM " . DB_DATABASE . ".course_shared_domains csd
+        WHERE csd.course_id = c.id AND {$sharedDomClause['fragment']}
+    )
+)";
+$visibilityParams = array_merge($courseDomClause['params'], $sharedDomClause['params']);
 
 // Hämta kurser baserat på användarens behörighet
 if ($isAdmin) {
-    // Administratörer ser kurser från hela sin organisation (alla orgens domäner)
+    // Administratörer ser kurser i sitt scope (sub-domän: egen domän,
+    // huvuddomän: hela orgen) plus delade kurser
     $courses = queryAll("
         SELECT c.*, COUNT(l.id) as lesson_count
         FROM " . DB_DATABASE . ".courses c
         LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id
-        WHERE {$courseDomClause['fragment']}
+        WHERE $visibilityFragment
         GROUP BY c.id
         ORDER BY c.id ASC
-    ", $courseDomClause['params']);
+    ", $visibilityParams);
 } else {
     // Redaktörer ser kurser de skapat (author_id) ELLER tilldelats redaktörskap för
     $courses = queryAll("
@@ -51,11 +63,11 @@ if ($isAdmin) {
         FROM " . DB_DATABASE . ".courses c
         LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id
         LEFT JOIN " . DB_DATABASE . ".course_editors ce ON c.id = ce.course_id
-        WHERE {$courseDomClause['fragment']}
+        WHERE $visibilityFragment
           AND (c.author_id = ? OR ce.email = ?)
         GROUP BY c.id
         ORDER BY c.id ASC
-    ", array_merge($courseDomClause['params'], [$userId, $userEmail]));
+    ", array_merge($visibilityParams, [$userId, $userEmail]));
 }
 
 // Hämta organisationstaggar per kurs

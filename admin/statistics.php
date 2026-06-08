@@ -24,10 +24,9 @@ $userDomain = substr(strrchr($userEmail, "@"), 1);
 $isAdmin = $currentUser && $currentUser['is_admin'] == 1;
 $isEditor = $currentUser && $currentUser['is_editor'] == 1;
 
-// Org-scope: alla domäner i adminens organisation (eller bara $userDomain om
-// domänen inte är grupperad). Varje statistikfråga expanderas till detta scope
-// så användare på alla orgens domäner kommer med.
-$orgScopeDomains = getOrgScopeDomains($userEmail);
+// Scope: huvuddomän-admins ser hela orgens statistik; sub-domän bara sin
+// egen domäns. Varje statistikfråga expanderas till detta scope.
+$orgScopeDomains = getEffectiveOrgScopeDomains($userEmail);
 $userEmailClauseU = buildEmailDomainInClause($orgScopeDomains, 'u.email');
 $orgScopeLabel = count($orgScopeDomains) === 1
     ? $orgScopeDomains[0]

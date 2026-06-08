@@ -26,11 +26,10 @@ $currentUserDomain = substr(strrchr($currentUser['email'], "@"), 1);
 $isSuperAdmin = $currentUser['role'] === 'super_admin';
 $isCurrentUserAdmin = $currentUser['is_admin'] == 1;
 
-// Adminens organisations-scope: alla domäner som tillhör samma organisation
-// (eller bara $currentUserDomain om domänen inte är grupperad). Används i
-// behörighetscheckar nedan så att vanlig admin kan hantera användare på alla
-// orgens domäner.
-$adminScopeDomains = getOrgScopeDomains($currentUser['email']);
+// Scope: huvuddomän-admins får hantera användare på alla orgens domäner;
+// sub-domän-admins bara sin egen domän. Begränsar både listning och
+// behörighetscheckar för actions nedan.
+$adminScopeDomains = getEffectiveOrgScopeDomains($currentUser['email']);
 
 // Kontrollera att användaren har behörighet att hantera användare
 if (!$isSuperAdmin && !$isCurrentUserAdmin) {

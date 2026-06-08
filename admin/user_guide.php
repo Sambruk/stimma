@@ -1506,6 +1506,96 @@ require_once 'include/header.php';
             <h2>Utökade behörigheter</h2>
         </div>
 
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-diagram-3-fill me-2 text-success"></i>Organisation, domäner och scope</h5>
+                <p class="text-muted">
+                    Stimma bygger på att användare hör till <strong>domäner</strong> (e-postdomänen i deras adress) och att
+                    flera domäner kan grupperas under en gemensam <strong>organisation</strong>. För varje organisation pekas
+                    en av domänerna ut som <strong>huvuddomän</strong> (markerad med en stjärna under Admin → Organisationer).
+                    Huvuddomänen är "modersorganisationen" — admins och redaktörer där har överblick över hela organisationen,
+                    medan underdomäner bara hanterar sina egna resurser.
+                </p>
+
+                <div class="tip-box info mt-3">
+                    <div class="tip-icon"><i class="bi bi-info-circle-fill"></i></div>
+                    <div class="tip-content">
+                        <strong>Exempel: Kommunalförbundet ITSAM</strong>
+                        <p class="mb-0 mt-1">
+                            ITSAM samlar 11 medlemskommuner. Huvuddomänen är <code>itsam.se</code>. Underdomäner är t.ex.
+                            <code>atvidaberg.se</code>, <code>boxholm.se</code>, <code>vimmerby.se</code> osv. En admin på
+                            <code>itsam.se</code> ser alla kommuners kurser och användare; en admin på
+                            <code>atvidaberg.se</code> ser bara Åtvidabergs.
+                        </p>
+                    </div>
+                </div>
+
+                <h6 class="mt-4 mb-2"><i class="bi bi-eye me-1"></i>Vad ser jag som admin eller redaktör?</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Du tillhör…</th>
+                                <th>Du ser…</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="badge bg-success">Huvuddomänen</span></td>
+                                <td>Alla resurser för alla underdomäner i organisationen — kurser, taggar, statistik, användare</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge bg-warning text-dark">Underdomän</span></td>
+                                <td>Bara din egen domäns resurser, plus kurser som huvuddomänen explicit delat med din domän</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge bg-secondary">Domän utan organisation</span></td>
+                                <td>Bara din egen domän</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="text-muted small mb-0">Gäller sidorna: Kurser, Taggar, Statistik och Användare.</p>
+
+                <h6 class="mt-4 mb-2"><i class="bi bi-share me-1"></i>Synlighet vid kursskapande</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Du tillhör…</th>
+                                <th>Du kan välja…</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="badge bg-success">Huvuddomänen</span></td>
+                                <td>"Delas med hela organisationen" <em>eller</em> "Dela med vissa domäner inom organisationen"</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge bg-warning text-dark">Underdomän</span></td>
+                                <td>Inget val — kursen blir automatiskt synlig endast på din egen domän</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="text-muted small mb-0">
+                    Underdomänens redaktörer kan ändå se och redigera kurser som huvuddomänen delat med dem
+                    (titel, lektioner, quiz, diplom-kriterier) — men inte ändra synlighetsinställningarna.
+                </p>
+
+                <div class="tip-box success mt-4">
+                    <div class="tip-icon"><i class="bi bi-star-fill"></i></div>
+                    <div class="tip-content">
+                        <strong>Sätta huvuddomän</strong>
+                        <p class="mb-0 mt-1">
+                            Superadmin sätter huvuddomän under <strong>Admin → Organisationer</strong> genom att klicka på
+                            stjärnan vid önskad domän. Endast en domän per organisation kan vara huvuddomän åt gången.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="card border-0 shadow-sm">
             <div class="card-body p-4">
                 <div class="row align-items-center">

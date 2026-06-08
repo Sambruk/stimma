@@ -7,7 +7,8 @@ Denna handbok beskriver hur du använder Stimma e-learning plattform. Stimma är
 ## Innehållsförteckning
 
 1. [Översikt över användarroller](#översikt-över-användarroller)
-2. [Kom igång - Logga in](#kom-igång---logga-in)
+2. [Organisation, domäner och scope](#organisation-domäner-och-scope)
+3. [Kom igång - Logga in](#kom-igång---logga-in)
    - [Hur länge är jag inloggad?](#hur-länge-är-jag-inloggad)
 3. [Guide för studenter](#guide-för-studenter)
    - [Din dashboard](#din-dashboard)
@@ -57,6 +58,40 @@ Stimma har fyra användarroller med olika behörigheter:
 | **Redaktör** | Kan skapa och redigera kurser som tilldelats dem |
 | **Admin** | Kan hantera alla kurser, användare och inställningar inom sin organisation |
 | **Superadmin** | Fullständig systemåtkomst inklusive AI-inställningar |
+
+---
+
+## Organisation, domäner och scope
+
+Stimma bygger på att användare hör till **domäner** (e-postdomänen i deras adress) och att flera domäner kan grupperas under en gemensam **organisation**. För varje organisation pekas en av domänerna ut som **huvuddomän** (markerad med en stjärna under Admin → Organisationer). Huvuddomänen är "modersorganisationen" — admins och redaktörer där har överblick över hela organisationen, medan underdomäner bara hanterar sina egna resurser.
+
+**Exempel: Kommunalförbundet ITSAM**
+ITSAM samlar 11 medlemskommuner. Huvuddomänen är `itsam.se`. Underdomäner är t.ex. `atvidaberg.se`, `boxholm.se`, `vimmerby.se` osv. En admin på `itsam.se` ser alla kommuners kurser och användare; en admin på `atvidaberg.se` ser bara Åtvidabergs.
+
+### Vad ser jag som admin eller redaktör?
+
+| Du tillhör... | Du ser... |
+|---|---|
+| **Huvuddomänen** för en organisation | Alla resurser för alla underdomäner i organisationen — kurser, taggar, statistik, användare |
+| **En underdomän** | Bara din egen domäns resurser, plus kurser som huvuddomänen explicit delat med din domän |
+| **En domän utan organisation** | Bara din egen domän |
+
+Detta gäller dessa admin-sidor: **Kurser**, **Taggar**, **Statistik** och **Användare**.
+
+### Synlighet vid kursskapande
+
+När du skapar eller redigerar en kurs:
+
+| Du tillhör... | Du kan välja... |
+|---|---|
+| **Huvuddomänen** | "Delas med hela organisationen" *eller* "Dela med vissa domäner inom organisationen" |
+| **En underdomän** | Inget val — kursen blir automatiskt synlig endast på din egen domän |
+
+Underdomänens redaktörer kan ändå se och redigera kurser som huvuddomänen delat med dem (titel, lektioner, quiz, diplom-kriterier) — men inte ändra synlighetsinställningarna.
+
+### Sätta huvuddomän
+
+Superadmin sätter huvuddomän under **Admin → Organisationer** genom att klicka på stjärnan vid önskad domän. Endast en domän per organisation kan vara huvuddomän åt gången.
 
 ---
 

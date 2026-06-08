@@ -24,10 +24,9 @@ $isAdmin = $currentUser['is_admin'] == 1;
 $isEditor = $currentUser['is_editor'] == 1;
 $isSuperAdmin = $currentUser['role'] === 'super_admin';
 
-// Org-scope: alla domäner i adminens organisation. Tag-listor och dubblettkontroller
-// expanderas till hela orgen så taggar är delade mellan grupperade domäner.
-// Nya taggar skapas dock fortfarande på adminens egen domän.
-$orgScopeDomains = getOrgScopeDomains($_SESSION['user_email']);
+// Scope: huvuddomän-admins ser hela orgens taggar; sub-domän bara sin egen
+// domäns. Nya taggar skapas alltid på adminens egen domän.
+$orgScopeDomains = getEffectiveOrgScopeDomains($_SESSION['user_email']);
 $tagDomClause = buildDomainInClause($orgScopeDomains, 'organization_domain');
 $tDomClause = buildDomainInClause($orgScopeDomains, 't.organization_domain');
 
