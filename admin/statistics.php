@@ -25,12 +25,19 @@ $isAdmin = $currentUser && $currentUser['is_admin'] == 1;
 $isEditor = $currentUser && $currentUser['is_editor'] == 1;
 
 // Scope: huvuddomän-admins ser hela orgens statistik; sub-domän bara sin
-// egen domäns. Varje statistikfråga expanderas till detta scope.
-$orgScopeDomains = getEffectiveOrgScopeDomains($userEmail);
-$userEmailClauseU = buildEmailDomainInClause($orgScopeDomains, 'u.email');
-$orgScopeLabel = count($orgScopeDomains) === 1
-    ? $orgScopeDomains[0]
-    : implode(', ', $orgScopeDomains);
+// egen domäns. Med domänfiltret (domains[]) kan en huvuddomän-admin begränsa
+// statistiken till en eller flera valda domäner (medlemskommuner). Valet skärs
+// alltid mot scopet i getStatsDomainScope().
+$domainScope = getStatsDomainScope($userEmail);
+$orgScopeDomains = $domainScope['scope'];   // hela scopet (för filter-UI)
+$selectedDomains = $domainScope['selected']; // användarens val
+$activeDomains = $domainScope['active'];      // det queries filtreras på
+$domainFilterQs = buildDomainFilterQuery($selectedDomains);
+
+$userEmailClauseU = buildEmailDomainInClause($activeDomains, 'u.email');
+$orgScopeLabel = count($activeDomains) === 1
+    ? $activeDomains[0]
+    : implode(', ', $activeDomains);
 
 // Kontrollera behörighet - måste vara admin eller redaktör
 if (!$isAdmin && !$isEditor) {
@@ -373,6 +380,26 @@ require_once 'include/header.php';
             </div>
             <div class="col-md-6">
                 <form method="GET" class="d-flex align-items-center justify-content-end gap-2 mb-0">
+                    <?php if (count($orgScopeDomains) > 1): ?>
+                    <div class="dropdown">
+                        <button class="btn btn-light btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" title="Filtrera på domän/organisation">
+                            <i class="bi bi-funnel me-1"></i><?= empty($selectedDomains) ? 'Alla domäner' : (count($selectedDomains) . ' valda') ?>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-end p-2" style="min-width: 240px; max-height: 320px; overflow:auto;">
+                            <div class="small text-muted px-1 mb-1">Visa endast användare från:</div>
+                            <?php foreach ($orgScopeDomains as $d): ?>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="domains[]" value="<?= htmlspecialchars($d) ?>" id="domf_<?= md5($d) ?>" <?= in_array($d, $selectedDomains, true) ? 'checked' : '' ?>>
+                                <label class="form-check-label" for="domf_<?= md5($d) ?>"><?= htmlspecialchars($d) ?></label>
+                            </div>
+                            <?php endforeach; ?>
+                            <div class="d-flex gap-2 mt-2 border-top pt-2">
+                                <button type="submit" class="btn btn-primary btn-sm flex-fill">Tillämpa</button>
+                                <a href="statistics.php<?= $selectedCourseId ? '?course_id=' . $selectedCourseId : '' ?>" class="btn btn-outline-secondary btn-sm">Rensa</a>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
                     <select name="course_id" id="course_id" class="form-select form-select-sm" style="max-width: 300px;" onchange="this.form.submit()">
                         <option value="">-- Välj kurs --</option>
                         <?php foreach ($courses as $course): ?>
@@ -382,7 +409,7 @@ require_once 'include/header.php';
                         <?php endforeach; ?>
                     </select>
                     <?php if ($selectedCourseId): ?>
-                    <a href="export_statistics.php?course_id=<?= $selectedCourseId ?>" class="btn btn-light btn-sm" title="Exportera till Excel">
+                    <a href="export_statistics.php?course_id=<?= $selectedCourseId . $domainFilterQs ?>" class="btn btn-light btn-sm" title="Exportera till Excel">
                         <i class="bi bi-file-earmark-excel"></i>
                     </a>
                     <?php endif; ?>

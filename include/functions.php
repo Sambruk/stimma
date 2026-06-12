@@ -1282,6 +1282,53 @@ function buildEmailDomainInClause(array $domains, $emailColumn) {
 }
 
 /**
+ * Läs ut ett valfritt domän-/organisationsfilter för statistiksidorna.
+ *
+ * Huvuddomän-admins (och superadmins) har flera domäner i sitt scope. Med detta
+ * filter kan de begränsa statistiken till en eller flera valda domäner
+ * (medlemskommuner) via GET-parametern domains[]. Av säkerhetsskäl skärs valet
+ * alltid mot det egna scopet — en användare kan aldrig filtrera fram (eller på
+ * annat sätt nå) domäner utanför sin behörighet.
+ *
+ * @param string $email Inloggad användares e-post
+ * @return array{scope:array,selected:array,active:array,filtered:bool}
+ *   scope    = alla domäner användaren har behörighet till (för filter-UI)
+ *   selected = de domäner användaren valt (alltid en delmängd av scope)
+ *   active   = den mängd som queries ska filtreras på (selected om något valts,
+ *              annars hela scope)
+ *   filtered = true om användaren aktivt valt en delmängd
+ */
+function getStatsDomainScope($email) {
+    $scope = getEffectiveOrgScopeDomains($email);
+    $raw = isset($_GET['domains']) ? (array)$_GET['domains'] : [];
+    $raw = array_map('strval', $raw);
+    // Skär valet mot scopet (skydd mot manipulerade/utanför-scope-domäner)
+    $selected = array_values(array_intersect($raw, $scope));
+    $active = !empty($selected) ? $selected : $scope;
+    return [
+        'scope'    => $scope,
+        'selected' => $selected,
+        'active'   => $active,
+        'filtered' => !empty($selected),
+    ];
+}
+
+/**
+ * Bygg en querystring-fragment (&domains[]=...) för att föra vidare ett aktivt
+ * domänfilter i länkar (t.ex. export). Returnerar tom sträng om inget valts.
+ *
+ * @param array $selectedDomains
+ * @return string
+ */
+function buildDomainFilterQuery(array $selectedDomains) {
+    $qs = '';
+    foreach ($selectedDomains as $d) {
+        $qs .= '&domains%5B%5D=' . urlencode($d);
+    }
+    return $qs;
+}
+
+/**
  * Kontrollera om en användares organisation (eller domän, om ingen org finns)
  * har tecknat PUB-avtal.
  *

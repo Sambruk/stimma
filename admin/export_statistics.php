@@ -32,6 +32,11 @@ if (!$isAdmin && !$isEditor) {
     exit;
 }
 
+// Scope + valfritt domänfilter (samma som statistik-sidorna). Skärs mot
+// användarens behörighet i getStatsDomainScope().
+$domainScope = getStatsDomainScope($userEmail);
+$activeDomains = $domainScope['active'];
+
 // Hämta vald kurs
 $selectedCourseId = isset($_GET['course_id']) ? (int)$_GET['course_id'] : null;
 
@@ -74,7 +79,10 @@ $lessonsInCourse = query("SELECT id, title, sort_order FROM " . DB_DATABASE . ".
 
 // Hämta progress för användare
 if ($isAdmin) {
-    $domainPattern = '%@' . $userDomain;
+    // Admin: hela org-scopet (eller den valda delmängden via domains[]).
+    // Tidigare användes bara admins egen domän, vilket gjorde att en
+    // huvuddomän-admins export saknade övriga domäner i organisationen.
+    $emailClause = buildEmailDomainInClause($activeDomains, 'u.email');
     $userProgressInCourse = query("SELECT
         u.id as user_id,
         u.email,
@@ -87,10 +95,10 @@ if ($isAdmin) {
     FROM " . DB_DATABASE . ".users u
     CROSS JOIN " . DB_DATABASE . ".lessons l
     LEFT JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id AND l.id = p.lesson_id
-    WHERE u.email LIKE ?
+    WHERE {$emailClause['fragment']}
     AND l.course_id = ?
     AND l.status = 'active'
-    ORDER BY u.email ASC, l.sort_order ASC", [$domainPattern, $selectedCourseId]);
+    ORDER BY u.email ASC, l.sort_order ASC", array_merge($emailClause['params'], [$selectedCourseId]));
 } else {
     $userProgressInCourse = query("SELECT
         u.id as user_id,
