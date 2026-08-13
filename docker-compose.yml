@@ -40,13 +40,24 @@ services:
         echo 'max_file_uploads = 20' >> /usr/local/etc/php/conf.d/uploads.ini &&
         echo 'max_execution_time = 300' >> /usr/local/etc/php/conf.d/uploads.ini &&
         echo 'max_input_time = 300' >> /usr/local/etc/php/conf.d/uploads.ini &&
+        echo 'display_errors = Off' > /usr/local/etc/php/conf.d/errors.ini &&
+        echo 'display_startup_errors = Off' >> /usr/local/etc/php/conf.d/errors.ini &&
+        echo 'log_errors = On' >> /usr/local/etc/php/conf.d/errors.ini &&
+        echo 'error_reporting = E_ALL & ~E_DEPRECATED' >> /usr/local/etc/php/conf.d/errors.ini &&
+        echo 'expose_php = Off' >> /usr/local/etc/php/conf.d/errors.ini &&
         apache2-foreground
       "
 
   scheduler:
     # Ofelia — docker-native cron som läser labels från web-containern.
     # Ingen host-cron behövs.
-    image: mcuadros/ofelia:latest
+    #
+    # Pinnad till digest (2026-08-13) istället för :latest. Ofelia har åtkomst
+    # till docker-socketen och är därmed stackens känsligaste container — en
+    # flytande tagg innebär att en ny image kan dras in oavsiktligt vid nästa
+    # pull. Uppdatera medvetet: kontrollera uppströms, byt digest, testa.
+    # Digesten nedan motsvarar den image som byggdes 2026-04-11.
+    image: mcuadros/ofelia@sha256:efcbe2c5cf658a25de6443c1462d653f9cc03791d642e01fc6c638a00f97e492
     restart: always
     depends_on:
       - web

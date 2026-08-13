@@ -98,14 +98,23 @@ define('SESSION_LIFETIME_HOURS', getenv('SESSION_LIFETIME_HOURS') ?: 24);
 
 // Session settings - skip for CLI
 if (php_sapi_name() !== 'cli' && session_status() === PHP_SESSION_NONE) {
-    // Set cookie parameters before starting session
-    $secure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+    // Set cookie parameters before starting session.
+    // Nginx terminerar TLS och proxyar till containern över HTTP, så $_SERVER['HTTPS']
+    // är aldrig satt här — Secure-flaggan måste läsas från X-Forwarded-Proto, annars
+    // skickas sessionskakan även över okrypterad HTTP.
+    $forwardedProto = strtolower(explode(',', $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')[0]);
+    $secure = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || $forwardedProto === 'https'
+        || (int)($_SERVER['HTTP_X_FORWARDED_PORT'] ?? 0) === 443;
     $httponly = true;
 
     // Use only cookies for session handling
     ini_set('session.use_cookies', 1);
     ini_set('session.use_only_cookies', 1);
     ini_set('session.use_trans_sid', 0);
+    // Avvisa sessions-ID som servern inte själv har utfärdat (skydd mot
+    // session fixation). PHP:s default är 0.
+    ini_set('session.use_strict_mode', 1);
 
     // Set session cookie parameters
     session_set_cookie_params([

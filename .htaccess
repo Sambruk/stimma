@@ -14,6 +14,21 @@ SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
     Require all denied
 </FilesMatch>
 
+# Block ALL markdown and example/template files.
+# Den namnbaserade listan ovan är en allowlist som lätt hamnar på efterkälken —
+# VULNERABILITIES.md, CLEANUP-REPORT.md, REPORT.md, CHANGELOG.md och env.example
+# låg publikt läsbara innan detta lades till (2026-08-13). Mönstren nedan täcker
+# framtida filer automatiskt.
+<FilesMatch "\.(md|markdown)$">
+    Require all denied
+</FilesMatch>
+<FilesMatch "(^|\.)(example|sample|dist|bak|old|orig|swp|log)$">
+    Require all denied
+</FilesMatch>
+<FilesMatch "\.(example|sample|dist|bak|old|orig|swp|sql|yml|yaml|ini|sh)$">
+    Require all denied
+</FilesMatch>
+
 # Block .git directory
 RedirectMatch 404 /\.git
 
