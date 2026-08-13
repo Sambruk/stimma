@@ -14,6 +14,7 @@ Denna handbok beskriver hur du använder Stimma e-learning plattform. Stimma är
    - [Din dashboard](#din-dashboard)
    - [Gamification - XP och nivåer](#gamification---xp-och-nivåer)
    - [Diplom](#diplom)
+   - [Lärvägar](#lärvägar)
 4. [Guide för redaktörer](#guide-för-redaktörer)
    - [Skapa en ny kurs](#skapa-en-ny-kurs) (flikbaserad redigerare)
    - [Ange slutdatum för en kurs](#ange-slutdatum-för-en-kurs)
@@ -31,9 +32,11 @@ Denna handbok beskriver hur du använder Stimma e-learning plattform. Stimma är
    - [Importera PowerPoint till kurs](#importera-powerpoint-till-kurs)
    - [Kopiera en befintlig kurs](#kopiera-en-befintlig-kurs)
    - [Förhandsgranska lektioner](#förhandsgranska-lektioner)
+   - [Skapa och hantera lärvägar](#skapa-och-hantera-lärvägar)
 5. [Guide för administratörer](#guide-för-administratörer)
    - [Dashboard - Översikt](#dashboard---översikt)
    - [Diplomhantering](#diplomhantering)
+   - [Lärvägsstatistik](#lärvägsstatistik)
    - [E-postlogg för stegvisa kurser](#e-postlogg-för-stegvisa-kurser)
    - [Påminnelseinställningar](#påminnelseinställningar)
    - [Skicka testmail](#skicka-testmail)
@@ -231,6 +234,26 @@ När du slutför en kurs får du automatiskt ett diplom:
 - Slutförandedatum
 - Unikt diplomnummer
 - Organisationens logotyp
+
+### Lärvägar
+
+En lärväg samlar flera kurser som hör ihop, till exempel "Introduktion för nyanställda". Du hittar dem under **Lärvägar** i vänstermenyn — posten visas bara om du har minst en lärväg — och som en sammanfattning under **Mina lärvägar** på översikten.
+
+**Så läser du lärvägen:**
+
+1. Kurserna är numrerade i en rekommenderad ordning
+2. **Ordningen är bara en rekommendation** — ingenting är låst, du kan börja var du vill
+3. Varje kurs visar din status:
+   - **Genomförd** — diplomet är utfärdat, med länk till diplomet
+   - **Påbörjad** — du har klarat minst en lektion, med procentsats
+   - **Registrerad** — du är inskriven men har inte börjat än
+   - **Ej påbörjad**
+4. Längst upp visas hur många kurser du klarat och lärvägens totala procent
+
+**Bra att veta:**
+- Kurser du inte har åtkomst till visas inte i lärvägen, och räknas inte i din procent
+- Det finns inget separat lärvägsdiplom — du får kursernas ordinarie diplom
+- Ingår en stegvis kurs i lärvägen gäller dess lektionslåsning som vanligt inne i kursen
 
 ---
 
@@ -493,6 +516,41 @@ Innan du publicerar kan du förhandsgranska hur en lektion ser ut för användar
 - Verifiera att videolänkar fungerar
 - Se hur innehållet presenteras för användare
 - Testa AI-tutorn om den är aktiverad
+
+### Skapa och hantera lärvägar
+
+En lärväg grupperar flera kurser till ett sammanhängande upplägg med en rekommenderad ordning.
+
+**Skapa lärvägen:**
+
+1. Gå till **Lärvägar** i adminmenyn
+2. Skriv ett namn under **"Skapa ny lärväg"** — du kommer direkt till redigeringsvyn
+3. Fyll i beskrivning (ren text) och ladda gärna upp en bild
+4. Lägg till kurser från **Tillgängliga kurser** till höger med plusknappen
+5. Dra kurserna i vänsterpanelen för att sätta ordningen — numreringen uppdateras direkt
+6. Sätt status till **Aktiv** och klicka **Spara lärvägen**
+
+Nya lärvägar skapas som **inaktiva** så att de inte visas för deltagare innan kurserna är på plats. I lärvägslistan kan du dra raderna för att styra i vilken ordning lärvägarna visas.
+
+**Synlighet:**
+
+| Val | Effekt |
+|-----|--------|
+| Delas med hela organisationen (standard) | Alla användare i organisationens domäner ser lärvägen |
+| Dela med vissa domäner | Endast valda medlemsdomäner ser den |
+| Global (endast superadmin) | Alla organisationer ser den |
+
+Synligheten kan bara ändras av administratör på organisationens huvuddomän. Skapar du som administratör på en underdomän låses lärvägen automatiskt till din egen domän.
+
+**Viktigt att veta:**
+
+- **Ordningen låser ingenting.** Deltagaren ser kurserna numrerade men kan ta dem i valfri ordning. Vill du styra takten inom en kurs använder du stegvisa kurser.
+- **Ingen separat tilldelning.** Alla som ser lärvägen har den — det finns ingen anmälningslista. Begränsa istället med delade domäner.
+- **Kurser deltagaren saknar åtkomst till döljs** och räknas inte i deltagarens procent. Stegen numreras om så inga hål uppstår. Sådana kurser märks med **Begränsad synlighet** i redigeringsvyn.
+- **Radering av lärvägen tar bara bort grupperingen.** Kurser, resultat och diplom påverkas inte. Raderar du däremot en kurs som ingår i en lärväg varnas du först.
+- **Kopierade kurser ärver inte lärvägsmedlemskap** — lägg in kopian manuellt om den ska ingå.
+
+Behörighet: administratör hanterar alla lärvägar i sin organisation, redaktör hanterar de lärvägar hen själv skapat, superadministratör hanterar alla.
 
 ### Skapa AI-genererad kurs
 
@@ -763,6 +821,32 @@ Hantera diplom för din organisation:
 2. Ladda upp organisationens logotyp
 3. Anpassa diplomtexten
 4. Förhandsgranska resultatet
+
+### Lärvägsstatistik
+
+Följ upp hur deltagarna ligger till i en lärväg: klicka på stapeldiagram-ikonen i lärvägslistan, eller **Statistik** från redigeringsvyn.
+
+**Vyn visar:**
+
+- **Nyckeltal:** antal användare i urvalet, hur många som genomfört hela lärvägen, hur många som påbörjat minst en kurs, och genomsnittlig andel
+- **Matris:** en rad per användare, en kolumn per kurs i lärvägen (kolumnrubriken länkar till kursens egen statistik)
+- **Summeringsrad:** per kurs, antal genomförda / antal som åtminstone registrerats
+
+**Symboler i matrisen:**
+
+| Symbol | Betydelse |
+|--------|-----------|
+| ✔ (grön) | Genomförd — diplom utfärdat, datum visas vid hovring |
+| Procentbadge | Påbörjad — andel avklarade lektioner |
+| Person-ikon (gul) | Registrerad, ingen lektion klar ännu |
+| – | Ej påbörjad |
+
+**Filter:**
+- **Domänfilter** — begränsa till valda medlemsdomäner (visas när organisationen har flera). Valet skärs alltid mot din behörighet.
+- **Visa alla användare** — som standard döljs användare som inte påbörjat något. Slå på för hela listan.
+- Listan pagineras vid fler än 200 användare.
+
+Till skillnad från deltagarvyn döljs inga kurser här — du ser lärvägen som den är definierad. Externa deltagare i publika kurser ingår inte, eftersom urvalet bygger på e-postdomän.
 
 ### E-postlogg för stegvisa kurser
 

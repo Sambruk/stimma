@@ -2056,10 +2056,193 @@ function getPublicCourseIdsForUser($userId) {
 }
 
 /**
+ * Bygg det kompletta synlighetsfragmentet för kurser för en given användare.
+ *
+ * Logiken är identisk med den som index.php:214-276 bygger inline. Den finns
+ * här som en återanvändbar helper för nyare vyer (lärvägar). index.php har
+ * ännu inte migrerats hit — se TODO.md. Ändras reglerna måste BÅDA ställena
+ * uppdateras tills migreringen är gjord.
+ *
+ * Regler:
+ *   public_only-användare  → ENDAST kurser från public_course_access
+ *   domain-användare       → ( kursens organization_domain i org-scope
+ *                              OCH org-tagg-överlapp (otaggad kurs syns för alla)
+ *                              OCH shared-domain-filter )
+ *                            ELLER publik access ELLER is_global = 1
+ *
+ * @param int $userId
+ * @param string $alias Tabellalias för courses i den anropande queryn
+ * @return array{fragment:string, params:array, is_public_only:bool,
+ *               org_scope_domains:array, public_course_ids:array}
+ */
+function buildCourseVisibilityClause($userId, $alias = 'c') {
+    $userId = (int)$userId;
+    $a = preg_replace('/[^a-zA-Z0-9_]/', '', $alias);
+    if ($a === '') {
+        $a = 'c';
+    }
+
+    $user = queryOne(
+        "SELECT email, access_mode FROM " . DB_DATABASE . ".users WHERE id = ?",
+        [$userId]
+    );
+    if (!$user) {
+        return [
+            'fragment' => "$a.id IN (NULL)",
+            'params' => [],
+            'is_public_only' => false,
+            'org_scope_domains' => [],
+            'public_course_ids' => [],
+        ];
+    }
+
+    $publicCourseIds = getPublicCourseIdsForUser($userId);
+    $isPublicOnly = ($user['access_mode'] ?? 'domain') === 'public_only';
+
+    if ($isPublicOnly) {
+        // public_only-användare ser ENDAST kurser de registrerat sig för.
+        $fragment = empty($publicCourseIds)
+            ? "$a.id IN (NULL)"
+            : "$a.id IN (" . implode(',', array_fill(0, count($publicCourseIds), '?')) . ")";
+        return [
+            'fragment' => $fragment,
+            'params' => $publicCourseIds,
+            'is_public_only' => true,
+            'org_scope_domains' => [],
+            'public_course_ids' => $publicCourseIds,
+        ];
+    }
+
+    $userDomain = getUserDomain($user['email']);
+    $orgScopeDomains = getOrgScopeDomains($user['email']);
+    $domainClause = buildDomainInClause($orgScopeDomains, "$a.organization_domain");
+
+    // Org-taggar: otaggad kurs syns för alla i scopet, taggad kurs kräver
+    // överlapp med användarens taggar. Saknar användaren taggar ser hen bara
+    // otaggade kurser.
+    $userOrgTagValues = array_column(getUserOrgTags($userId), 'tag');
+    if (!empty($userOrgTagValues)) {
+        $tagPlaceholders = implode(',', array_fill(0, count($userOrgTagValues), '?'));
+        $orgTagFilter = "AND (
+            NOT EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_org_tags cot WHERE cot.course_id = $a.id)
+            OR EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_org_tags cot WHERE cot.course_id = $a.id AND cot.tag IN ($tagPlaceholders))
+        )";
+        $orgTagParams = $userOrgTagValues;
+    } else {
+        $orgTagFilter = "AND NOT EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_org_tags cot WHERE cot.course_id = $a.id)";
+        $orgTagParams = [];
+    }
+
+    // Kurs utan rader i course_shared_domains delas med hela organisationen.
+    $sharedDomainFilter = "AND (
+        NOT EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_shared_domains csd WHERE csd.course_id = $a.id)
+        OR EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_shared_domains csd WHERE csd.course_id = $a.id AND csd.domain = ?)
+    )";
+    $sharedDomainParams = [$userDomain];
+
+    $scoped = "({$domainClause['fragment']} $orgTagFilter $sharedDomainFilter)";
+    $params = array_merge($domainClause['params'], $orgTagParams, $sharedDomainParams);
+
+    if (!empty($publicCourseIds)) {
+        $publicPlaceholders = implode(',', array_fill(0, count($publicCourseIds), '?'));
+        $fragment = "($scoped OR $a.id IN ($publicPlaceholders) OR $a.is_global = 1)";
+        $params = array_merge($params, $publicCourseIds);
+    } else {
+        $fragment = "($scoped OR $a.is_global = 1)";
+    }
+
+    return [
+        'fragment' => $fragment,
+        'params' => $params,
+        'is_public_only' => false,
+        'org_scope_domains' => $orgScopeDomains,
+        'public_course_ids' => $publicCourseIds,
+    ];
+}
+
+/**
+ * Batch-beräkna kursprogress för M användare × N kurser. Två queries totalt,
+ * oavsett hur många användare och kurser som efterfrågas.
+ *
+ * Nämnaren är lessons.status='active' oavsett lesson_type — exakt samma
+ * definition som checkAndCompleteCourse() i gamification.php använder. Därmed
+ * gäller att 100 % ⇔ kursen är klar (och diplom utfärdat om kriterierna
+ * uppfylls). Räknar man bort infosidor kan en kurs visa 100 % utan diplom.
+ *
+ * @param int[] $userIds
+ * @param int[] $courseIds
+ * @return array [userId][courseId] => ['total'=>int,'done'=>int,'percent'=>int]
+ *               Tät matris: alla efterfrågade kombinationer finns med.
+ */
+function getCourseProgressForUsers(array $userIds, array $courseIds) {
+    $userIds = array_values(array_unique(array_map('intval', $userIds)));
+    $courseIds = array_values(array_unique(array_map('intval', $courseIds)));
+
+    $result = [];
+    if (empty($userIds) || empty($courseIds)) {
+        return $result;
+    }
+
+    $coursePlaceholders = implode(',', array_fill(0, count($courseIds), '?'));
+
+    // 1) Antal aktiva lektioner per kurs
+    $totals = [];
+    $totalRows = query(
+        "SELECT course_id, COUNT(*) AS n
+         FROM " . DB_DATABASE . ".lessons
+         WHERE course_id IN ($coursePlaceholders) AND status = 'active'
+         GROUP BY course_id",
+        $courseIds
+    );
+    foreach ($totalRows ?: [] as $row) {
+        $totals[(int)$row['course_id']] = (int)$row['n'];
+    }
+
+    // 2) Antal avklarade lektioner per (användare, kurs)
+    $userPlaceholders = implode(',', array_fill(0, count($userIds), '?'));
+    $doneRows = query(
+        "SELECT l.course_id, p.user_id, COUNT(DISTINCT p.lesson_id) AS n
+         FROM " . DB_DATABASE . ".progress p
+         JOIN " . DB_DATABASE . ".lessons l ON l.id = p.lesson_id
+         WHERE l.course_id IN ($coursePlaceholders)
+           AND l.status = 'active'
+           AND p.user_id IN ($userPlaceholders)
+           AND p.status = 'completed'
+         GROUP BY l.course_id, p.user_id",
+        array_merge($courseIds, $userIds)
+    );
+    $done = [];
+    foreach ($doneRows ?: [] as $row) {
+        $done[(int)$row['user_id']][(int)$row['course_id']] = (int)$row['n'];
+    }
+
+    foreach ($userIds as $uid) {
+        foreach ($courseIds as $cid) {
+            $total = $totals[$cid] ?? 0;
+            $completed = $done[$uid][$cid] ?? 0;
+            if ($completed > $total) {
+                // Kan inträffa om lektioner inaktiverats efter att de klarats.
+                $completed = $total;
+            }
+            $result[$uid][$cid] = [
+                'total' => $total,
+                'done' => $completed,
+                'percent' => $total > 0 ? (int)round($completed / $total * 100) : 0,
+            ];
+        }
+    }
+
+    return $result;
+}
+
+/**
  * Rensa ALL data för en användare i en specifik publik kurs. Gemensam för
  * självradering (leave_public_course.php) och admin-bulk-delete. Rör INTE
  * users-raden — det sköts av maybeDeleteOrphanPublicUser() efter sista access
  * är borta.
+ *
+ * Lärvägar berörs inte: de tilldelas implicit och äger ingen per-användardata
+ * (se migrations/044_learning_paths.sql, designbeslut 2).
  *
  * Körs i transaktion.
  *

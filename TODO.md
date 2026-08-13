@@ -1,6 +1,62 @@
 # Stimma - Utvecklingsuppgifter
 
 ## Pågående
+- [x] Lärvägar (learning paths) (2026-08-13). Plan: /root/.claude/plans/vi-ska-skapa-en-swift-candy.md
+  - [x] Migration 044: learning_paths, learning_path_courses, learning_path_shared_domains + index på progress
+  - [x] include/functions.php: buildCourseVisibilityClause() + getCourseProgressForUsers()
+  - [x] include/learning_paths.php: CRUD, delade domäner, behörighet, synlighetsfilter, batchad status
+  - [x] admin/learning_paths.php: lista, skapa, radera + menypost i admin/include/header.php
+  - [x] admin/ajax/update_learning_path_order.php: drag-and-drop-ordning
+  - [x] admin/edit_learning_path.php: formulär + tvåpanels-kurskoppling
+  - [x] include/learning_paths.php del 2: batchad status + getLearningPathOverviewForUser()
+  - [x] learning_paths.php (student) + länk i include/sidebar.php
+  - [x] index.php: sektionen "Mina lärvägar"
+  - [x] admin/learning_path_stats.php: matrisvy över genomförda/registrerade
+  - [x] Kaskader: delete_course.php + varning i courses.php + kommentarer i users.php/copy_course.php
+  - [x] Dokumentation: admin/user_guide.php + docs/USER_GUIDE.md + CHANGELOG.md (v2.1.0)
+  - [x] E2E-verifierat: synlighet per org/domän/public_only, IDOR (edit, statistik, sortering, kurssmuggling
+        vid spara), kaskad vid kursradering, tomma tillstånd, konstant antal queries (35 oavsett antal lärvägar)
+- [ ] Uppföljning: migrera index.php:214-276 till buildCourseVisibilityClause() (kräver före/efter-regressionstest av kurskatalogen för huvuddomänadmin, sub-domänanvändare med org-taggar och public_only)
+- [x] Statistik: filtrera per domän/organisation, flera samtidigt (2026-06-12)
+  - [x] include/functions.php: getStatsDomainScope() + buildDomainFilterQuery(), val skärs alltid mot användarens scope
+  - [x] admin/statistics.php: multi-select-dropdown, alla user-frågor mot valda domäner, filter följer med i export-länk
+  - [x] admin/course_stats.php: filter i översikt, detaljvy och summeringar; publika deltagare exkluderas vid aktivt filter
+  - [x] admin/export_statistics.php: respekterar scope + filter (fixar latent bugg där admin-export bara tog egen domän)
+- [x] Synkverktyg + dokumentation (2026-06-08)
+  - [x] admin/sync_tool.php: "Exempelfil"-knapp som laddar ner kommenterad CSV (UTF-8 + BOM, flera org-taggar via "/")
+  - [x] docs/USER_GUIDE.md + admin/user_guide.php: avsnitt om Synkverktyget (manuell synk) och användarsynk via API
+  - [x] admin/user_guide.php: fullständiga API-URL:er härledda från aktuell host
+- [x] Tokenbeställningar för superadmin (2026-06-08)
+  - [x] Migration 041_token_order_billing: billed_at + billed_by på token_orders
+  - [x] include/token_balance.php: getAllTokenOrders(), getTokenOrdersBillingSummary(), setOrderBilled()
+  - [x] admin/token_orders.php: superadmin-vy med nyckeltal, filter, markera debiterad + CSV-export av ej debiterade
+  - [x] admin/include/header.php: menypost "Tokenbeställningar" (superadmin)
+- [x] Enhetlig rollterminologi: Redaktör och Användare (2026-06-08)
+  - [x] users.php, export_users.php, sync_tool.php, api_keys.php, user_guide.php, docs/USER_GUIDE.md
+  - [x] normalizeRole() känner igen "redaktör/redaktor/användare" vid CSV-import (interna rollvärden oförändrade)
+- [x] IDOR-härdning i kurs-/lektions-endpoints (2026-05-13 + 2026-06-08)
+  - [x] include/functions.php: kanonisk userCanModifyCourse() (super_admin / org-scopad admin / kursredaktör)
+  - [x] edit_course, delete_course, delete_lesson, add/remove_course_editor, update_info_page_owner
+  - [x] update_course_order, update_lesson_order, generate_course_image, generate_lesson_image
+- [x] Huvuddomän-scope: sub-domän-admins ser bara egen domän (2026-06-08)
+  - [x] getEffectiveOrgScopeDomains() + isUserOnPrimaryOrgDomain() i functions.php
+  - [x] Kurser, Taggar, Statistik, Användare scopeas per huvuddomän/underdomän
+  - [x] Synlighets-/delningskontroller endast för huvuddomän; nya sub-domänkurser låses via course_shared_domains
+  - [x] Org/domän/scope-modellen dokumenterad i user_guide.php + docs/USER_GUIDE.md
+- [x] AI-kvoter: visa alla scopes (org + vitlistade domäner) med default-rader (2026-06-05)
+- [x] Diplom-kriterier, retry-blockering och cert-backfill (2026-06-05)
+  - [x] Migration 043: courses.allow_quiz_retry, course_completion_criteria, quiz_answers
+  - [x] lesson.php: recordQuizAnswer() + server-side blockering av omtag när allow_quiz_retry=0
+  - [x] gamification.php: evaluateCourseCriteria() gatar recordCourseCompletion (grandfathering av historiska completions)
+  - [x] admin/edit_course.php: "Diplom-kriterier"-sektion (procenttröskel + retry-switch)
+  - [x] migrations/backfill_missing_certificates.php + migration 042 (lesson_video_position)
+- [x] Token-ekonomi + AI-säkerhetshärdning (2026-05-13)
+  - [x] Migration 040: saldo per organisation, 6 paket, append-only token_transactions
+  - [x] cron/monthly_token_refill.php: auto-påfyllning den 1:a (Ofelia), tak 3× paketstorlek
+  - [x] admin/order_tokens.php + saldobanner i admin-header
+  - [x] Migration 041_image_model_migration + include/ai_image_helper.php (gpt-image-1-mini default, dall-e utfasad)
+  - [x] Kvotkontroll före AI-bildgenerering (tidigare billing-bypass), dead-code utan usage-loggning borttagen
+- [x] Lektions-UX: multipage, quiz per fråga, navigering (2026-05-13)
 - [x] Kurskatalog visar alla kurser + avbrutna kurser i Avslutade-fliken (2026-05-11)
   - [x] index.php: kurskatalogen filtrerar inte längre bort påbörjade/klara kurser
   - [x] index.php: kontextuell knapptext i katalogen ("Börja kursen" / "Fortsätt" / "Gå igenom igen")

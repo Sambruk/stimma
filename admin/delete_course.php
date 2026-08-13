@@ -119,6 +119,11 @@ try {
     // Delete reminder_log entries (no FK but contains course data)
     execute("DELETE FROM " . DB_DATABASE . ".reminder_log WHERE course_id = ?", [$courseId]);
 
+    // Koppla loss kursen ur eventuella lärvägar. FK:n cascadar visserligen,
+    // men filen raderar allt explicit — håll mönstret. Lärvägarna själva blir
+    // kvar, bara ett steg kortare.
+    execute("DELETE FROM " . DB_DATABASE . ".learning_path_courses WHERE course_id = ?", [$courseId]);
+
     // Samla public_course_access-användare INNAN kursen raderas (FK cascade
     // tömmer tabellen) så vi kan göra orphan-sweep efteråt.
     $publicUserIds = array_column(

@@ -68,6 +68,21 @@ if ($rdUserDomain !== '' && function_exists('getOrganizationByDomain')) {
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
             Mina kurser
         </a>
+        <?php
+        // Lärvägar visas bara för den som faktiskt har någon — annars är
+        // menyposten en återvändsgränd.
+        $rdShowPaths = false;
+        if (!empty($_SESSION['user_id']) && empty($isHeaderPublicOnly)) {
+            require_once __DIR__ . '/learning_paths.php';
+            $rdShowPaths = hasVisibleLearningPaths((int)$_SESSION['user_id']);
+        }
+        ?>
+        <?php if ($rdShowPaths): ?>
+        <a href="learning_paths.php" class="rd-nav-link <?= $rdActive === 'paths' ? 'active' : '' ?>">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h9l3 3-3 3H9"/><path d="M15 12H6l-3 3 3 3h9"/><path d="M12 3v3"/><path d="M12 18v3"/></svg>
+            Lärvägar
+        </a>
+        <?php endif; ?>
         <a href="index.php#kurskatalog" class="rd-nav-link <?= $rdActive === 'catalog' ? 'active' : '' ?>">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
             Katalog

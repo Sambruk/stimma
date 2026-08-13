@@ -90,6 +90,12 @@ require_once 'include/header.php';
                         </a>
                     </div>
                     <div class="col-md-3 col-6">
+                        <a href="#larvagar" class="quick-nav-card" style="background: linear-gradient(135deg, #4facfe 0%, #00b4db 100%); color: white;">
+                            <div class="icon"><i class="bi bi-signpost-split"></i></div>
+                            <div class="label">Lärvägar</div>
+                        </a>
+                    </div>
+                    <div class="col-md-3 col-6">
                         <a href="#pub-avtal" class="quick-nav-card pub">
                             <div class="icon"><i class="bi bi-file-earmark-lock-fill"></i></div>
                             <div class="label">PUB-avtal</div>
@@ -1226,6 +1232,102 @@ require_once 'include/header.php';
                     <li>För att rensa deltagare, använd "Hantera publika deltagare" separat</li>
                 </ul>
                 <p class="small text-muted mb-0">Matchar GDPR-/samtyckesmodellen: deltagaren gav samtycke till sin registrering och den ska inte automatiskt återkallas bara för att publik-flaggan ändras.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lärvägar -->
+<div class="row mb-5" id="larvagar">
+    <div class="col-12">
+        <div class="section-header">
+            <span class="section-icon" style="background: linear-gradient(135deg, #4facfe 0%, #00b4db 100%);"><i class="bi bi-signpost-split"></i></span>
+            <h2>Lärvägar</h2>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <p class="lead">En lärväg samlar flera kurser till ett sammanhängande upplägg med en rekommenderad ordning — till exempel "Introduktion för nyanställda" bestående av tre kurser.</p>
+                <p class="text-muted mb-0">Deltagaren ser sin status för varje kurs i lärvägen och hur långt hen kommit totalt. Du som redaktör eller administratör ser samma sak för alla deltagare i din organisation.</p>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-1-circle-fill me-2 text-success"></i>Skapa en lärväg</h5>
+                <ol class="mt-3">
+                    <li>Gå till <strong>Admin → Lärvägar</strong></li>
+                    <li>Skriv ett namn i rutan <strong>"Skapa ny lärväg"</strong> och klicka på knappen — du kommer direkt till redigeringsvyn</li>
+                    <li>Fyll i beskrivning och ladda gärna upp en bild</li>
+                    <li>Lägg till kurser från listan <strong>Tillgängliga kurser</strong> till höger med plusknappen</li>
+                    <li>Dra kurserna i vänsterpanelen för att sätta ordningen — numreringen uppdateras direkt</li>
+                    <li>Sätt status till <strong>Aktiv</strong> när lärvägen är klar och klicka <strong>Spara lärvägen</strong></li>
+                </ol>
+
+                <div class="tip-box info mt-3">
+                    <div class="tip-icon"><i class="bi bi-arrow-down-up"></i></div>
+                    <div class="tip-content">
+                        <strong>Ordningen är en rekommendation</strong>
+                        <p class="mb-0 mt-1">Kurserna låses inte. Deltagaren ser dem numrerade 1, 2, 3 … men kan starta vilken som helst när som helst. Vill du styra takten inom en enskild kurs använder du istället <strong>stegvisa kurser</strong>, som låser upp en lektion i taget.</p>
+                    </div>
+                </div>
+
+                <div class="tip-box warning mt-3">
+                    <div class="tip-icon"><i class="bi bi-people"></i></div>
+                    <div class="tip-content">
+                        <strong>Ingen separat tilldelning</strong>
+                        <p class="mb-0 mt-1">Lärvägen delas ut automatiskt — alla som ser den i sin meny har den. Det finns ingen anmälningslista. Vill du begränsa vilka som ser lärvägen använder du <strong>Synlighet → Dela med vissa domäner</strong> i redigeringsvyn (kräver att du är administratör på organisationens huvuddomän).</p>
+                    </div>
+                </div>
+
+                <div class="tip-box info mt-3">
+                    <div class="tip-icon"><i class="bi bi-eye-slash"></i></div>
+                    <div class="tip-content">
+                        <strong>Kurser deltagaren inte har åtkomst till döljs</strong>
+                        <p class="mb-0 mt-1">Om en kurs i lärvägen är inaktiv, riktad till andra domäner eller taggad för en annan grupp, ser deltagaren den inte alls — och den räknas inte heller i deltagarens procent. Stegen numreras om så att inga hål uppstår. I redigeringsvyn märks sådana kurser med <span class="badge bg-warning text-dark">Begränsad synlighet</span> så att du vet om det.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-2-circle-fill me-2 text-success"></i>Så ser deltagaren lärvägen</h5>
+                <p class="mt-3">Deltagaren hittar <strong>Lärvägar</strong> i vänstermenyn (visas bara för den som har minst en) och en sammanfattning under <strong>Mina lärvägar</strong> på översikten. Varje kurs visas med en av fyra statusar:</p>
+                <ul>
+                    <li><i class="bi bi-check-circle-fill text-success me-1"></i><strong>Genomförd</strong> — diplomet är utfärdat, med länk till diplomet</li>
+                    <li><i class="bi bi-play-circle-fill text-info me-1"></i><strong>Påbörjad</strong> — minst en lektion klar, med procentsats</li>
+                    <li><i class="bi bi-person-check-fill text-warning me-1"></i><strong>Registrerad</strong> — inskriven eller tilldelad, men ingen lektion klar ännu</li>
+                    <li><i class="bi bi-circle text-muted me-1"></i><strong>Ej påbörjad</strong></li>
+                </ul>
+                <p class="text-muted mb-0">Lärvägens totala procent är genomsnittet av kursernas procent. Något separat lärvägsdiplom finns inte — deltagaren får kursernas ordinarie diplom.</p>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-3-circle-fill me-2 text-success"></i>Följ upp i Lärvägsstatistik</h5>
+                <p class="mt-3">Klicka på stapeldiagram-ikonen i lärvägslistan, eller gå till <strong>Statistik</strong> från redigeringsvyn. Där visas en matris: en rad per användare, en kolumn per kurs i lärvägen.</p>
+                <ul>
+                    <li>Nyckeltal överst: antal användare, hur många som genomfört hela lärvägen, hur många som påbörjat och genomsnittlig andel</li>
+                    <li>Domänfiltret begränsar listan till valda medlemsdomäner (visas när organisationen har flera)</li>
+                    <li>Som standard döljs användare som inte påbörjat något — slå på <strong>"Visa alla användare"</strong> för hela listan</li>
+                    <li>Raden längst ned summerar per kurs: antal genomförda / antal som åtminstone registrerats</li>
+                </ul>
+                <div class="tip-box info mt-3">
+                    <div class="tip-icon"><i class="bi bi-info-circle"></i></div>
+                    <div class="tip-content">
+                        <strong>Statistiken visar hela lärvägen</strong>
+                        <p class="mb-0 mt-1">Till skillnad från deltagarvyn döljs inga kurser här — du ser lärvägen som den är definierad, även kurser som bara vissa deltagare kan se.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-trash me-2 text-danger"></i>Ta bort en lärväg</h5>
+                <p class="mt-3 mb-0">Att radera en lärväg tar bara bort grupperingen. Kurserna, deltagarnas resultat och utfärdade diplom är helt opåverkade. Raderar du däremot en <em>kurs</em> som ingår i en lärväg får du en varning — kursen försvinner ur lärvägen, som då blir ett steg kortare.</p>
             </div>
         </div>
     </div>

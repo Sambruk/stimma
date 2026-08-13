@@ -83,6 +83,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' &&
     try {
         // Komplett cascade — rensa alla tabeller som refererar user_id utan FK.
         // (public_course_access rensas via FK ON DELETE CASCADE på users.)
+        // Lärvägar behöver ingen rad här: de tilldelas implicit och äger ingen
+        // per-användardata. learning_paths.created_by nollställs av
+        // FK ON DELETE SET NULL, så lärvägen överlever sin skapare.
         execute("DELETE FROM " . DB_DATABASE . ".progress WHERE user_id = ?", [$userId]);
         execute("DELETE FROM " . DB_DATABASE . ".course_enrollments WHERE user_id = ?", [$userId]);
         execute("DELETE FROM " . DB_DATABASE . ".sequential_lesson_schedule WHERE user_id = ?", [$userId]);

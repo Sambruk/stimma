@@ -64,7 +64,7 @@
 
         <div class="container-fluid footer text-center">
             <p class="text-muted small p-2 mb-0">
-                © <?= date('Y') ?> <a href="https://stimma.se" class="text-muted">Stimma.se</a> v2.0.0.
+                © <?= date('Y') ?> <a href="https://stimma.se" class="text-muted">Stimma.se</a> v2.1.0.
                 Tillgänglig under GPL v2-licens.
                 <a href="tillganglighet.php" class="text-muted ms-2">
                     <i class="bi bi-universal-access me-1"></i>Tillgänglighetsredogörelse

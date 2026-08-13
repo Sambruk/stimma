@@ -988,6 +988,58 @@ else:
                     </div><!-- /.tab-content -->
 
                     <?php
+                    // Mina lärvägar: kompakt sektion med de tre första lärvägarna.
+                    // Full status finns på learning_paths.php. Renderas inte alls
+                    // om användaren saknar synliga lärvägar.
+                    require_once 'include/learning_paths.php';
+                    $rdLearningPaths = getLearningPathOverviewForUser($userId);
+                    ?>
+                    <?php if (!empty($rdLearningPaths)): ?>
+                    <section class="rd-section mt-5" id="mina-larvagar">
+                        <div class="rd-section-head">
+                            <h2>Mina lärvägar</h2>
+                            <a href="learning_paths.php" class="rd-section-meta" style="text-decoration:none;">Se alla &rarr;</a>
+                        </div>
+                        <div class="row row-cols-1 row-cols-md-2 g-3 mx-0">
+                            <?php foreach (array_slice($rdLearningPaths, 0, 3) as $lpIdx => $rdLp): ?>
+                                <?php
+                                    $lpIconColors = ['purple', 'teal', 'amber'];
+                                    $lpIconColor = $lpIconColors[$lpIdx % 3];
+                                ?>
+                                <div class="col">
+                                    <div class="rd-course">
+                                        <div class="rd-course-top">
+                                            <div class="rd-course-info">
+                                                <div class="rd-course-icon <?= $lpIconColor ?>" aria-hidden="true">
+                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h9l3 3-3 3H9"/><path d="M15 12H6l-3 3 3 3h9"/><path d="M12 3v3"/><path d="M12 18v3"/></svg>
+                                                </div>
+                                                <div style="min-width:0;">
+                                                    <div class="rd-course-meta">
+                                                        <?= (int)$rdLp['total_count'] ?> kurser · <?= (int)$rdLp['completed_count'] ?> klar<?= (int)$rdLp['completed_count'] != 1 ? 'a' : '' ?>
+                                                    </div>
+                                                    <div class="rd-course-title text-truncate" title="<?= sanitize($rdLp['title']) ?>">
+                                                        <?= sanitize($rdLp['title']) ?>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <span class="rd-course-percent"><?= (int)$rdLp['path_percent'] ?> %</span>
+                                        </div>
+                                        <div class="rd-progress" role="progressbar"
+                                             aria-valuenow="<?= (int)$rdLp['path_percent'] ?>" aria-valuemin="0" aria-valuemax="100"
+                                             aria-label="Framsteg i lärvägen">
+                                            <div class="rd-progress-fill" style="width: <?= (int)$rdLp['path_percent'] ?>%;"></div>
+                                        </div>
+                                        <div class="rd-actions">
+                                            <a href="learning_paths.php#larvag-<?= (int)$rdLp['id'] ?>" class="rd-btn rd-btn-primary">Visa lärvägen</a>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </section>
+                    <?php endif; ?>
+
+                    <?php
                     // Bygg kurskatalog: ALLA kurser i orgens scope (oavsett progress).
                     // Användaren ser även påbörjade/klara kurser här så de kan
                     // återbesöka eller starta om.

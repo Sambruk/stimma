@@ -18,6 +18,11 @@ Stimma är en e-learning plattform för mikroutbildning, utvecklad för svenska 
 - **Organisationsbaserad separation** - Multi-tenant arkitektur baserad på e-postdomän
 - **PUB-avtal** - Klickbara avtal med digital signering, SMS-verifiering och PDF-stämpling
 
+### Nytt i v2.1
+- **Lärvägar** - Paketera flera kurser i en namngiven, ordnad grupp med rekommenderad ordning (ingen låsning)
+- **Deltagarvy för lärvägar** - Status per kurs (genomförd/påbörjad/registrerad) och samlad procent, plus sektion på översikten
+- **Lärvägsstatistik** - Matris över genomförda, påbörjade och registrerade per kurs och användare, med domänfilter
+
 ### Nytt i v2.0
 - **PowerPoint-import** - Importera befintliga PPTX-filer och låt AI utveckla texten till en Stimma-kurs
 - **AI-genererad enstaka lektion** - Lägg till AI-skrivna lektioner till befintliga kurser

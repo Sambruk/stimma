@@ -144,6 +144,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a href="learning_paths.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= in_array($current_page, ['learning_paths.php', 'edit_learning_path.php', 'learning_path_stats.php'], true) ? 'active' : '' ?>">
+                        <i class="bi bi-signpost-split me-2"></i> Lärvägar
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a href="copy_course.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'copy_course.php' ? 'active' : '' ?>">
                         <i class="bi bi-copy me-2"></i> Kopiera kurs
                     </a>

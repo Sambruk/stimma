@@ -4,6 +4,25 @@ Alla större ändringar i Stimma dokumenteras här.
 
 Formatet följer [Keep a Changelog](https://keepachangelog.com/sv/1.1.0/) och projektet använder semantisk versionshantering.
 
+## [2.1.0] – 2026-08-13
+
+### Lagts till
+
+#### Lärvägar
+- Lärvägar: paketera flera kurser i en namngiven, ordnad grupp. Ordningen är en rekommendation — inga kurser låses
+- Deltagarvy `learning_paths.php` med status per kurs (genomförd / påbörjad / registrerad / ej påbörjad) och samlad procent
+- Sektionen "Mina lärvägar" på deltagarens översikt, med länk till fullständig vy
+- Adminvy för att skapa lärvägar, koppla kurser med dra-och-släpp och begränsa delning per domän
+- Lärvägsstatistik: matris över genomförda, påbörjade och registrerade per kurs och användare, med domänfilter och paginering
+- Varning vid kursradering när kursen ingår i en eller flera lärvägar
+
+### Ändrat
+- Kursernas synlighetsfilter finns nu även som återanvändbar helper `buildCourseVisibilityClause()` i `include/functions.php`
+- Ny batchad progressberäkning `getCourseProgressForUsers()` för M användare × N kurser på två queries
+
+### Prestanda
+- Nya index på `progress(user_id, lesson_id)` och `progress(lesson_id)` (tabellen saknade index utöver primärnyckeln)
+
 ## [2.0.0] – 2026-04-28
 
 Stort funktionssläpp. Stimma har vuxit från en enkel mikroutbildningsplattform till en fullfjädrad LMS med fokus på svensk kommunal sektor — flexibel kursutrullning, fler kursskapande-vägar, utökad frågetypsuppsättning och säkerhetshärdning.

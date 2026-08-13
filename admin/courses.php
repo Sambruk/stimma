@@ -84,6 +84,26 @@ if (!empty($courses)) {
     }
 }
 
+// Lärvägar per kurs — används i raderingsbekräftelsen så att admin ser att
+// kursen ingår i ett större upplägg innan den tas bort. En query för hela
+// listan (inget N+1).
+$courseLearningPathsMap = [];
+if (!empty($courses)) {
+    $lpCourseIds = array_column($courses, 'id');
+    $lpPlaceholders = implode(',', array_fill(0, count($lpCourseIds), '?'));
+    $lpRows = query(
+        "SELECT lpc.course_id, lp.title
+           FROM " . DB_DATABASE . ".learning_path_courses lpc
+           JOIN " . DB_DATABASE . ".learning_paths lp ON lp.id = lpc.learning_path_id
+          WHERE lpc.course_id IN ($lpPlaceholders)
+          ORDER BY lp.title",
+        $lpCourseIds
+    );
+    foreach ($lpRows ?: [] as $lpRow) {
+        $courseLearningPathsMap[$lpRow['course_id']][] = $lpRow['title'];
+    }
+}
+
 // Hämta max antal lektioner från AI-inställningar
 $maxLessonSetting = queryOne("SELECT setting_value FROM " . DB_DATABASE . ".ai_settings WHERE setting_key = 'max_lesson_count'");
 $maxLessonCount = (int)($maxLessonSetting['setting_value'] ?? 20);
@@ -224,7 +244,7 @@ require_once 'include/header.php';
                                 <a href="export.php?id=<?= $course['id'] ?>" class="btn btn-sm btn-outline-secondary" title="Exportera kurs">
                                     <i class="bi bi-box-arrow-up"></i>
                                 </a>
-                                <button type="button" onclick="deleteCourse(<?= $course['id'] ?>)"
+                                <button type="button" onclick="deleteCourse(<?= $course['id'] ?>, <?= json_encode($courseLearningPathsMap[$course['id']] ?? []) ?>)"
                                    class="btn btn-sm btn-outline-danger" title="Radera kurs">
                                     <i class="bi bi-trash"></i>
                                 </button>
@@ -1000,8 +1020,14 @@ $extra_scripts = '<script>
 </script>';
 
 echo '<script>
-function deleteCourse(id) {
-    if (!confirm("Är du säker på att du vill radera denna kurs? Alla lektioner i kursen kommer också att raderas.")) return;
+function deleteCourse(id, learningPaths) {
+    var msg = "Är du säker på att du vill radera denna kurs? Alla lektioner i kursen kommer också att raderas.";
+    if (learningPaths && learningPaths.length) {
+        msg += "\n\nKursen ingår i " + learningPaths.length + " lärväg" + (learningPaths.length > 1 ? "ar" : "") + ":\n"
+             + learningPaths.map(function(t) { return "• " + t; }).join("\n")
+             + "\n\nLärvägarna finns kvar men blir ett steg kortare.";
+    }
+    if (!confirm(msg)) return;
     var form = document.createElement("form");
     form.method = "POST";
     form.action = "delete_course.php";

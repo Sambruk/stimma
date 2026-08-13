@@ -98,6 +98,11 @@ function copyCourse($sourceCourseId, $targetDomain, $newAuthorId, $orgScopeDomai
     // Hämta det nya kurs-ID:t
     $newCourseId = queryOne("SELECT LAST_INSERT_ID() as id")['id'];
 
+    // Obs: kopian ärver medvetet INTE källkursens lärvägsmedlemskap. En kopia
+    // görs oftast till en annan organisation, och då ska den inte dyka upp som
+    // ett steg i originalorganisationens lärväg. Lägg in kopian manuellt via
+    // admin/edit_learning_path.php om den ska ingå i en lärväg.
+
     // Kopiera alla lektioner
     $sourceLessons = query(
         "SELECT * FROM " . DB_DATABASE . ".lessons WHERE course_id = ? ORDER BY sort_order ASC",
