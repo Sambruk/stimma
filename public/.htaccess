@@ -1,0 +1,36 @@
+# Stimma — dokumentrot (public/)
+# Skapad 2026-08-17 vid omläggningen till public/-webbrot.
+#
+# Denna fil är NU en tunn kompletterande regeluppsättning, inte huvudskyddet.
+# Huvudskyddet är strukturellt: .env, .git, db/, logs/, data/, migrations/,
+# include/, lib/, cron/ och backuper ligger UTANFÖR denna katalog och kan inte
+# nås över HTTP oavsett vad som står här.
+#
+# Kvar att blockera är bara sådant som måste ligga i public/ av funktionella skäl.
+
+# Skicka vidare Authorization-headern till PHP (krävs för API:ets Bearer-token)
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+
+# Dotfiler (utom .htaccess själv)
+<FilesMatch "^\.(?!htaccess)">
+    Require all denied
+</FilesMatch>
+
+# Markdown: docs/ ligger i public/ eftersom docs/pdf/ serveras över HTTP,
+# men dokumentationen i .md ska inte vara publik.
+<FilesMatch "\.(md|markdown)$">
+    Require all denied
+</FilesMatch>
+
+# Symlänkad konfigurationsfil som admin/ läser relativt
+<FilesMatch "^allowed_domains\.txt$">
+    Require all denied
+</FilesMatch>
+
+# Ingen kataloglistning
+Options -Indexes
+
+# Symlänkade interna kataloger: blockera PHP-källfilerna, men SLÄPP FRAM statiska
+# resurser. include/css/style.css, include/css/redesign.css och include/js/ laddas
+# av sidorna över HTTP — en total blockering av /include/ tar bort all styling.
+RedirectMatch 404 ^/(include|lib)/.*\.(php|phtml|inc|sql|md)$

@@ -1,6 +1,39 @@
 # Stimma - Utvecklingsuppgifter
 
 ## Pågående
+- [x] SCORM-import: zip-paket → Stimma-kurs (2026-08-20). Utredning: memory/scorm_import.md
+  - [x] include/scorm_extractor.php: manifest-parsning, SCO-text, bilder/video, textklump (verifierad mot 4 syntetiska paket)
+  - [x] public/admin/ajax/import_scorm.php: uppladdning, validering, zip-bombsskydd, diskkontroll
+  - [x] cron/process_ai_jobs.php: detectImportMarker() + mappning av BILDFIL/VIDEOFIL (video_type='local')
+  - [x] admin/courses.php: knapp + modal + JS för SCORM-import
+  - [x] Verifierat E2E: 4 syntetiska paket (SCORM 1.2, 2004 med xml:base, Rise-likt JS-paket, paket utan manifest),
+        HTTP-uppladdning mot ajax-endpointen och full AI-körning → kurs med rätt bild/video per lektion
+  - [x] Skarp körning mot MSB DISA-paketet (jobb 67 → kurs 135) avslöjade tre saker, alla åtgärdade:
+    - [x] Bakgrundsjobbet startade aldrig: trigger_ai_processor.php loggade till /var/www/html/upload
+          (root-ägd sedan webrots-omläggningen 2026-08-17) → shell-omdirigeringen nekades och processen dog.
+          Loggen går nu till public/upload med fallback till sys_get_temp_dir()
+    - [x] Synkron fallback i triggern var död sedan tidigare (processorns CLI-spärr) — släpps nu igenom
+          via konstanten STIMMA_JOB_PROCESSOR_INTERNAL (direkt HTTP-anrop ger fortfarande 403)
+    - [x] Enkel-SCO-paket klipptes vid 8000 tecken: textbudgeten fördelas nu per avsnitt (60k totalt),
+          fas 2 får bara sin egen del av källtexten, typsnittsskräp och ligaturer städas bort
+  - [x] Kopieringsläge byggt efter återkoppling: AI-omskrivning duger inte när kursen ska likna originalet
+    - [x] include/scorm_storyline.php: Storyline-paket läses ur html5/data/js (scen → lektion, altText → text,
+          assetLib → bilder/film, frekvensfilter mot navigation, svarsalternativ under radioknappar)
+    - [x] include/scorm_course_builder.php: kurs + lektioner skapas direkt, media kopieras, generisk HTML saneras med cleanHtml()
+    - [x] ajax/import_scorm.php: import_mode=copy (standard) / ai
+    - [x] admin/courses.php: lägesval i modalen, AI-inställningar döljs i kopieringsläge
+    - [x] Verifierat mot MSB:s riktiga DISA-paket (88 MB, Storyline): kurs 137 = 11 lektioner,
+          11 filmer, 27 bilder, 18 475 tecken originaltext. Bild och film verifierat serverade över HTTP
+  - [x] SCORM-importen dold för alla utom superadmin (2026-08-20). Thomas underkände även kopieringsläget
+        (kurs 137) och sätter sig in i SCORM-formatet innan arbetet fortsätter. Gäller både knappen/modalen
+        i admin/courses.php och ajax/import_scorm.php (403 för alla utom role=super_admin)
+  - [ ] PAUSAD i väntan på Thomas riktning. Öppna trådar när den tas upp igen:
+    - [ ] Vad var dåligt i kurs 137? (introduktionslektionen rörig, text utan layout, frågor rättas inte)
+    - [ ] Ska paketets quizfrågor konverteras till riktiga Stimma-frågor? Rätt svar finns i Storylines data
+    - [ ] Alternativ som inte utretts: bädda in paketet som det är i en sandlådad iframe på egen origin
+          (kräver separat domän + SCORM-runtime, men bevarar originalet exakt)
+  - [ ] Städa bort testkurserna 135 och 136 när Thomas jämfört
+  - [x] Dokumentation: admin/user_guide.php + public/docs/USER_GUIDE.md + CHANGELOG (v2.2.0)
 - [x] Lärvägar (learning paths) (2026-08-13). Plan: /root/.claude/plans/vi-ska-skapa-en-swift-candy.md
   - [x] Migration 044: learning_paths, learning_path_courses, learning_path_shared_domains + index på progress
   - [x] include/functions.php: buildCourseVisibilityClause() + getCourseProgressForUsers()

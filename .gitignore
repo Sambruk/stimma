@@ -37,3 +37,14 @@ CLEANUP-REPORT.md
 # Marknadsmaterial — promptmallar och underlag, hör inte hemma i kodrepot
 marketing/
 db-backup/
+
+# Webbroten flyttades till public/ 2026-08-17. Mönstren ovan är förankrade i
+# repots rot, så samma undantag måste upprepas för den nya sökvägen — annars
+# hamnar 500+ MB uppladdad media och signerade PUB-avtal i repot.
+public/upload/*
+!public/upload/.htaccess
+!public/upload/.gitkeep
+public/logs/*
+!public/logs/.gitkeep
+public/db/*
+public/docs/pdf/*.pdf

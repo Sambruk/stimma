@@ -8,9 +8,12 @@ services:
       - "172.17.0.1:13050:80"
     volumes:
       - /opt/app/stimma:/var/www/html
-      - /opt/app/stimma/upload:/var/www/html/upload
+      - /opt/app/stimma/public/upload:/var/www/html/public/upload
+      # Egen vhost: dokumentrot = public/. Avbildens 000-default.conf har
+      # DocumentRoot hårdkodad, så APACHE_DOCUMENT_ROOT nedan har aldrig haft effekt.
+      - /opt/app/stimma/config/vhost.conf:/etc/apache2/sites-enabled/000-default.conf:ro
     environment:
-      - APACHE_DOCUMENT_ROOT=/var/www/html
+      - APACHE_DOCUMENT_ROOT=/var/www/html/public
     labels:
       # Schemaläggning via Ofelia (scheduler-container nedan)
       ofelia.enabled: "true"

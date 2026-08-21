@@ -4,6 +4,34 @@ Alla större ändringar i Stimma dokumenteras här.
 
 Formatet följer [Keep a Changelog](https://keepachangelog.com/sv/1.1.0/) och projektet använder semantisk versionshantering.
 
+## [2.2.0] – 2026-08-20
+
+### Lagts till
+
+#### SCORM-import — kopieringsläge (standard)
+- `include/scorm_course_builder.php`: bygger kurs och lektioner direkt ur paketet, utan AI och utan tokenförbrukning. Originaltexten kopieras ordagrant, alla bilder hamnar i rätt lektion och alla filmer kopieras in som lokala lektionsvideor
+- `include/scorm_storyline.php`: Articulate Storyline läses ur paketets egen datamodell (`html5/data/js/*.js`). Scen → lektion, scenens film → lektionens video, text ur objektens `altText` (renare än den grafiska vektortexten, som tappar ligaturer). Svarsalternativ under radioknappar följer med, medan navigation och menysidor sållas bort på förekomstfrekvens
+- Generiska HTML-paket: sidans HTML städas med `cleanHtml()` och sparas som lektionstext med bilderna ompekade till Stimmas uppladdningskatalog
+- Valet mellan kopiering och AI-omskrivning görs i importdialogen; AI-inställningarna visas bara när AI-läget är valt
+
+#### SCORM-import — AI-läge
+- Importera SCORM-paket (`.zip`, SCORM 1.2 och 2004) och låt AI skriva om innehållet till en vanlig Stimma-kurs. Paketets HTML/JS körs eller serveras aldrig — bara text och media plockas ut
+- `include/scorm_extractor.php`: läser `imsmanifest.xml` (namnrymdsokänsligt, stöd för `xml:base` och `isvisible`), extraherar sidtext, väljer största bilden per avsnitt och kopierar ut MP4/WebM
+- Fallback för JS-drivna paket (Rise 360, Storyline, iSpring, Captivate): när HTML-skalet är tomt skördas text ur paketets JSON/XML-payload
+- `public/admin/ajax/import_scorm.php`: uppladdning (max 100 MB), zip-bombsskydd, diskutrymmeskontroll och jobbskapande
+- Avsnittsstruktur: ≥3 SCO:er ger en lektion per avsnitt, ett enda SCO delas upp i 3–12 lektioner
+- Bilder och videor mappas till rätt lektion efter generering; videor sätts som `video_type = 'local'`
+
+### Ändrat
+- `process_ai_jobs.php` känner igen både PPTX-markören (`SLIDE N:`) och SCORM-markören (`SCO N:`) via `detectImportMarker()`, och mappar nu även `VIDEOFIL:` utöver `BILDFIL:`
+- SCORM-fas 2 får bara sin egen del av källtexten (`buildImportSourceSlices()`) istället för hela underlaget i varje lektionsprompt — annars växer både kostnad och brus med kursens längd
+
+### Fixat
+- **AI-jobb startade aldrig från webbgränssnittet.** `trigger_ai_processor.php` skrev processorloggen till `/var/www/html/upload`, som efter webbrots-omläggningen 2026-08-17 är en tom root-ägd katalog. Shell-omdirigeringen nekades, bakgrundsprocessen dog direkt och jobben blev liggande som `pending`. Loggen skrivs nu till `public/upload` med fallback till `sys_get_temp_dir()`. Påverkade all AI-kursgenerering, inte bara SCORM
+- Den synkrona reservvägen i samma trigger var verkningslös: processorn blockerar webbåtkomst och dog tyst vid `include`. Den släpps nu igenom via konstanten `STIMMA_JOB_PROCESSOR_INTERNAL`; ett direkt HTTP-anrop mot processorn ger fortfarande 403
+- SCORM-paket med ett enda avsnitt (Rise 360, iSpring, Storyline) klipptes vid 8 000 tecken. Textbudgeten fördelas nu över avsnitten, med 60 000 tecken totalt
+- Typsnitts- och assetdefinitioner (`Poppins SemiBold ChBold1D9B48A7`) filtreras bort ur textskörden, och ligaturer (`ﬁ`, `ﬂ`, `ﬀ`) expanderas — de gjorde orden obegripliga i paket vars text kommer från ett PDF-original
+
 ## [2.1.0] – 2026-08-13
 
 ### Lagts till
