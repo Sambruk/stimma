@@ -1,14 +1,17 @@
 # Stimma - Utvecklingsuppgifter
 
 ## Pågående
-- [ ] 🔴 Personuppgifter i det PUBLIKA GitHub-repot (upptäckt 2026-08-21 vid commit-genomgång)
-  - [ ] `import_users.sql` ligger spårad i HEAD: 93 namngivna tjänstemäns e-postadresser hos ~49 kommuner
-        och myndigheter. Ska bort ur HEAD **och** ur historiken
-  - [ ] `docs/pdf/pub_avtal_20260212_163146_787ad09b.pdf` (signerat PUB-avtal, 549 kB) togs bort ur HEAD
-        i commit 95dcf19 men finns kvar i historiken sedan ae362aa (2026-02-13)
-  - [ ] `allowed_domains.txt` (kundlista, ~alla svenska kommuner) finns i historiken sedan 382e2c4 (2026-01-15)
-  - [ ] Beslut krävs av Thomas: history rewrite (git filter-repo + force-push) eller acceptera exponeringen.
-        Rewrite påverkar alla som klonat repot
+- [ ] 🔴 Personuppgifter i det PUBLIKA GitHub-repot — historiken rensad 2026-08-21, EXPONERINGEN KVARSTÅR
+  - [x] `import_users.sql`, `allowed_domains.txt` och `docs/pdf/*.pdf` rensade ur hela historiken med
+        git filter-repo och force-pushade (132 commits bevarade, .git 97 MB → 11 MB, tagg v2.0.0 bevarad).
+        Säkerhetskopia före rewrite: /opt/app/stimma-git-backup-20260821/ (bundle + filerna)
+  - [ ] **Gamla objekt går fortfarande att hämta anonymt på GitHub via commit-SHA** — verifierat HTTP 200 på
+        raw.githubusercontent.com för både PUB-avtalet (ae362aa) och import_users.sql (689db8f).
+        Bara GitHub Support kan städa bort dem: begär "purge unreachable objects" för Sambruk/stimma
+  - [ ] **Två forkar har egna kopior**: joakimbergros/stimma och ereffner/stimma. Be ägarna radera dem —
+        annars lever datan kvar i fork-nätverket oavsett vad Support gör med huvudrepot
+  - [ ] Bedöm om detta är en personuppgiftsincident att anmäla: 93 namngivna tjänstemän hos ~49 kommuner
+        och myndigheter, publikt exponerade sedan 2025-12-04 (import_users.sql) respektive 2026-02-13 (PUB-avtalet)
 - [x] SCORM-import: zip-paket → Stimma-kurs (2026-08-20). Utredning: memory/scorm_import.md
   - [x] include/scorm_extractor.php: manifest-parsning, SCO-text, bilder/video, textklump (verifierad mot 4 syntetiska paket)
   - [x] public/admin/ajax/import_scorm.php: uppladdning, validering, zip-bombsskydd, diskkontroll
