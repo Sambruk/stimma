@@ -1,6 +1,14 @@
 # Stimma - Utvecklingsuppgifter
 
 ## Pågående
+- [ ] 🔴 Personuppgifter i det PUBLIKA GitHub-repot (upptäckt 2026-08-21 vid commit-genomgång)
+  - [ ] `import_users.sql` ligger spårad i HEAD: 93 namngivna tjänstemäns e-postadresser hos ~49 kommuner
+        och myndigheter. Ska bort ur HEAD **och** ur historiken
+  - [ ] `docs/pdf/pub_avtal_20260212_163146_787ad09b.pdf` (signerat PUB-avtal, 549 kB) togs bort ur HEAD
+        i commit 95dcf19 men finns kvar i historiken sedan ae362aa (2026-02-13)
+  - [ ] `allowed_domains.txt` (kundlista, ~alla svenska kommuner) finns i historiken sedan 382e2c4 (2026-01-15)
+  - [ ] Beslut krävs av Thomas: history rewrite (git filter-repo + force-push) eller acceptera exponeringen.
+        Rewrite påverkar alla som klonat repot
 - [x] SCORM-import: zip-paket → Stimma-kurs (2026-08-20). Utredning: memory/scorm_import.md
   - [x] include/scorm_extractor.php: manifest-parsning, SCO-text, bilder/video, textklump (verifierad mot 4 syntetiska paket)
   - [x] public/admin/ajax/import_scorm.php: uppladdning, validering, zip-bombsskydd, diskkontroll
