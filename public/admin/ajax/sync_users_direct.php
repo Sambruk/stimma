@@ -158,7 +158,8 @@ if (empty($grouped)) {
 
 // Kör performUserSync per domän
 $ipAddress = $_SERVER['REMOTE_ADDR'] ?? 'admin';
-$totalSummary = ['total_in_payload' => 0, 'created' => 0, 'updated' => 0, 'deactivated' => 0, 'reactivated' => 0];
+$totalSummary = ['total_in_payload' => 0, 'created' => 0, 'updated' => 0, 'deactivated' => 0, 'reactivated' => 0,
+                 'org_tags_satta' => 0, 'org_tags_rensade' => 0];
 $syncIds = [];
 $perDomainResults = [];
 
@@ -182,8 +183,13 @@ logActivity($userEmail, 'Admin-synk (multi-domän)', [
     'sync_ids' => $syncIds,
 ]);
 
-echo json_encode([
+// Varningarna gäller de poster som faktiskt synkades — rader vars domän ligger
+// utanför orgen är redan bortfiltrerade och rapporteras som "skipped".
+$warnings = collectSyncUserWarnings(array_merge(...array_values($grouped)));
+
+echo json_encode(array_filter([
     'success' => true,
+    'warnings' => $warnings ?: null,
     'organization' => $orgName,
     'domains' => array_keys($grouped),
     'summary' => $totalSummary,
@@ -197,4 +203,4 @@ echo json_encode([
             'error' => $r['error'] ?? null,
         ];
     }, $perDomainResults),
-]);
+], function ($v) { return $v !== null; }));

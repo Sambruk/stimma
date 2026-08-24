@@ -3094,6 +3094,205 @@ function isUserSyncDeleteRequest($user) {
 }
 
 /**
+ * Vilka fältnamn i en synkpost som betyder organisationstaggar.
+ *
+ * Två namn därför att vi själva stavar det olika: API-dokumentationen anger
+ * `organization` medan synkverktygets CSV-mall har rubriken `organisation`.
+ * En integration byggd efter mallen skickade därför ett fält som ingen läste,
+ * och användaren skapades utan taggar — utan felmeddelande. Alias är billigare
+ * än att bryta de integrationer som redan gissat rätt eller fel.
+ *
+ * @return array
+ */
+function syncOrgFieldNames() {
+    return ['organization', 'organisation'];
+}
+
+/**
+ * Alla fältnamn en synkpost får innehålla.
+ *
+ * @return array
+ */
+function syncUserFieldNames() {
+    return array_merge(['email', 'name', 'role', 'delete'], syncOrgFieldNames());
+}
+
+/**
+ * Läs ut organisationstaggarna ur en synkpost.
+ *
+ * Returnerar både värdet OCH om fältet fanns med, för skillnaden är bärande:
+ *
+ *   fältet saknas  → "jag har ingen uppfattning om taggarna, rör dem inte"
+ *   fältet är tomt → "personen ska inte ha några taggar"
+ *
+ * Innan skillnaden fanns raderade varje synk utan organisationskolumn tyst
+ * allas taggar, eftersom taggarna alltid skrivs om från grunden. En AD-export
+ * utan den kolumnen hade alltså nollställt ett arbete som gjorts för hand.
+ *
+ * En lista accepteras som alternativ till den snedstrecksseparerade strängen.
+ * Källsystem som serialiserar från AD skickar ofta flervärdesattribut som array,
+ * och trim() på en array är ett fatalt fel i PHP 8 — alltså skulle hela synken
+ * ha havererat på något som rimligen ska fungera.
+ *
+ * @param array $userData En post ur users-listan
+ * @return array{finns:bool, varde:string}
+ */
+function readSyncOrganization(array $userData) {
+    foreach (syncOrgFieldNames() as $falt) {
+        if (!array_key_exists($falt, $userData)) {
+            continue;
+        }
+        $v = $userData[$falt];
+        if (is_array($v)) {
+            $delar = array_map(function ($x) { return is_scalar($x) ? (string)$x : ''; }, $v);
+            $v = implode('/', $delar);
+        } elseif (!is_scalar($v) && $v !== null) {
+            $v = '';
+        }
+        return ['finns' => true, 'varde' => trim((string)($v ?? ''))];
+    }
+    return ['finns' => false, 'varde' => ''];
+}
+
+/**
+ * Dela upp ett organisationsvärde i platta taggar.
+ *
+ * "Kommun/Förvaltning/Avdelning" blir tre fristående rader. Hierarkin bevaras
+ * alltså inte — se getOwnOrgTagFilter() för vad det betyder för filtreringen.
+ *
+ * @param string $organization
+ * @return array
+ */
+function splitOrgTags($organization) {
+    $segments = array_map('trim', explode('/', (string)$organization));
+    $segments = array_filter($segments, function ($s) { return $s !== ''; });
+    return array_values(array_unique($segments));
+}
+
+/**
+ * Skriv om en användares organisationstaggar från grunden.
+ *
+ * Delad av synken och adminpanelen, så att båda vägarna tolkar
+ * "Kommun/Förvaltning/Avdelning" likadant. Innan adminpanelen kunde sätta
+ * taggar fanns bara synkvägen, och en admin som ville rätta en avdelning för
+ * EN person var tvungen att köra om hela organisationens synk.
+ *
+ * Returnerar hur det gick, så att anroparen kan skilja "satte taggar" från
+ * "rensade taggar som fanns". En oavsiktlig rensning ska gå att se i svaret.
+ *
+ * @param int $userId
+ * @param string|array $organization
+ * @return array{taggar:array, satta:int, rensade:int}
+ */
+function setUserOrgTags($userId, $organization) {
+    $userId = (int)$userId;
+    if (is_array($organization)) {
+        $delar = array_map(function ($x) { return is_scalar($x) ? (string)$x : ''; }, $organization);
+        $organization = implode('/', $delar);
+    }
+    $taggar = splitOrgTags($organization);
+
+    // Raka prepared statements, INTE execute()/queryOne(): de hjälparna sväljer
+    // PDOException och returnerar null. Funktionen anropas inifrån synkens
+    // transaktion, där ett svalt fel hade betytt att taggarna tyst uteblev i
+    // stället för att hela synken rullades tillbaka.
+    $db = getDb();
+
+    $stmt = $db->prepare("SELECT COUNT(*) FROM " . DB_DATABASE . ".user_org_tags WHERE user_id = ?");
+    $stmt->execute([$userId]);
+    $foreAntal = (int)$stmt->fetchColumn();
+
+    $stmt = $db->prepare("DELETE FROM " . DB_DATABASE . ".user_org_tags WHERE user_id = ?");
+    $stmt->execute([$userId]);
+
+    $stmt = $db->prepare(
+        "INSERT IGNORE INTO " . DB_DATABASE . ".user_org_tags (user_id, tag) VALUES (?, ?)"
+    );
+    foreach ($taggar as $tag) {
+        $stmt->execute([$userId, $tag]);
+    }
+
+    return [
+        'taggar'  => $taggar,
+        'satta'   => empty($taggar) ? 0 : 1,
+        'rensade' => (empty($taggar) && $foreAntal > 0) ? 1 : 0,
+    ];
+}
+
+/**
+ * Fältnamn i en synkpost som Stimma inte känner igen.
+ *
+ * Poängen är att ett felstavat fält ska gå att upptäcka. Payloaden valideras
+ * bara på e-post, namn och roll, så `organisation_namn` eller `department`
+ * passerade tidigare med HTTP 200 och "success": true — och användaren skapades
+ * utan taggar. Anroparen hade ingenting att felsöka på.
+ *
+ * Okända fält är INTE ett fel. Att avvisa payloaden hade brutit integrationer
+ * som skickar med extrafält från källsystemet utan att mena något med dem.
+ * De rapporteras som varningar.
+ *
+ * @param array $userData
+ * @return array
+ */
+function unknownSyncUserFields(array $userData) {
+    $kanda = syncUserFieldNames();
+    $okanda = [];
+    foreach (array_keys($userData) as $k) {
+        if (!in_array(strtolower((string)$k), $kanda, true)) {
+            $okanda[] = (string)$k;
+        }
+    }
+    return $okanda;
+}
+
+/**
+ * Samla varningar om en payload — sådant som inte gör synken ogiltig men som
+ * nästan alltid betyder att anroparen menade något annat än det som händer.
+ *
+ * Delad av API:et och adminpanelens synkverktyg, så att båda vägarna säger
+ * samma sak om samma payload.
+ *
+ * @param array $users
+ * @return array Lista med varningstexter
+ */
+function collectSyncUserWarnings(array $users) {
+    $varningar = [];
+    $okandaFalt = [];
+    $utanOrg = 0;
+    $totalt = 0;
+
+    foreach ($users as $u) {
+        if (!is_array($u)) {
+            continue;
+        }
+        if (isUserSyncDeleteRequest($u)) {
+            continue;   // raderingsposter har bara e-post, resten ignoreras avsiktligt
+        }
+        $totalt++;
+        foreach (unknownSyncUserFields($u) as $f) {
+            $okandaFalt[$f] = ($okandaFalt[$f] ?? 0) + 1;
+        }
+        if (!readSyncOrganization($u)['finns']) {
+            $utanOrg++;
+        }
+    }
+
+    foreach ($okandaFalt as $falt => $antal) {
+        $varningar[] = "Fältet \"{$falt}\" känns inte igen och ignorerades ({$antal} "
+            . ($antal === 1 ? 'post' : 'poster') . '). Tillåtna fält: '
+            . implode(', ', syncUserFieldNames()) . '.';
+    }
+
+    if ($totalt > 0 && $utanOrg === $totalt) {
+        $varningar[] = 'Ingen post innehöll fältet "organization" — befintliga '
+            . 'organisationstaggar lämnades därför orörda. Skicka fältet med tomt '
+            . 'värde för att rensa taggar.';
+    }
+
+    return $varningar;
+}
+
+/**
  * Radera en användare fullständigt, med allt som hänger på kontot.
  *
  * Delad av adminpanelens raderingsknapp (admin/users.php) och synk-API:ets
@@ -3206,6 +3405,8 @@ function performUserSync(array $users, string $domain, bool $deactivateMissing, 
     $deleted = 0;
     $deletesRefused = 0;
     $reactivated = 0;
+    $orgTagsSet = 0;
+    $orgTagsCleared = 0;
     $syncLogId = null;
 
     $db = getDb();
@@ -3221,7 +3422,8 @@ function performUserSync(array $users, string $domain, bool $deactivateMissing, 
             // Rollen normaliseras vid systemgränsen: "Användare" är termen utåt,
             // 'student' är det som lagras. Se normalizeSyncRole() i api_helpers.php.
             $role = normalizeSyncRole($userData['role'] ?? null) ?? 'student';
-            $organization = trim($userData['organization'] ?? '');
+            // Både värdet och OM fältet fanns med — se readSyncOrganization().
+            $orgFalt = readSyncOrganization($userData);
 
             $existingUser = queryOne(
                 "SELECT id, is_synced, sync_status, role FROM " . DB_DATABASE . ".users WHERE email = ?",
@@ -3299,20 +3501,16 @@ function performUserSync(array $users, string $domain, bool $deactivateMissing, 
                 $updated++;
             }
 
-            // Hantera organisationstaggar
-            $stmt = $db->prepare("DELETE FROM " . DB_DATABASE . ".user_org_tags WHERE user_id = ?");
-            $stmt->execute([$userId]);
-
-            if (!empty($organization)) {
-                $segments = array_map('trim', explode('/', $organization));
-                $segments = array_filter($segments, function($s) { return $s !== ''; });
-
-                foreach ($segments as $tag) {
-                    $stmt = $db->prepare(
-                        "INSERT IGNORE INTO " . DB_DATABASE . ".user_org_tags (user_id, tag) VALUES (?, ?)"
-                    );
-                    $stmt->execute([$userId, $tag]);
-                }
+            // Organisationstaggar skrivs om från grunden, men BARA när posten
+            // faktiskt bär fältet. Ett utelämnat fält betyder "jag har ingen
+            // uppfattning" — annars hade en AD-synk utan organisationskolumn
+            // tyst nollställt taggar som satts för hand.
+            if ($orgFalt['finns']) {
+                // Ett tomt fält ÄR ett besked: personen ska inte ha taggar.
+                // Rensningen räknas separat så att den syns i svaret.
+                $orgUtfall = setUserOrgTags($userId, $orgFalt['varde']);
+                $orgTagsSet += $orgUtfall['satta'];
+                $orgTagsCleared += $orgUtfall['rensade'];
             }
         }
 
@@ -3375,7 +3573,9 @@ function performUserSync(array $users, string $domain, bool $deactivateMissing, 
                 'deactivated' => $deactivated,
                 'deleted' => $deleted,
                 'deletes_refused' => $deletesRefused,
-                'reactivated' => $reactivated
+                'reactivated' => $reactivated,
+                'org_tags_satta' => $orgTagsSet,
+                'org_tags_rensade' => $orgTagsCleared
             ],
             'sync_id' => (int)$syncLogId,
             'error' => null
@@ -3406,7 +3606,9 @@ function performUserSync(array $users, string $domain, bool $deactivateMissing, 
                 'deactivated' => $deactivated,
                 'deleted' => $deleted,
                 'deletes_refused' => $deletesRefused,
-                'reactivated' => $reactivated
+                'reactivated' => $reactivated,
+                'org_tags_satta' => $orgTagsSet,
+                'org_tags_rensade' => $orgTagsCleared
             ],
             'sync_id' => null,
             'error' => 'Ett internt fel uppstod vid synkronisering.'

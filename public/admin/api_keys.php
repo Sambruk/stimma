@@ -689,7 +689,7 @@ Authorization: Bearer stm_din_api_nyckel_har</code></pre>
                         <tr><td><code>email</code></td><td>string</td><td>Ja</td><td>E-postadress på nyckelns domän eller någon av dess underdomäner</td></tr>
                         <tr><td><code>name</code></td><td>string</td><td>Ja</td><td>Användarens namn</td></tr>
                         <tr><td><code>role</code></td><td>string</td><td>Nej</td><td><code>användare</code> (standard), <code>redaktör</code> eller <code>admin</code>. De äldre värdena <code>student</code> och <code>teacher</code> fungerar fortfarande</td></tr>
-                        <tr><td><code>organization</code></td><td>string</td><td>Nej</td><td>Organisationshierarki separerad med / (t.ex. "Kommun/Förvaltning/Avdelning")</td></tr>
+                        <tr><td><code>organization</code></td><td>string<br>eller lista</td><td>Nej</td><td>Organisationstaggar separerade med / (t.ex. "Kommun/Förvaltning/Avdelning"). Den svenska stavningen <code>organisation</code> accepteras också. <strong>Utelämnas fältet lämnas befintliga taggar orörda</strong> — skicka tom sträng för att rensa dem</td></tr>
                         <tr><td><code>delete</code></td><td>bool</td><td>Nej</td><td><strong>Raderar användaren permanent.</strong> Endast <code>email</code> behöver anges på en sådan post</td></tr>
                     </tbody>
                 </table>
@@ -735,6 +735,49 @@ Authorization: Bearer stm_din_api_nyckel_har</code></pre>
                     <li><strong>Inloggning påverkas INTE</strong> - inaktiva kan fortfarande logga in</li>
                     <li>Super_admin-användare och icke-synkade användare berörs aldrig</li>
                 </ul>
+
+                <h6>Organisationstaggar</h6>
+                <div class="alert alert-info">
+                    <i class="bi bi-diagram-3 me-2"></i>
+                    Varje del av <code>"Kommun/Förvaltning/Avdelning"</code> blir en egen tagg. Taggarna är
+                    <strong>platta</strong> — hierarkin lagras inte, så ett filter på "Förvaltningen" träffar
+                    inte automatiskt avdelningarna under den.
+                    <ul class="mb-0 mt-2">
+                        <li><strong>Fältet saknas i posten</strong> → befintliga taggar lämnas orörda. En synk
+                            utan organisationskolumn kan alltså inte råka nollställa taggar som satts för hand.</li>
+                        <li><strong>Fältet finns men är tomt</strong> → taggarna tas bort. Det räknas som
+                            <code>org_tags_rensade</code> i svaret.</li>
+                        <li>Taggar kan också sättas för hand under <strong>Användare</strong> i adminpanelen.
+                            En efterföljande synk som innehåller fältet skriver dock om dem.</li>
+                    </ul>
+                </div>
+
+                <h6>Svar</h6>
+                <pre class="bg-light p-3 rounded"><code>{
+  "success": true,
+  "summary": {
+    "total_in_payload": 45,
+    "created": 2,
+    "updated": 43,
+    "deactivated": 0,
+    "deleted": 0,
+    "deletes_refused": 0,
+    "reactivated": 0,
+    "org_tags_satta": 43,
+    "org_tags_rensade": 0
+  },
+  "sync_id": 128,
+  "warnings": [
+    "Fältet \"department\" känns inte igen och ignorerades (45 poster). Tillåtna fält: email, name, role, delete, organization, organisation."
+  ]
+}</code></pre>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong><code>warnings</code> finns bara när något behöver uppmärksammas</strong> och gör inte
+                    synken misslyckad. Fält som Stimma inte känner igen ignoreras tyst i själva synken — varningen
+                    är enda sättet att upptäcka ett felstavat fältnamn. <strong>Kontrollera
+                    <code>org_tags_satta</code></strong> om ni skickar taggar: står det 0 kom fältet aldrig fram.
+                </div>
 
                 <h6>Felkoder</h6>
                 <table class="table table-sm">

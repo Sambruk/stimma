@@ -93,6 +93,12 @@ if (!$validation['valid']) {
 // när saknade användare avaktiveras.
 $result = performUserSync($users, $domain, $deactivateMissing, $apiKeyId, $ipAddress, true);
 
+// Varningar: sådant som inte gör payloaden ogiltig men nästan alltid betyder att
+// anroparen menade något annat. Ett felstavat fältnamn passerade tidigare med
+// HTTP 200 och "success": true, och användaren skapades utan organisationstaggar
+// — det fanns ingenting i svaret att felsöka på.
+$warnings = collectSyncUserWarnings($users);
+
 if ($result['success']) {
     // Logga i activity_log
     logActivity('api@' . $domain, 'API-synk genomförd', [
@@ -107,11 +113,15 @@ if ($result['success']) {
         'reactivated' => $result['summary']['reactivated']
     ]);
 
-    apiResponse(200, [
+    $svar = [
         'success' => true,
         'summary' => $result['summary'],
         'sync_id' => $result['sync_id']
-    ]);
+    ];
+    if (!empty($warnings)) {
+        $svar['warnings'] = $warnings;
+    }
+    apiResponse(200, $svar);
 } else {
     apiResponse(500, [
         'success' => false,

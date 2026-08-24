@@ -4,6 +4,30 @@ Alla större ändringar i Stimma dokumenteras här.
 
 Formatet följer [Keep a Changelog](https://keepachangelog.com/sv/1.1.0/) och projektet använder semantisk versionshantering.
 
+## [2.2.1] – 2026-08-24
+
+### Rättat
+
+#### Organisationstaggar i synken
+- 🔴 **Taggar rensades tyst.** `performUserSync()` raderade alltid en användares org-taggar innan den skrev nya, även när `organization` saknades i payloaden. En AD-synk utan den kolumnen nollställde alltså taggar som satts för hand. Fältet skiljer nu på *saknas* (rör inte taggarna) och *tomt* (ta bort dem)
+- **Okända fältnamn ignorerades utan ett ord.** En payload med `department` eller `organisation_namn` passerade med HTTP 200 och `"success": true`, och användaren skapades utan taggar. Svaret innehåller nu `warnings` som namnger de fält som inte känns igen, och en varning när ingen post alls bär organisationsfältet
+- Sammanfattningen fick `org_tags_satta` och `org_tags_rensade`, så att det går att se i svaret om taggarna kom fram
+- `organisation` (svensk stavning) accepteras som alias för `organization` — synkverktygets CSV-mall och API-dokumentationen stavade fältet olika
+- En lista accepteras som alternativ till den snedstrecksseparerade strängen. AD-flervärdesattribut serialiseras ofta så, och `trim()` på en array är ett fatalt fel i PHP 8
+
+### Lagts till
+
+#### Org-taggar direkt i adminvyn
+- Fält för org-taggar i "Lägg till ny användare" — formuläret tog tidigare bara e-postadress
+- Ändra taggar på en befintlig användare via en pennknapp i kolumnen Org-taggar. Tidigare krävdes en omkörning av hela organisationens synk för att rätta en enda persons avdelning
+- Grindat på hanteringsrätt (läsbehörig blockeras före action-hanteraren), CSRF-validerat och begränsat till adminens egna organisationsdomäner
+- `setUserOrgTags()` delas av adminvyn och synken, så samma sträng ger samma taggar oavsett väg
+- Synkverktygets logg visar varningar och skriver ut en egen rad när taggar rensats
+
+### Dokumentation
+- API-dokumentationen: nytt avsnitt om organisationstaggar, komplett svarsexempel med `warnings` och de nya räknarna, samt rådet att kontrollera `org_tags_satta` om taggar skickas
+- CSV-mallen påpekar att kolumnerna läses på position, inte på rubriknamn, och att JSON-fältet heter `organization`
+
 ## [2.2.0] – 2026-08-20
 
 ### Lagts till

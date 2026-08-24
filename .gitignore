@@ -53,3 +53,6 @@ public/docs/pdf/*.pdf
 # spårad i det publika repot och rensades ur historiken 2026-08-21 — filen
 # finns kvar på disk men får aldrig committas igen.
 import_users.sql
+
+# Lokala backuper vid felsökning (ska aldrig checkas in)
+.bak-*/

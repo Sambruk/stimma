@@ -255,6 +255,50 @@ if (isset($_POST['action']) && $_POST['action'] === 'toggle_viewer' && isset($_P
     exit;
 }
 
+// Hantera organisationstaggar på en befintlig användare.
+// Taggar kunde tidigare bara sättas via en synk. En admin som ville rätta
+// avdelningen för EN person fick köra om hela organisationens synk, vilket är
+// både omständligt och riskabelt — en synk rör alla konton, inte ett.
+if (isset($_POST['action']) && $_POST['action'] === 'set_org_tags' && isset($_POST['user_id'])) {
+    if (!validateCsrfToken($_POST['csrf_token'] ?? '')) {
+        $_SESSION['message'] = 'Ogiltig CSRF-token. Försök igen.';
+        $_SESSION['message_type'] = 'danger';
+        header('Location: users.php');
+        exit;
+    }
+
+    $userId = (int)$_POST['user_id'];
+    $targetUser = queryOne("SELECT email FROM " . DB_DATABASE . ".users WHERE id = ?", [$userId]);
+    $targetUserDomain = $targetUser ? substr(strrchr($targetUser['email'], "@"), 1) : '';
+
+    // Samma domängräns som för rolländringar: en admin råder bara över sin
+    // organisations domäner.
+    if (!$targetUser || (!$isSuperAdmin && !in_array($targetUserDomain, $adminScopeDomains, true))) {
+        $_SESSION['message'] = 'Du kan endast ändra org-taggar för användare i din egen organisation.';
+        $_SESSION['message_type'] = 'danger';
+        header('Location: users.php');
+        exit;
+    }
+
+    try {
+        $utfall = setUserOrgTags($userId, $_POST['org_tags'] ?? '');
+        logActivity($_SESSION['user_email'], 'Ändrade org-taggar för ' . $targetUser['email'] . ': '
+            . (empty($utfall['taggar']) ? '(inga)' : implode(', ', $utfall['taggar'])));
+
+        $_SESSION['message'] = empty($utfall['taggar'])
+            ? 'Org-taggarna för ' . htmlspecialchars($targetUser['email']) . ' har tagits bort.'
+            : 'Org-taggarna för ' . htmlspecialchars($targetUser['email']) . ' är nu: '
+              . htmlspecialchars(implode(', ', $utfall['taggar'])) . '.';
+        $_SESSION['message_type'] = 'success';
+    } catch (Exception $e) {
+        $_SESSION['message'] = 'Ett fel uppstod vid uppdatering av org-taggar: ' . $e->getMessage();
+        $_SESSION['message_type'] = 'danger';
+    }
+
+    header('Location: users.php' . ($orgTagFilterQs ? '?' . ltrim($orgTagFilterQs, '&') : ''));
+    exit;
+}
+
 // Hantera skapande av ny användare
 if (isset($_POST['action']) && $_POST['action'] === 'create_user') {
     $inputValue = trim($_POST['email'] ?? '');
@@ -298,9 +342,17 @@ if (isset($_POST['action']) && $_POST['action'] === 'create_user') {
             $error = 'En användare med e-postadressen ' . htmlspecialchars($email) . ' finns redan.';
         } else {
             // Skapa användaren automatiskt med endast de kolumner som finns i tabellen
-            execute("INSERT INTO " . DB_DATABASE . ".users (email, created_at)
+            $newUserId = execute("INSERT INTO " . DB_DATABASE . ".users (email, created_at)
                      VALUES (?, NOW())",
                      [$email]);
+
+            // Org-taggar direkt vid skapandet. Tolkas med samma funktion som
+            // synken använder, så "Kommun/Förvaltning/Avdelning" betyder samma
+            // sak oavsett om kontot kom in via adminvyn eller via API:et.
+            $newOrgTags = trim($_POST['org_tags'] ?? '');
+            if ($newUserId && $newOrgTags !== '') {
+                setUserOrgTags((int)$newUserId, $newOrgTags);
+            }
 
             // Säkerställ att domänen/orgen har en AI-kvotrad så den syns i UI:t
             require_once '../include/ai_quota.php';
@@ -580,6 +632,16 @@ require_once 'include/header.php';
                                                 else: ?>
                                                     <span class="text-muted">-</span>
                                                 <?php endif; ?>
+                                                <?php if ($canManageUsers && ($isSuperAdmin || in_array($user['user_domain'], $adminScopeDomains, true))): ?>
+                                                <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline org-tag-edit"
+                                                        style="font-size: 0.8em;"
+                                                        data-id="<?= (int)$user['id'] ?>"
+                                                        data-email="<?= htmlspecialchars($user['email']) ?>"
+                                                        data-tags="<?= htmlspecialchars(str_replace(', ', '/', $user['org_tags'] ?? '')) ?>"
+                                                        title="Ändra org-taggar">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                                <?php endif; ?>
                                             </td>
                                             <td>
                                                 <?php
@@ -745,10 +807,62 @@ require_once 'include/header.php';
                         </div>
                     </div>
                     <?php endif; ?>
+                    <div class="mb-3">
+                        <label for="create_org_tags" class="form-label">Org-taggar <span class="text-muted fw-normal">(valfritt)</span></label>
+                        <input type="text" class="form-control" id="create_org_tags" name="org_tags"
+                               placeholder="Kommun/Förvaltning/Avdelning" autocomplete="off">
+                        <div class="form-text">
+                            Separera nivåerna med snedstreck. Varje nivå blir en egen tagg, och taggarna
+                            kan användas för att filtrera statistik och användarlistor.
+                            <strong>Obs:</strong> en synk som innehåller fältet <code>organization</code>
+                            skriver om taggarna för de användare den omfattar.
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
                     <button type="submit" class="btn btn-primary">Skapa användare</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php if ($canManageUsers): ?>
+<!-- Ändra org-taggar på en befintlig användare. Fältet är samma
+     snedstrecksform som synken använder, så en admin som sett API-exemplet
+     känner igen sig. -->
+<div class="modal fade" id="orgTagModal" tabindex="-1" aria-labelledby="orgTagModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="orgTagModalLabel">Org-taggar</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Stäng"></button>
+            </div>
+            <form method="post" action="">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                <input type="hidden" name="action" value="set_org_tags">
+                <input type="hidden" name="user_id" id="orgTagUserId" value="">
+                <div class="modal-body">
+                    <p class="mb-3">Användare: <strong id="orgTagUserEmail"></strong></p>
+                    <div class="mb-3">
+                        <label for="orgTagInput" class="form-label">Taggar</label>
+                        <input type="text" class="form-control" id="orgTagInput" name="org_tags"
+                               placeholder="Kommun/Förvaltning/Avdelning" autocomplete="off">
+                        <div class="form-text">
+                            Separera nivåerna med snedstreck. Varje nivå blir en egen tagg.
+                            Töm fältet för att ta bort alla taggar.
+                        </div>
+                    </div>
+                    <div class="alert alert-warning py-2 mb-0" style="font-size: 0.9em;">
+                        En synk som innehåller fältet <code>organization</code> skriver om taggarna
+                        för de användare den omfattar. Saknas fältet i synken lämnas taggarna orörda.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
+                    <button type="submit" class="btn btn-primary">Spara taggar</button>
                 </div>
             </form>
         </div>
@@ -817,6 +931,20 @@ $csrfToken = htmlspecialchars($_SESSION['csrf_token']);
                 noResultsRow.style.display = "none";
             }
         });
+
+        // Org-taggar: fyll modalen med användarens nuvarande taggar. Värdet i
+        // data-tags är redan omvandlat till snedstrecksform serverside.
+        const orgTagModalEl = document.getElementById("orgTagModal");
+        if (orgTagModalEl) {
+            document.querySelectorAll(".org-tag-edit").forEach(button => {
+                button.addEventListener("click", function() {
+                    document.getElementById("orgTagUserId").value = this.getAttribute("data-id");
+                    document.getElementById("orgTagUserEmail").textContent = this.getAttribute("data-email");
+                    document.getElementById("orgTagInput").value = this.getAttribute("data-tags") || "";
+                    new bootstrap.Modal(orgTagModalEl).show();
+                });
+            });
+        }
 
         // Delete user functionality (SECURITY FIX: Use POST with CSRF token)
         const deleteButtons = document.querySelectorAll(".delete-user");

@@ -435,3 +435,79 @@ Felsökning av att Säter inte får åtkomst till API:et med `sater.se`.
   Utforskare → Expert → Mästare), inte en roll. Ska inte heta "Användare".
 - migrations/008: AI-promptens "studenten fyller i" syftar på den som läser kursen.
   Prompten ligger i databasen; migrationsfilen bara seedar den. Inte ändrad.
+
+## 2026-08-24 — org-taggar kom aldrig fram, och ingen sa till
+
+**Rapport:** sater.se skapade användare med org-taggar via API:et, men inga taggar
+syntes i adminvyn.
+
+**Utredning:** backend var korrekt hela tiden. Säters två första anrop (13:22 och
+13:46) innehöll inget `organization`-fält; deras senare anrop (14:01) gjorde det, och
+då skrevs taggarna direkt. Verifierat separat med en testanvändare som därefter togs
+bort. Det verkliga felet är att inget i systemet berättar att fältet uteblivit.
+
+### Sluta ignorera tyst
+- [x] `collectSyncUserWarnings()` i functions.php — okända fältnamn rapporteras per
+      post, och en payload där INGEN post bär organisationsfältet får en egen varning.
+      Okända fält avvisas inte: en payload med extrafält från källsystemet ska
+      fortsätta fungera. De redovisas som `warnings` i svaret.
+- [x] `organisation` (svensk stavning) accepteras som alias för `organization`.
+      Vi stavar det själva olika — CSV-mallen i synkverktyget har rubriken
+      `organisation` medan API-dokumentationen säger `organization`.
+- [x] Sammanfattningen fick `org_tags_satta` och `org_tags_rensade`. Utan dem gick det
+      inte att se i svaret om taggarna kom fram.
+- [x] Både API:et och adminpanelens synkverktyg returnerar varningarna, från samma
+      funktion, så att båda vägarna säger samma sak om samma payload.
+- [x] Synkverktygets logg visar varningarna och skriver ut en egen rad när taggar
+      rensats — en rensning är nästan alltid en kolumn som saknades i filen.
+
+### Stoppa den tysta taggrensningen
+- [x] 🔴 `performUserSync()` raderade ALLTID en användares taggar innan den skrev nya,
+      även när `organization` saknades i payloaden. En AD-synk utan den kolumnen hade
+      alltså tyst nollställt taggar som satts för hand.
+- [x] `readSyncOrganization()` skiljer nu på **fältet saknas** (rör inte taggarna) och
+      **fältet är tomt** (ta bort taggarna). Skillnaden är hela poängen.
+- [x] En lista accepteras som alternativ till den snedstrecksseparerade strängen.
+      AD-flervärdesattribut serialiseras ofta så, och `trim()` på en array är ett
+      FATALT fel i PHP 8 — hela synken hade havererat.
+
+### Org-taggar i adminvyn
+- [x] Fält för org-taggar i "Lägg till ny användare". Formuläret tog tidigare bara
+      e-post, så taggar kunde över huvud taget inte sättas därifrån.
+- [x] Ny action `set_org_tags` + modal för att ändra taggar på befintlig användare.
+      Tidigare krävdes en omkörning av hela organisationens synk för att rätta EN
+      persons avdelning.
+- [x] Grindad på `$canManageUsers` (läsbehörig blockeras före action-hanteraren),
+      CSRF-validerad, och domänbegränsad till `$adminScopeDomains` — samma gräns som
+      rolländringarna. Redigeringsknappen visas bara för användare inom scopet.
+- [x] `setUserOrgTags()` delas av adminvyn och synken, så "Kommun/Förvaltning/Avdelning"
+      betyder samma sak oavsett väg. Dubbletter och blanksteg städas.
+- [x] Funktionen använder RAKA prepared statements, inte `execute()`/`queryOne()` —
+      de hjälparna sväljer PDOException och returnerar null. Anropad inifrån synkens
+      transaktion hade ett svalt fel betytt att taggarna tyst uteblev i stället för
+      att synken rullades tillbaka.
+
+### Enhetlig stavning
+- [x] API-dokumentationen: `organization` accepterar sträng eller lista, alias
+      `organisation`, och den bärande semantiken (utelämnat fält = orörda taggar).
+- [x] Nytt avsnitt "Organisationstaggar" och ett komplett svarsexempel med `warnings`
+      och de nya räknarna, plus rådet att kontrollera `org_tags_satta`.
+- [x] CSV-mallen och synkverktyget påpekar att kolumnerna läses på POSITION, inte på
+      rubriknamn, och att JSON-fältet heter `organization`.
+
+### Verifierat
+- [x] 9 kontroller på semantiken: skapa med taggar, synk utan fältet (rör inte),
+      svensk stavning, lista i stället för sträng, tomt fält rensar, rensning av redan
+      tomt räknas inte, adminvägen, samspelet admin↔synk.
+- [x] Skarpt HTTP-test mot `/api/sync_users.php` med en tillfällig nyckel på en
+      slaskdomän: korrekt payload, felstavat fält (gav båda varningarna) och svensk
+      stavning. **Nyckeln, domänen, användaren och loggraderna raderade efteråt** —
+      verifierat att inget ligger kvar.
+- [x] users.php renderad som Säter-admin: 48 redigeringsknappar, modal och nytt
+      formulärfält på plats, och båda Säter-användarnas taggar syns i listan.
+
+### Kvarstår
+- [ ] Taggar är fortfarande platta. Redigeringsmodalen visar dem i snedstrecksform men
+      ordningen är alfabetisk, inte den ursprungliga hierarkin — den lagras inte.
+- [ ] `ensureAiQuotaRow()` skapar fortfarande separat AI-kvot per e-postdomän
+      (kvarstående punkt sedan domänomfånget).

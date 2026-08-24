@@ -272,7 +272,8 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
             <div class="modal-body">
                 <div class="alert alert-info">
                     <strong>CSV-format:</strong> email, namn, roll, organisation<br>
-                    <small>Första raden hoppas över om den innehåller rubriker. Flera organisationstaggar separeras med snedstreck <code>/</code> (t.ex. <code>Kommun/IT-avdelningen/Support</code>).</small>
+                    <small>Första raden hoppas över om den innehåller rubriker. Flera organisationstaggar separeras med snedstreck <code>/</code> (t.ex. <code>Kommun/IT-avdelningen/Support</code>).
+                    Kolumnerna läses på position, inte på rubriknamn. I JSON-API:et heter motsvarande fält <code>organization</code>.</small>
                     <div class="mt-2">
                         <a href="#" id="sampleCsvLink"><i class="bi bi-file-earmark-text me-1"></i>Ladda ner exempelfil med instruktioner</a>
                     </div>
@@ -635,6 +636,7 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
             '#   2. namn         – för- och efternamn',
             '#   3. roll         – anvandare, redaktor eller admin (standard: anvandare)',
             '#   4. organisation – en eller flera organisationstaggar',
+            '#                    (fältet heter organization i JSON-API:et)',
             '#',
             '# FLERA ORGANISATIONSTAGGAR:',
             '#   Separera taggarna med snedstreck  /  . Varje del blir en egen tagg.',
@@ -732,8 +734,18 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
                 const s = data.summary;
                 addLogEntry('success',
                     `Synk klar mot ${data.domains.length} domän(er)! Skapade: ${s.created}, Uppdaterade: ${s.updated}, ` +
-                    `Inaktiverade: ${s.deactivated}, Reaktiverade: ${s.reactivated}`
+                    `Inaktiverade: ${s.deactivated}, Reaktiverade: ${s.reactivated}, ` +
+                    `Org-taggar satta: ${s.org_tags_satta ?? 0}`
                 );
+                // En rensning är nästan alltid oavsiktlig — en kolumn som saknades
+                // i filen. Den ska synas, inte gömmas i en sifferrad.
+                if (s.org_tags_rensade > 0) {
+                    addLogEntry('error',
+                        `⚠ ${s.org_tags_rensade} användare fick sina org-taggar borttagna, eftersom ` +
+                        `organisationskolumnen var tom för dem. Fyll i kolumnen och synka om för att återställa.`
+                    );
+                }
+                (data.warnings || []).forEach(w => addLogEntry('error', '⚠ ' + w));
                 if (data.skipped_count > 0) {
                     addLogEntry('error',
                         `⚠ ${data.skipped_count} användare hoppades över — deras e-postdomän tillhör inte organisationen. ` +
