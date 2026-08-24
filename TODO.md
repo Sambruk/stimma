@@ -523,8 +523,10 @@ bort. Det verkliga felet är att inget i systemet berättar att fältet uteblivi
 - [ ] Redigeringsmodalen visar taggarna i snedstrecksform men i alfabetisk ordning,
       inte den ursprungliga vägen — ordningen lagras inte. Kräver en kolumn i
       `user_org_tags` för att lösas ordentligt.
-- [ ] Äkta hierarki (skilja grenar med samma lövnamn, visa träd, "allt under X" som
-      relation i stället för sammanträffande) kräver att vägen bärs i datamodellen.
-      Obeslutat om behovet finns.
+- **Äkta hierarki: NEJ, beslutat 2026-08-24.** Att skilja grenar med samma lövnamn,
+  visa träd och göra "allt under X" till en relation i stället för ett sammanträffande
+  kräver att vägen bärs i datamodellen. Thomas valde bort det — komplexiteten i
+  applikationen ska inte öka nu. Platt modell gäller; begränsningarna är dokumenterade
+  i api_keys.php och i kodkommentarerna. Ta inte upp det igen utan nytt verksamhetsbehov.
 - [ ] `ensureAiQuotaRow()` skapar fortfarande separat AI-kvot per e-postdomän
       (kvarstående punkt sedan domänomfånget).
