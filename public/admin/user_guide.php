@@ -60,7 +60,7 @@ require_once 'include/header.php';
                 <h5 class="card-title mb-4"><i class="bi bi-signpost-2 me-2 text-primary"></i>Snabbnavigering</h5>
                 <div class="row g-3">
                     <div class="col-md-3 col-6">
-                        <a href="#anvandare" class="quick-nav-card student">
+                        <a href="#anvandare" class="quick-nav-card anvandare">
                             <div class="icon"><i class="bi bi-person-fill"></i></div>
                             <div class="label">Användare</div>
                         </a>
@@ -129,7 +129,7 @@ require_once 'include/header.php';
 
         <div class="row g-4 mb-4">
             <div class="col-md-6 col-lg-3">
-                <div class="role-card student">
+                <div class="role-card anvandare">
                     <div class="role-icon"><i class="bi bi-person-fill"></i></div>
                     <h5>Användare</h5>
                     <p>Tar kurser och följer sin progress genom utbildningen. Standardrollen för alla inloggade.</p>
@@ -1939,7 +1939,7 @@ Content-Type: application/json
     {
       "email": "anna@example.se",
       "name": "Anna Svensson",
-      "role": "student",
+      "role": "användare",
       "organization": "Avd1/Enhet2"
     }
   ],
@@ -1976,7 +1976,8 @@ Content-Type: application/json
                         <tbody>
                             <tr><td><code>email</code></td><td>Obligatoriskt</td><td>Måste tillhöra nyckelns domän</td></tr>
                             <tr><td><code>name</code></td><td>Obligatoriskt</td><td>För- och efternamn</td></tr>
-                            <tr><td><code>role</code></td><td>Valfritt</td><td><code>student</code> = Användare (standard), <code>teacher</code> = Redaktör, <code>admin</code></td></tr>
+                            <tr><td><code>role</code></td><td>Valfritt</td><td><code>användare</code> (standard), <code>redaktör</code> eller <code>admin</code>. Äldre värden <code>student</code>/<code>teacher</code> fungerar fortfarande</td></tr>
+                            <tr><td><code>delete</code></td><td>Valfritt</td><td><code>true</code> raderar kontot permanent — då räcker <code>email</code> på posten</td></tr>
                             <tr><td><code>organization</code></td><td>Valfritt</td><td>Skapar org-taggar; dela nivåer med <code>/</code></td></tr>
                         </tbody>
                     </table>
@@ -2185,8 +2186,8 @@ Authorization: Bearer stm_din_nyckel_här</code></pre>
     font-weight: 600;
     font-size: 0.9rem;
 }
-.quick-nav-card.student { background: linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%); color: #667eea; }
-.quick-nav-card.student:hover { border-color: #667eea; }
+.quick-nav-card.anvandare { background: linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%); color: #667eea; }
+.quick-nav-card.anvandare:hover { border-color: #667eea; }
 .quick-nav-card.editor { background: linear-gradient(135deg, rgba(240,147,251,0.1) 0%, rgba(245,87,108,0.1) 100%); color: #f093fb; }
 .quick-nav-card.editor:hover { border-color: #f093fb; }
 .quick-nav-card.admin { background: linear-gradient(135deg, rgba(79,172,254,0.1) 0%, rgba(0,242,254,0.1) 100%); color: #4facfe; }
@@ -2244,7 +2245,7 @@ Authorization: Bearer stm_din_nyckel_här</code></pre>
     font-size: 1.5rem;
     margin-bottom: 1rem;
 }
-.role-card.student .role-icon { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+.role-card.anvandare .role-icon { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
 .role-card.editor .role-icon { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; }
 .role-card.admin .role-icon { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; }
 .role-card.superadmin .role-icon { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white; }

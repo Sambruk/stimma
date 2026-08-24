@@ -1116,7 +1116,7 @@ function userCanModifyCourse(array $course) {
 // Flera e-postdomäner kan tillhöra samma organisation. Domäner som inte
 // tilldelats någon organisation behandlas som "implicit single-domain org" och
 // fungerar som tidigare. Helpern getOrgScopeDomains() är central — den används
-// av alla refaktorerade admin-/student-queries för att expandera filterklausuler
+// av alla refaktorerade admin-/användar-queries för att expandera filterklausuler
 // från en enskild domän till orgens samtliga domäner.
 // =============================================================================
 
@@ -1324,6 +1324,101 @@ function buildDomainFilterQuery(array $selectedDomains) {
     $qs = '';
     foreach ($selectedDomains as $d) {
         $qs .= '&domains%5B%5D=' . urlencode($d);
+    }
+    return $qs;
+}
+
+/**
+ * Läs ut ett valfritt filter på den inloggades EGNA organisationstaggar.
+ *
+ * En chef eller uppföljningsansvarig tillhör oftast en avdelning ("IT-avdelningen")
+ * och vill kunna se statistiken för just den, i stället för hela domänen. Filtret
+ * erbjuder därför bara de taggar personen själv bär — inte alla taggar som finns i
+ * organisationen. Det är avsiktligt: filtret är en bekvämlighet för att hitta rätt
+ * avsnitt av det man redan får se, inte en väg att navigera andras avdelningar.
+ *
+ * Filtret är VALFRITT. Utan val visas allt inom domänscopet, precis som förut —
+ * befintliga administratörer tappar alltså ingen sikt när kontrollen införs.
+ *
+ * Valet skärs alltid mot de egna taggarna, så en manipulerad GET-parameter kan
+ * inte smyga in en tagg personen inte tillhör.
+ *
+ * OBS om datamodellen: taggar lagras platt. performUserSync() splittar
+ * "Kommun/Förvaltning/Avdelning" på "/" och sparar tre fristående rader, så en
+ * hierarkisk träffbild ("allt under Förvaltningen") går inte att uttrycka här.
+ *
+ * @param int $userId Inloggad användares id
+ * @return array{available:array,selected:array,filtered:bool}
+ *   available = den inloggades egna taggar (för filter-UI)
+ *   selected  = de taggar som valts (alltid en delmängd av available)
+ *   filtered  = om ett filter är aktivt
+ */
+function getOwnOrgTagFilter($userId) {
+    $available = array_column(getUserOrgTags($userId), 'tag');
+
+    $raw = isset($_GET['org_tags']) ? (array)$_GET['org_tags'] : [];
+    $raw = array_map('strval', $raw);
+    $selected = array_values(array_intersect($raw, $available));
+
+    return [
+        'available' => $available,
+        'selected'  => $selected,
+        'filtered'  => !empty($selected),
+    ];
+}
+
+/**
+ * Bygg en parametriserad klausul som begränsar till användare som bär någon av
+ * de valda org-taggarna.
+ *
+ * Returnerar en klausul som alltid matchar när inget filter är aktivt, så att
+ * anroparen kan väva in den villkorslöst utan att specialfallshantera.
+ *
+ * @param array $selectedTags
+ * @param string $userIdColumn Tabell.kolumn för användarens id (t.ex. "u.id")
+ * @return array{fragment:string, params:array}
+ */
+function buildOrgTagFilterClause(array $selectedTags, $userIdColumn) {
+    if (empty($selectedTags)) {
+        return ['fragment' => '1=1', 'params' => []];
+    }
+    $placeholders = implode(',', array_fill(0, count($selectedTags), '?'));
+    return [
+        'fragment' => "EXISTS (SELECT 1 FROM " . DB_DATABASE . ".user_org_tags uotf
+                               WHERE uotf.user_id = $userIdColumn AND uotf.tag IN ($placeholders))",
+        'params' => array_values($selectedTags),
+    ];
+}
+
+/**
+ * Väv ihop två klausuler från build*Clause() till en.
+ *
+ * Poängen är att anropande sidor ska kunna lägga på ett extra villkor på ETT
+ * ställe i stället för att röra varje enskild query. Klausulen används både i
+ * WHERE och i JOIN ... ON, därför parentesen runt varje del.
+ *
+ * @param array{fragment:string,params:array} $a
+ * @param array{fragment:string,params:array} $b
+ * @return array{fragment:string,params:array}
+ */
+function combineSqlClauses(array $a, array $b) {
+    return [
+        'fragment' => '(' . $a['fragment'] . ') AND (' . $b['fragment'] . ')',
+        'params'   => array_merge($a['params'], $b['params']),
+    ];
+}
+
+/**
+ * Bygg querystring-fragment (&org_tags[]=...) för att föra vidare ett aktivt
+ * taggfilter i länkar (t.ex. export).
+ *
+ * @param array $selectedTags
+ * @return string
+ */
+function buildOrgTagFilterQuery(array $selectedTags) {
+    $qs = '';
+    foreach ($selectedTags as $t) {
+        $qs .= '&org_tags%5B%5D=' . urlencode($t);
     }
     return $qs;
 }
@@ -2840,7 +2935,8 @@ function sendPermissionChangeNotification($userEmail, $changeType, $newStatus, $
     // Bestäm rollnamn på svenska
     $roleNames = [
         'admin' => 'administratör',
-        'editor' => 'redaktör'
+        'editor' => 'redaktör',
+        'viewer' => 'läsbehörig'
     ];
     $roleName = $roleNames[$changeType] ?? $changeType;
 
@@ -2918,6 +3014,172 @@ function sendPermissionChangeNotification($userEmail, $changeType, $newStatus, $
     return sendSmtpMail($userEmail, $subject, $message);
 }
 
+// ---------------------------------------------------------------------------
+// Synkens semantik. Ligger HÄR och inte i api_helpers.php därför att
+// performUserSync() använder dem, och den anropas även av adminpanelens
+// synkverktyg (admin/ajax/sync_users_direct.php) som inte laddar api_helpers.php.
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalisera ett rollvärde från synk-API:et till det värde som lagras.
+ *
+ * Rollen heter "Användare" i hela gränssnittet och i dokumentationen. Internt
+ * lagras den fortfarande som 'student' i users.role — enum-värdet är gammalt och
+ * i praktiken dekorativt (behörighet bärs av is_admin/is_editor/is_viewer), och
+ * att byta det hade krävt en migration som rör varje query som nämner rollen,
+ * utan att någon användare eller API-anropare blir hjälpt.
+ *
+ * Därför sker översättningen här, vid systemgränsen. `användare` är det värde
+ * dokumentationen anger. `student` accepteras fortfarande: kunder som redan
+ * integrerat mot den äldre dokumentationen ska inte få sin synk sönder av ett
+ * terminologibyte.
+ *
+ * @param string|null $role Rollvärde från payloaden
+ * @return string|null Lagrat värde, eller null om rollen inte känns igen
+ */
+function normalizeSyncRole($role) {
+    if ($role === null || $role === '') {
+        return null;
+    }
+
+    $r = strtolower(trim((string)$role));
+
+    $map = [
+        // Användare — nya termen först, äldre kvar som alias
+        'användare'      => 'student',
+        'anvandare'      => 'student',
+        'student'        => 'student',
+        // Redaktör
+        'redaktör'       => 'teacher',
+        'redaktor'       => 'teacher',
+        'teacher'        => 'teacher',
+        // Administratör
+        'administratör'  => 'admin',
+        'administrator'  => 'admin',
+        'admin'          => 'admin',
+    ];
+
+    return $map[$r] ?? null;
+}
+
+/**
+ * Är posten en begäran om radering?
+ *
+ * Accepterar true, 1 och "true"/"1" som strängar, eftersom källsystem som
+ * serialiserar från AD ofta skickar strängar. Allt annat — inklusive "false",
+ * 0 och utelämnat fält — betyder att posten är en vanlig synkpost.
+ *
+ * Att tolkningen ligger i en egen funktion är avsiktligt: valideringen och
+ * synken måste vara ense om vad flaggan betyder. Om de tolkade den olika kunde
+ * en post passera valideringen som radering men behandlas som uppdatering.
+ *
+ * @param array $user En post ur users-listan
+ * @return bool
+ */
+function isUserSyncDeleteRequest($user) {
+    if (!isset($user['delete'])) {
+        return false;
+    }
+    $v = $user['delete'];
+    if (is_bool($v)) {
+        return $v;
+    }
+    if (is_int($v)) {
+        return $v === 1;
+    }
+    if (is_string($v)) {
+        return in_array(strtolower(trim($v)), ['true', '1'], true);
+    }
+    return false;
+}
+
+/**
+ * Radera en användare fullständigt, med allt som hänger på kontot.
+ *
+ * Delad av adminpanelens raderingsknapp (admin/users.php) och synk-API:ets
+ * per-användarflagga "delete". Att ha EN implementation är poängen: de två
+ * vägarna hann glida isär, och den i adminpanelen missade quiz_answers.
+ *
+ * Vad som händer med data:
+ *
+ * - Tabeller med FK ON DELETE CASCADE mot users städas av databasen själv.
+ *   Det gäller bland annat certificates, user_progress, daily_activity,
+ *   user_badges, user_stats, public_course_access, announcement_dismissals,
+ *   sequential_lesson_schedule, sequential_email_queue, ai_course_jobs,
+ *   user_org_tags och remember_tokens.
+ *
+ *   OBS: certificates ligger i den listan. En radering tar alltså med sig
+ *   personens diplom, och genomförd utbildning går inte att styrka i efterhand.
+ *
+ * - Tabeller med user_id UTAN främmandenyckel måste städas här. Missas någon
+ *   blir personuppgifter kvar efter en "radering".
+ *
+ * - pub_agreement_artifacts raderas AVSIKTLIGT INTE. Det är ett signerat
+ *   PUB-avtal med undertecknarens namn, e-post, IP och PDF-hash — organisationens
+ *   handling med egen rättslig grund för bevarande, inte användarens
+ *   inlärningsdata. Raden blir kvar med ett user_id som pekar på ett borttaget
+ *   konto; artefakten är självbärande och innehåller alla uppgifter den behöver.
+ *
+ * - Skapat innehåll överlever sin skapare: courses.author_id, lessons.author_id,
+ *   learning_paths.created_by, tags.created_by och resources.author_id har
+ *   ON DELETE SET NULL.
+ *
+ * Anroparen ansvarar för behörighetskontrollen. Funktionen kör i egen
+ * transaktion om ingen redan är igång, annars deltar den i anroparens.
+ *
+ * @param int $userId
+ * @return array{success:bool, error:?string}
+ */
+function deleteUserCompletely($userId) {
+    $userId = (int)$userId;
+    if ($userId <= 0) {
+        return ['success' => false, 'error' => 'Ogiltigt användar-id.'];
+    }
+
+    $db = getDb();
+    $ownTransaction = !$db->inTransaction();
+
+    // Tabeller med user_id men utan främmandenyckel — databasen städar dem inte.
+    // Vissa saknas i äldre installationer, därför tolereras "okänd tabell".
+    $manualTables = [
+        'progress',
+        'quiz_answers',
+        'course_enrollments',
+        'sequential_reminder_log',
+        'reminder_log',
+    ];
+
+    try {
+        if ($ownTransaction) {
+            $db->beginTransaction();
+        }
+
+        foreach ($manualTables as $table) {
+            try {
+                $stmt = $db->prepare("DELETE FROM " . DB_DATABASE . ".{$table} WHERE user_id = ?");
+                $stmt->execute([$userId]);
+            } catch (Exception $e) {
+                // Tabellen finns inte i den här installationen — hoppa över.
+            }
+        }
+
+        $stmt = $db->prepare("DELETE FROM " . DB_DATABASE . ".users WHERE id = ?");
+        $stmt->execute([$userId]);
+
+        if ($ownTransaction) {
+            $db->commit();
+        }
+
+        return ['success' => true, 'error' => null];
+    } catch (Exception $e) {
+        if ($ownTransaction && $db->inTransaction()) {
+            $db->rollBack();
+        }
+        error_log('deleteUserCompletely misslyckades för id ' . $userId . ': ' . $e->getMessage());
+        return ['success' => false, 'error' => 'Radering misslyckades.'];
+    }
+}
+
 /**
  * Utför användarsynkronisering mot databasen.
  * Delad logik som används av både API-endpointen (api/sync_users.php)
@@ -2941,6 +3203,8 @@ function performUserSync(array $users, string $domain, bool $deactivateMissing, 
     $created = 0;
     $updated = 0;
     $deactivated = 0;
+    $deleted = 0;
+    $deletesRefused = 0;
     $reactivated = 0;
     $syncLogId = null;
 
@@ -2954,15 +3218,46 @@ function performUserSync(array $users, string $domain, bool $deactivateMissing, 
         foreach ($users as $userData) {
             $email = strtolower(trim($userData['email']));
             $name = trim($userData['name'] ?? '');
-            $role = $userData['role'] ?? 'student';
+            // Rollen normaliseras vid systemgränsen: "Användare" är termen utåt,
+            // 'student' är det som lagras. Se normalizeSyncRole() i api_helpers.php.
+            $role = normalizeSyncRole($userData['role'] ?? null) ?? 'student';
             $organization = trim($userData['organization'] ?? '');
-
-            $processedEmails[] = $email;
 
             $existingUser = queryOne(
                 "SELECT id, is_synced, sync_status, role FROM " . DB_DATABASE . ".users WHERE email = ?",
                 [$email]
             );
+
+            // Raderingsbegäran: "delete": true på posten.
+            if (isUserSyncDeleteRequest($userData)) {
+                // Adressen läggs medvetet INTE i $processedEmails. Listan används
+                // bara för att avgöra vem som saknas och ska inaktiveras, och en
+                // raderad rad finns ändå inte kvar att inaktivera.
+
+                if (!$existingUser) {
+                    // Redan borta. Ingen åtgärd, inget fel — en synk som körs om
+                    // ska ge samma resultat som första gången.
+                    continue;
+                }
+
+                // Superadmins kan inte raderas via API. En felaktig eller kapad
+                // synk ska aldrig kunna låsa ute systemets sista administratör.
+                // Vägran räknas och rapporteras — att tyst strunta i en begärd
+                // radering vore värre än att neka den, eftersom anroparen då tror
+                // att kontot är borta.
+                if (($existingUser['role'] ?? '') === 'super_admin') {
+                    $deletesRefused++;
+                    continue;
+                }
+
+                $delResult = deleteUserCompletely($existingUser['id']);
+                if ($delResult['success']) {
+                    $deleted++;
+                }
+                continue;
+            }
+
+            $processedEmails[] = $email;
 
             $isAdmin = ($role === 'admin') ? 1 : 0;
             $isEditor = ($role === 'admin' || $role === 'teacher') ? 1 : 0;
@@ -3028,6 +3323,9 @@ function performUserSync(array $users, string $domain, bool $deactivateMissing, 
         // alltid, för brett omfång avaktiverar det användare anroparen inte råder över.
         // Suffixjämförelsen görs med RIGHT() i stället för LIKE eftersom '_' är ett
         // jokertecken i LIKE och förekommer i domännamn.
+        // Villkoret !empty($processedEmails) är inte bara en optimering: en payload
+        // som BARA innehåller raderingsposter ger en tom lista, och utan detta
+        // villkor hade "alla som inte står i listan" träffat hela organisationen.
         if ($deactivateMissing && !empty($processedEmails)) {
             $placeholders = implode(',', array_fill(0, count($processedEmails), '?'));
 
@@ -3060,10 +3358,10 @@ function performUserSync(array $users, string $domain, bool $deactivateMissing, 
 
         $stmt = $db->prepare(
             "INSERT INTO " . DB_DATABASE . ".sync_log
-             (domain, api_key_id, users_in_payload, users_created, users_updated, users_deactivated, users_reactivated, status, ip_address, duration_ms)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 'success', ?, ?)"
+             (domain, api_key_id, users_in_payload, users_created, users_updated, users_deactivated, users_deleted, users_reactivated, status, ip_address, duration_ms)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'success', ?, ?)"
         );
-        $stmt->execute([$domain, $apiKeyId, $userCount, $created, $updated, $deactivated, $reactivated, $ipAddress, $durationMs]);
+        $stmt->execute([$domain, $apiKeyId, $userCount, $created, $updated, $deactivated, $deleted, $reactivated, $ipAddress, $durationMs]);
         $syncLogId = $db->lastInsertId();
 
         $db->commit();
@@ -3075,6 +3373,8 @@ function performUserSync(array $users, string $domain, bool $deactivateMissing, 
                 'created' => $created,
                 'updated' => $updated,
                 'deactivated' => $deactivated,
+                'deleted' => $deleted,
+                'deletes_refused' => $deletesRefused,
                 'reactivated' => $reactivated
             ],
             'sync_id' => (int)$syncLogId,
@@ -3090,9 +3390,9 @@ function performUserSync(array $users, string $domain, bool $deactivateMissing, 
 
         execute(
             "INSERT INTO " . DB_DATABASE . ".sync_log
-             (domain, api_key_id, users_in_payload, users_created, users_updated, users_deactivated, users_reactivated, status, error_message, ip_address, duration_ms)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 'failed', ?, ?, ?)",
-            [$domain, $apiKeyId, $userCount, $created, $updated, $deactivated, $reactivated, $errorMsg, $ipAddress, $durationMs]
+             (domain, api_key_id, users_in_payload, users_created, users_updated, users_deactivated, users_deleted, users_reactivated, status, error_message, ip_address, duration_ms)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'failed', ?, ?, ?)",
+            [$domain, $apiKeyId, $userCount, $created, $updated, $deactivated, $deleted, $reactivated, $errorMsg, $ipAddress, $durationMs]
         );
 
         error_log("Stimma sync error: " . $errorMsg);
@@ -3104,6 +3404,8 @@ function performUserSync(array $users, string $domain, bool $deactivateMissing, 
                 'created' => $created,
                 'updated' => $updated,
                 'deactivated' => $deactivated,
+                'deleted' => $deleted,
+                'deletes_refused' => $deletesRefused,
                 'reactivated' => $reactivated
             ],
             'sync_id' => null,

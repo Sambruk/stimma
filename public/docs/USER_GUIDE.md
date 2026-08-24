@@ -55,14 +55,53 @@ Denna handbok beskriver hur du använder Stimma e-learning plattform. Stimma är
 
 ## Översikt över användarroller
 
-Stimma har fyra användarroller med olika behörigheter:
+Stimma har fem användarroller med olika behörigheter:
 
 | Roll | Beskrivning |
 |------|-------------|
 | **Användare** | Kan ta kurser och spåra sin progress. Standardrollen för alla inloggade |
 | **Redaktör** | Kan skapa och redigera kurser som tilldelats dem |
+| **Läsbehörig** | Kan **se** kursstatistik, diplom och användarinformation inom sin organisation, och exportera underlaget. Kan inte ändra något |
 | **Admin** | Kan hantera alla kurser, användare och inställningar inom sin organisation |
 | **Superadmin** | Fullständig systemåtkomst inklusive AI-inställningar |
+
+### Läsbehörig
+
+Rollen är till för den som ska **följa upp** utbildning utan att förvalta systemet —
+en chef, en HR-funktion eller en utbildningssamordnare. Tidigare krävde den
+uppgiften full administratörsbehörighet, vilket också gav rätt att skapa och
+radera användare, ändra andras roller och styra API-nycklar.
+
+**Läsbehörig kommer åt:**
+
+- **Översikt** och **Kursstatistik** för hela sitt domänscope
+- **Diplom** — kan förhandsgranska, men inte ändra stämpelbilden
+- **Användare** — ser listan med namn, e-post, roller, org-taggar och framsteg
+- **Export till CSV** av både användarlista och statistik
+
+**Läsbehörig kommer inte åt:** kursredigering, lärvägar, taggar, påminnelser,
+API-nycklar, synkverktyg, PUB-avtal eller varumärkesinställningar. Varje skrivande
+åtgärd stoppas på servern, inte bara genom att knappen döljs.
+
+Rollen sätts av en administratör på **Användare**-sidan och kan inte tilldelas via
+AD-synkens API — de tillåtna rollerna där är fortfarande `användare`, `redaktör` och
+`admin`.
+
+### Filtrera på din organisationsdel
+
+På **Statistik**, **Kursstatistik** och **Användare** finns en filterkontroll där du
+kan begränsa vyn till de organisationstaggar **du själv tillhör**. En chef på
+IT-avdelningen kan alltså se just sin avdelning i stället för hela kommunen.
+
+Filtret är valfritt — utan val visas allt inom ditt domänscope, som tidigare.
+Det gäller både **Läsbehörig** och **Admin**, och erbjuder bara dina egna taggar:
+det är en genväg till rätt del av det du redan får se, inte en väg in i andras
+avdelningar. Valet följer med till CSV-exporten, så filen matchar det du tittade på.
+
+> **Om taggar och hierarki:** taggar lagras platt. En synk av
+> `"Kommun/Förvaltning/Avdelning"` skapar tre fristående taggar, inte en hierarki.
+> Filtret matchar därför enskilda taggar — det går inte att välja "allt under
+> Förvaltningen".
 
 ---
 
@@ -784,8 +823,8 @@ Content-Type: application/json
 
 {
   "users": [
-    { "email": "anna@dindoman.se", "name": "Anna Andersson", "role": "student" },
-    { "email": "bo@dindoman.se",   "name": "Bo Bengtsson",   "role": "teacher" }
+    { "email": "anna@dindoman.se", "name": "Anna Andersson", "role": "användare" },
+    { "email": "bo@dindoman.se",   "name": "Bo Bengtsson",   "role": "redaktör" }
   ],
   "deactivate_missing": true
 }
@@ -797,7 +836,12 @@ Content-Type: application/json
 |---|---|---|
 | `email` | Obligatoriskt | Måste tillhöra **nyckelns domän eller någon av dess underdomäner** |
 | `name` | Obligatoriskt | För- och efternamn |
-| `role` | Valfritt | `student` = Användare (standard), `teacher` = Redaktör, `admin` |
+| `role` | Valfritt | `användare` (standard), `redaktör` eller `admin` |
+| `delete` | Valfritt | `true` **raderar kontot permanent**. Då behövs bara `email` på posten |
+
+> **Äldre rollvärden:** `student` och `teacher` accepteras fortfarande och betyder
+> samma sak som `användare` respektive `redaktör`. Ni behöver alltså inte ändra en
+> synk som redan fungerar.
 
 **Domänomfång — nyckeln gäller hela organisationen:**
 
@@ -830,6 +874,37 @@ Matchningen kräver punkt före domänen, så en nyckel för `kommun.se` ger ing
 | Finns i listan, fanns redan | Uppdateras (namn, roll), sätts aktiv |
 | Fanns inaktiv, nu med i listan | Återaktiveras |
 | Saknas i listan (och `deactivate_missing=true`) | Markeras inaktiv |
+| Märkt med `"delete": true` | **Raderas permanent** |
+
+#### Radera en användare
+
+Normalt räcker det att låta personen falla ur listan — då markeras kontot som
+inaktivt och historiken finns kvar. Behöver ni verklig radering, till exempel vid
+en begäran om radering enligt GDPR, märker ni posten:
+
+```json
+{ "users": [ { "email": "anna.svensson@dindoman.se", "delete": true } ] }
+```
+
+> ⚠️ **Raderingen går inte att ångra, och personens diplom raderas med kontot.**
+> Genomförd utbildning går därefter inte att styrka. Vill ni behålla
+> utbildningsbeviset ska ni inaktivera i stället för att radera.
+
+Med kontot försvinner även framsteg, quizsvar, kursanmälningar, org-taggar och
+märken. Signerade **PUB-avtal raderas inte** — de är organisationens handling med
+egen rättslig grund för bevarande, och innehåller alla uppgifter de behöver även
+utan användarkontot.
+
+Att tänka på:
+
+- Adressen måste tillhöra nyckelns domän eller en underdomän, precis som annars.
+- Att radera någon som redan är borta ger inget fel. Synken kan köras om.
+- **Superadmin-konton kan inte raderas via API.** Sådana begäranden nekas och
+  räknas i `deletes_refused` i svaret, så ni ser att de inte gick igenom.
+- En payload som *bara* innehåller raderingsposter inaktiverar inte era övriga
+  användare, trots att `deactivate_missing` är `true` som standard.
+- Flaggan finns bara i API:et. Adminpanelens synkverktyg ignorerar den — där
+  raderar ni via knappen på Användare-sidan.
 
 Superadmin-användares roll ändras aldrig av en synk.
 

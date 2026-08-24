@@ -23,9 +23,10 @@ $userEmail = $_SESSION['user_email'];
 $userDomain = substr(strrchr($userEmail, "@"), 1);
 $isAdmin = $currentUser && $currentUser['is_admin'] == 1;
 $isEditor = $currentUser && $currentUser['is_editor'] == 1;
+$isViewer = $currentUser && $currentUser['is_viewer'] == 1;
 
 // Kontrollera behörighet - måste vara admin eller redaktör
-if (!$isAdmin && !$isEditor) {
+if (!$isAdmin && !$isEditor && !$isViewer) {
     $_SESSION['message'] = 'Du har inte behörighet att exportera statistik.';
     $_SESSION['message_type'] = 'danger';
     header('Location: index.php');

@@ -113,7 +113,7 @@ Behandlingen omfattar:
 |----------|-----------------|-------|--------------|
 | **Kontaktuppgifter** | E-postadress | Registrering | Ja |
 | **Identitetsuppgifter** | Namn | Registrering | Nej |
-| **Kontouppgifter** | Användarroll (student/redaktör/admin), Verifieringsstatus, Senaste inloggning | System | Ja |
+| **Kontouppgifter** | Användarroll (användare/redaktör/läsbehörig/admin), Verifieringsstatus, Senaste inloggning | System | Ja |
 | **Utbildningsuppgifter** | Påbörjade kurser, Slutförda lektioner, Quizresultat, Tid per lektion | Användning | Ja |
 | **Tekniska uppgifter** | IP-adress (i loggar), Tidsstämplar för aktivitet | System | Ja |
 | **Organisationsuppgifter** | E-postdomän (för organisationstillhörighet) | Härlett från e-post | Ja |
@@ -143,7 +143,7 @@ Stimma behandlar inte:
 
 | Kategori | Beskrivning | Uppskattad mängd |
 |----------|-------------|------------------|
-| **Studenter/Deltagare** | Medarbetare eller andra personer som den Personuppgiftsansvarige tilldelar utbildningar | [ANTAL] |
+| **Användare/Deltagare** | Medarbetare eller andra personer som den Personuppgiftsansvarige tilldelar utbildningar | [ANTAL] |
 | **Redaktörer** | Personer med behörighet att skapa och redigera kursinnehåll | [ANTAL] |
 | **Administratörer** | Personer med behörighet att administrera användare och systemet | [ANTAL] |
 
@@ -233,7 +233,7 @@ g) Inte överföra personuppgifter till tredjeland utan godkännande.
 |--------|-------------|
 | **Kryptering vid överföring** | All kommunikation sker över HTTPS/TLS |
 | **Säker autentisering** | E-postbaserad inloggning med tidsbegränsade engångslänkar |
-| **Åtkomstkontroll** | Rollbaserad behörighetsstyrning (student, redaktör, admin) |
+| **Åtkomstkontroll** | Rollbaserad behörighetsstyrning (användare, redaktör, läsbehörig, admin) |
 | **Loggning** | Loggning av säkerhetsrelevanta händelser |
 | **Brandvägg** | Nätverksskydd mot obehörig åtkomst |
 | **Säkerhetskopiering** | Daglig backup av databas med krypterad lagring |

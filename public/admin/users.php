@@ -21,21 +21,43 @@ if (!isLoggedIn()) {
 }
 
 // Hämta aktuell användares information
-$currentUser = queryOne("SELECT id, email, role, is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
+$currentUser = queryOne("SELECT id, email, role, is_admin, is_editor, is_viewer FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
 $currentUserDomain = substr(strrchr($currentUser['email'], "@"), 1);
 $isSuperAdmin = $currentUser['role'] === 'super_admin';
 $isCurrentUserAdmin = $currentUser['is_admin'] == 1;
+// Läsbehörig får se användarlistan inom sitt domänscope men inte ändra något.
+// $canManageUsers grindar varje skrivande åtgärd och varje knapp nedan.
+$isViewer = $currentUser['is_viewer'] == 1;
+$canManageUsers = $isSuperAdmin || $isCurrentUserAdmin;
 
 // Scope: huvuddomän-admins får hantera användare på alla orgens domäner;
 // sub-domän-admins bara sin egen domän. Begränsar både listning och
 // behörighetscheckar för actions nedan.
 $adminScopeDomains = getEffectiveOrgScopeDomains($currentUser['email']);
 
-// Kontrollera att användaren har behörighet att hantera användare
-if (!$isSuperAdmin && !$isCurrentUserAdmin) {
+// Valfritt filter på den inloggades egna org-taggar — samma kontroll som på
+// statistiksidorna, så att en chef kan begränsa listan till sin avdelning.
+$orgTagFilter = getOwnOrgTagFilter($currentUser['id']);
+$availableOrgTags = $orgTagFilter['available'];
+$selectedOrgTags = $orgTagFilter['selected'];
+$orgTagFilterQs = buildOrgTagFilterQuery($selectedOrgTags);
+$orgTagClauseUsers = buildOrgTagFilterClause($selectedOrgTags, 'u.id');
+
+// Kontrollera att användaren har behörighet att se användarsidan
+if (!$canManageUsers && !$isViewer) {
     $_SESSION['message'] = 'Du har inte behörighet att hantera användare.';
     $_SESSION['message_type'] = 'danger';
     header('Location: index.php');
+    exit;
+}
+
+// Alla skrivande åtgärder kräver hanteringsrätt. Grinden ligger här, före
+// varje enskild action-hanterare, så att en läsbehörig inte kan nå dem genom
+// att posta formulärdata direkt — knapparna döljs i vyn, men det är inte skyddet.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$canManageUsers) {
+    $_SESSION['message'] = 'Din behörighet är läsande. Du kan inte ändra användare.';
+    $_SESSION['message_type'] = 'danger';
+    header('Location: users.php');
     exit;
 }
 
@@ -77,42 +99,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' &&
         exit;
     }
 
-    // Börja en transaktion för att säkerställa att både användare och framsteg raderas
-    execute("START TRANSACTION");
+    // Raderingen görs av deleteUserCompletely() i include/functions.php — samma
+    // funktion som synk-API:ets "delete"-flagga använder. Tidigare fanns logiken
+    // bara här, och den hann missa quiz_answers.
+    $deleteResult = deleteUserCompletely($userId);
 
-    try {
-        // Komplett cascade — rensa alla tabeller som refererar user_id utan FK.
-        // (public_course_access rensas via FK ON DELETE CASCADE på users.)
-        // Lärvägar behöver ingen rad här: de tilldelas implicit och äger ingen
-        // per-användardata. learning_paths.created_by nollställs av
-        // FK ON DELETE SET NULL, så lärvägen överlever sin skapare.
-        execute("DELETE FROM " . DB_DATABASE . ".progress WHERE user_id = ?", [$userId]);
-        execute("DELETE FROM " . DB_DATABASE . ".course_enrollments WHERE user_id = ?", [$userId]);
-        execute("DELETE FROM " . DB_DATABASE . ".sequential_lesson_schedule WHERE user_id = ?", [$userId]);
-        try { execute("DELETE FROM " . DB_DATABASE . ".sequential_reminder_log WHERE user_id = ?", [$userId]); } catch (Exception $e) {}
-        try { execute("DELETE FROM " . DB_DATABASE . ".reminder_log WHERE user_id = ?", [$userId]); } catch (Exception $e) {}
-        try { execute("DELETE FROM " . DB_DATABASE . ".remember_tokens WHERE user_id = ?", [$userId]); } catch (Exception $e) {}
-        try { execute("DELETE FROM " . DB_DATABASE . ".user_org_tags WHERE user_id = ?", [$userId]); } catch (Exception $e) {}
-
-        // Radera användaren (FK cascades public_course_access)
-        execute("DELETE FROM " . DB_DATABASE . ".users WHERE id = ?", [$userId]);
-
-        // Commit transaktionen
-        execute("COMMIT");
-
-        // Logga borttagningen
+    if ($deleteResult['success']) {
         logActivity($_SESSION['user_email'], "Raderade användare med ID: " . $userId . " (E-post: " . $userEmail . ")");
 
         $_SESSION['message'] = "Användaren och tillhörande framsteg har raderats.";
         $_SESSION['message_type'] = "success";
-    } catch (Exception $e) {
-        // Rollback vid fel
-        execute("ROLLBACK");
-
+    } else {
         $_SESSION['message'] = "Ett fel uppstod vid radering av användaren.";
         $_SESSION['message_type'] = "danger";
-        // Log the actual error for debugging (not exposed to user)
-        error_log("User deletion error: " . $e->getMessage());
     }
 
     // Omdirigera för att undvika omladdningsproblem
@@ -210,6 +209,48 @@ if (isset($_POST['action']) && $_POST['action'] === 'toggle_editor' && isset($_P
     }
 
     // Omdirigera för att undvika omladdningsproblem
+    header('Location: users.php');
+    exit;
+}
+
+// Hantera ändring av läsbehörig-status
+if (isset($_POST['action']) && $_POST['action'] === 'toggle_viewer' && isset($_POST['user_id'])) {
+    $userId = (int)$_POST['user_id'];
+    $newIsViewer = (int)$_POST['is_viewer'];
+
+    $targetUser = queryOne("SELECT email FROM " . DB_DATABASE . ".users WHERE id = ?", [$userId]);
+    $targetUserDomain = $targetUser ? substr(strrchr($targetUser['email'], "@"), 1) : '';
+
+    // Samma domängräns som för admin- och redaktörsrollen: superadmin kan ändra
+    // alla, en admin bara inom sin organisations domäner.
+    if (!$isSuperAdmin && !in_array($targetUserDomain, $adminScopeDomains, true)) {
+        $_SESSION['message'] = "Du kan endast ändra läsbehörighet för användare i din egen organisation.";
+        $_SESSION['message_type'] = "danger";
+        header('Location: users.php');
+        exit;
+    }
+
+    try {
+        execute("UPDATE " . DB_DATABASE . ".users SET is_viewer = ? WHERE id = ?", [$newIsViewer, $userId]);
+
+        logActivity($_SESSION['user_email'], "Ändrade läsbehörig-status för användare med ID: " . $userId . " till " . ($newIsViewer ? "läsbehörig" : "icke-läsbehörig"));
+
+        $notificationSent = sendPermissionChangeNotification(
+            $targetUser['email'],
+            'viewer',
+            (bool)$newIsViewer,
+            $_SESSION['user_email']
+        );
+
+        $_SESSION['message'] = $notificationSent
+            ? "Användarens läsbehörighet har uppdaterats och en notifikation har skickats."
+            : "Användarens läsbehörighet har uppdaterats, men e-postnotifikationen kunde inte skickas.";
+        $_SESSION['message_type'] = "success";
+    } catch (Exception $e) {
+        $_SESSION['message'] = "Ett fel uppstod vid uppdatering av läsbehörighet: " . $e->getMessage();
+        $_SESSION['message_type'] = "danger";
+    }
+
     header('Location: users.php');
     exit;
 }
@@ -345,10 +386,10 @@ if ($isSuperAdmin && empty($selectedDomain)) {
                 FROM " . DB_DATABASE . ".user_org_tags uot WHERE uot.user_id = u.id) as org_tags
         FROM " . DB_DATABASE . ".users u
         LEFT JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id AND p.status = 'completed'
-        WHERE 1=1 $syncWhere
+        WHERE {$orgTagClauseUsers['fragment']} $syncWhere
         GROUP BY u.id
         ORDER BY user_domain ASC, u.email ASC
-    ");
+    ", $orgTagClauseUsers['params']);
 } elseif ($isSuperAdmin && !empty($selectedDomain)) {
     // Superadmin med domänfilter
     $users = queryAll("
@@ -359,13 +400,16 @@ if ($isSuperAdmin && empty($selectedDomain)) {
                 FROM " . DB_DATABASE . ".user_org_tags uot WHERE uot.user_id = u.id) as org_tags
         FROM " . DB_DATABASE . ".users u
         LEFT JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id AND p.status = 'completed'
-        WHERE u.email LIKE ? $syncWhere
+        WHERE u.email LIKE ? AND {$orgTagClauseUsers['fragment']} $syncWhere
         GROUP BY u.id
         ORDER BY user_domain ASC, u.email ASC
-    ", ['%@' . $selectedDomain]);
+    ", array_merge(['%@' . $selectedDomain], $orgTagClauseUsers['params']));
 } else {
     // Vanlig admin: filtrera på alla domäner i orgen, sortera på domän + e-post
-    $userEmailClause = buildEmailDomainInClause($filterDomains, 'u.email');
+    $userEmailClause = combineSqlClauses(
+        buildEmailDomainInClause($filterDomains, 'u.email'),
+        $orgTagClauseUsers
+    );
     $users = queryAll("
         SELECT u.*,
                COUNT(p.id) as completed_lessons,
@@ -408,10 +452,12 @@ require_once 'include/header.php';
                 <div class="card-header py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="d-flex align-items-center gap-2">
                         <h6 class="m-0 font-weight-bold text-muted me-3">Användare <span class="badge bg-secondary"><?= count($users) ?></span></h6>
+                        <?php if ($canManageUsers): ?>
                         <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addUserModal">
                             + Användare
                         </button>
-                        <a href="export_users.php?<?= $isSuperAdmin && !empty($selectedDomain) ? 'domain=' . urlencode($selectedDomain) : '' ?><?= !empty($syncFilter) ? ($isSuperAdmin && !empty($selectedDomain) ? '&' : '') . 'sync=' . urlencode($syncFilter) : '' ?>"
+                        <?php endif; ?>
+                        <a href="export_users.php?<?= $isSuperAdmin && !empty($selectedDomain) ? 'domain=' . urlencode($selectedDomain) : '' ?><?= !empty($syncFilter) ? ($isSuperAdmin && !empty($selectedDomain) ? '&' : '') . 'sync=' . urlencode($syncFilter) : '' ?><?= $orgTagFilterQs ?>"
                            class="btn btn-outline-success btn-sm">
                             <i class="bi bi-download me-1"></i>Exportera CSV
                         </a>
@@ -438,6 +484,34 @@ require_once 'include/header.php';
                                 <option value="inactive" <?= $syncFilter === 'inactive' ? 'selected' : '' ?>>Inaktiva i synk</option>
                             </select>
                         </div>
+                        <?php if (!empty($availableOrgTags)): ?>
+                        <form method="GET" class="mb-0">
+                            <?php if ($isSuperAdmin && !empty($selectedDomain)): ?>
+                            <input type="hidden" name="domain" value="<?= htmlspecialchars($selectedDomain) ?>">
+                            <?php endif; ?>
+                            <?php if (!empty($syncFilter)): ?>
+                            <input type="hidden" name="sync" value="<?= htmlspecialchars($syncFilter) ?>">
+                            <?php endif; ?>
+                            <div class="dropdown">
+                                <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" title="Filtrera på din organisationstillhörighet">
+                                    <i class="bi bi-diagram-3 me-1"></i><?= empty($selectedOrgTags) ? 'Hela domänen' : (count($selectedOrgTags) . ' valda') ?>
+                                </button>
+                                <div class="dropdown-menu dropdown-menu-end p-2" style="min-width: 260px; max-height: 320px; overflow:auto;">
+                                    <div class="small text-muted px-1 mb-1">Visa endast användare i din organisationsdel:</div>
+                                    <?php foreach ($availableOrgTags as $t): ?>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="org_tags[]" value="<?= htmlspecialchars($t) ?>" id="utagf_<?= md5($t) ?>" <?= in_array($t, $selectedOrgTags, true) ? 'checked' : '' ?>>
+                                        <label class="form-check-label" for="utagf_<?= md5($t) ?>"><?= htmlspecialchars($t) ?></label>
+                                    </div>
+                                    <?php endforeach; ?>
+                                    <div class="d-flex gap-2 mt-2 border-top pt-2">
+                                        <button type="submit" class="btn btn-primary btn-sm flex-fill">Tillämpa</button>
+                                        <a href="users.php" class="btn btn-outline-secondary btn-sm">Rensa</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                        <?php endif; ?>
                         <div class="input-group" style="width: 250px;">
                             <span class="input-group-text bg-light border-0">
                                 <i class="bi bi-search"></i>
@@ -457,6 +531,7 @@ require_once 'include/header.php';
                                     <th>Org-taggar</th>
                                     <th>Admin</th>
                                     <th>Redaktör</th>
+                                    <th>Läsbehörig</th>
                                     <th>Framsteg</th>
                                     <th>Åtgärder</th>
                                 </tr>
@@ -489,7 +564,7 @@ require_once 'include/header.php';
                                                     'super_admin' => ['text' => 'Superadmin', 'class' => 'bg-danger'],
                                                     'admin' => ['text' => 'Admin', 'class' => 'bg-primary'],
                                                     'teacher' => ['text' => 'Redaktör', 'class' => 'bg-info'],
-                                                    'student' => ['text' => 'Användare', 'class' => 'bg-secondary']
+                                                    'student' => ['text' => 'Användare', 'class' => 'bg-secondary'] // lagrat värde, visas som Användare
                                                 ];
                                                 $role = $user['role'] ?? 'student';
                                                 $roleInfo = $roleLabels[$role] ?? $roleLabels['student'];
@@ -550,6 +625,25 @@ require_once 'include/header.php';
                                                 <?php endif; ?>
                                             </td>
                                             <td>
+                                                <?php if ($canToggleAdmin): ?>
+                                                <form method="post" class="d-inline" onsubmit="return confirm('Är du säker på att du vill ändra läsbehörighet för denna användare?');">
+                                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                                                    <input type="hidden" name="action" value="toggle_viewer">
+                                                    <input type="hidden" name="user_id" value="<?= $user['id'] ?>">
+                                                    <input type="hidden" name="is_viewer" value="<?= $user['is_viewer'] ? '0' : '1' ?>">
+                                                    <button type="submit" class="btn btn-sm <?= $user['is_viewer'] ? 'btn-success' : 'btn-secondary' ?>"
+                                                            title="Läsbehörig ser statistik, diplom och användare i sin organisation, men kan inte ändra något">
+                                                        <i class="bi <?= $user['is_viewer'] ? 'bi-check-circle-fill' : 'bi-circle' ?>"></i>
+                                                        <?= $user['is_viewer'] ? 'Läsbehörig' : 'Ej läsbehörig' ?>
+                                                    </button>
+                                                </form>
+                                                <?php else: ?>
+                                                <span class="badge <?= $user['is_viewer'] ? 'bg-success' : 'bg-secondary' ?>">
+                                                    <?= $user['is_viewer'] ? 'Läsbehörig' : 'Ej läsbehörig' ?>
+                                                </span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
                                                 <?php
                                                 $completedLessons = $user['completed_lessons'] ?? 0;
                                                 $progressPercent = $totalLessonsInSystem > 0 ? round(($completedLessons / $totalLessonsInSystem) * 100) : 0;
@@ -587,7 +681,7 @@ require_once 'include/header.php';
                                     <?php endforeach; ?>
                                 <?php else: ?>
                                     <tr>
-                                        <td colspan="8" class="text-center">Inga användare hittades</td>
+                                        <td colspan="9" class="text-center">Inga användare hittades</td>
                                     </tr>
                                 <?php endif; ?>
                             </tbody>
@@ -599,7 +693,10 @@ require_once 'include/header.php';
     </div>
 </div>
 
-<!-- Modal för att lägga till användare -->
+<!-- Modal för att lägga till användare. Renderas inte alls för läsbehöriga:
+     serverns POST-grind stoppar dem ändå, men ett dolt formulär i DOM:en är
+     bara förvirrande. -->
+<?php if ($canManageUsers): ?>
 <div class="modal fade" id="addUserModal" tabindex="-1" aria-labelledby="addUserModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -657,6 +754,7 @@ require_once 'include/header.php';
         </div>
     </div>
 </div>
+<?php endif; ?>
 
 <?php
 // Hämta CSRF-token för användning i JavaScript

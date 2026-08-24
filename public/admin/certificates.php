@@ -13,11 +13,23 @@ require_once '../include/auth.php';
 // Include centralized authentication and authorization check
 require_once 'include/auth_check.php';
 
-// Endast administratörer kan hantera diplom
-if (!$isAdmin) {
-    $_SESSION['message'] = 'Du har inte behörighet att hantera diplom.';
+// Administratörer hanterar diplom; läsbehöriga får se och förhandsgranska dem.
+// $isViewer sätts i include/auth_check.php.
+if (!$isAdmin && !$isViewer) {
+    $_SESSION['message'] = 'Du har inte behörighet att se diplom.';
     $_SESSION['message_type'] = 'warning';
     redirect('admin/index.php');
+    exit;
+}
+
+// Skrivande åtgärder (ladda upp/ta bort stämpelbild) kräver admin. Grinden ligger
+// före POST-hanteraren nedan så att en läsbehörig inte kommer förbi genom att
+// posta direkt — att dölja formuläret i vyn är inte skyddet.
+$canManageCertificates = $isAdmin;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$canManageCertificates) {
+    $_SESSION['message'] = 'Din behörighet är läsande. Du kan inte ändra diplominställningar.';
+    $_SESSION['message_type'] = 'danger';
+    redirect('admin/certificates.php');
     exit;
 }
 
@@ -200,6 +212,7 @@ require_once 'include/header.php';
                                                          class="img-fluid rounded border"
                                                          style="max-height: 150px;">
                                                 </div>
+                                                <?php if ($canManageCertificates): ?>
                                                 <form method="post" class="mb-3">
                                                     <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
                                                     <input type="hidden" name="action" value="remove_image">
@@ -210,7 +223,9 @@ require_once 'include/header.php';
                                                 </form>
                                                 <hr>
                                                 <?php endif; ?>
+                                                <?php endif; ?>
 
+                                                <?php if ($canManageCertificates): ?>
                                                 <form method="post" enctype="multipart/form-data">
                                                     <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
                                                     <input type="hidden" name="action" value="upload_image">
@@ -227,6 +242,12 @@ require_once 'include/header.php';
                                                         <i class="bi bi-upload me-1"></i>Ladda upp
                                                     </button>
                                                 </form>
+                                                <?php else: ?>
+                                                <p class="text-muted small mb-0">
+                                                    <i class="bi bi-eye me-1"></i>Din behörighet är läsande — du kan
+                                                    förhandsgranska diplom men inte ändra stämpelbilden.
+                                                </p>
+                                                <?php endif; ?>
                                             </div>
                                         </div>
                                     </div>

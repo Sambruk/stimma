@@ -103,6 +103,7 @@ if ($result['success']) {
         'created' => $result['summary']['created'],
         'updated' => $result['summary']['updated'],
         'deactivated' => $result['summary']['deactivated'],
+        'deleted' => $result['summary']['deleted'],
         'reactivated' => $result['summary']['reactivated']
     ]);
 

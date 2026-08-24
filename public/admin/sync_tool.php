@@ -86,7 +86,7 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
 .sync-log .log-success { border-left: 3px solid #198754; }
 .sync-log .log-error { border-left: 3px solid #dc3545; }
 .sync-log .log-info { border-left: 3px solid #0d6efd; }
-.badge-role-student { background-color: #6c757d; }
+.badge-role-anvandare { background-color: #6c757d; }
 .badge-role-teacher { background-color: #0dcaf0; color: #000; }
 .badge-role-admin { background-color: #0d6efd; }
 .user-row-editing { background-color: #fff3cd !important; }
@@ -222,7 +222,7 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
                     <div class="mb-3">
                         <label for="userRole" class="form-label">Roll</label>
                         <select id="userRole" class="form-select form-select-sm">
-                            <option value="student">Användare</option>
+                            <option value="användare">Användare</option>
                             <option value="teacher">Redaktör</option>
                             <option value="admin">Admin</option>
                         </select>
@@ -412,10 +412,11 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
         userTableBody.closest('.table-responsive').style.display = users.length === 0 ? 'none' : '';
 
         const roleBadge = (role) => ({
-            student: '<span class="badge badge-role-student">Användare</span>',
+            'användare': '<span class="badge badge-role-anvandare">Användare</span>',
+            student: '<span class="badge badge-role-anvandare">Användare</span>',
             teacher: '<span class="badge badge-role-teacher">Redaktör</span>',
             admin: '<span class="badge badge-role-admin">Admin</span>'
-        }[role] || '<span class="badge badge-role-student">Användare</span>');
+        }[role] || '<span class="badge badge-role-anvandare">Användare</span>');
 
         userTableBody.innerHTML = filtered.map(u => `
             <tr data-idx="${u._idx}" class="${parseInt(editIndexInput.value) === u._idx ? 'user-row-editing' : ''}">
@@ -474,7 +475,7 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
         editIndexInput.value = idx;
         $('#userEmail').value = u.email;
         $('#userName').value = u.name;
-        $('#userRole').value = u.role || 'student';
+        $('#userRole').value = u.role || 'användare';
         $('#userOrg').value = u.organization || '';
         formTitle.innerHTML = '<i class="bi bi-pencil me-2"></i>Redigera användare';
         formCard.classList.add('editing');
@@ -554,7 +555,7 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
         const dataLines = hasHeader ? lines.slice(1) : lines;
         const parsed = dataLines.map(line => {
             const cols = line.split(delim).map(c => c.trim().replace(/^["']|["']$/g, ''));
-            return {email: cols[0] || '', name: cols[1] || '', role: cols[2] || 'student', organization: cols[3] || ''};
+            return {email: cols[0] || '', name: cols[1] || '', role: cols[2] || 'användare', organization: cols[3] || ''};
         }).filter(u => u.email);
 
         const preview = parsed.slice(0, 5);
@@ -585,7 +586,7 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
             return {
                 email: (cols[0] || '').toLowerCase(),
                 name: cols[1] || '',
-                role: normalizeRole(cols[2] || 'student'),
+                role: normalizeRole(cols[2] || 'användare'),
                 organization: cols[3] || ''
             };
         }).filter(u => u.email && u.email.includes('@'));
@@ -615,10 +616,11 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
     function normalizeRole(r) {
         r = r.toLowerCase().trim();
         // Acceptera både nya etiketter (redaktör/användare) och äldre (lärare/student)
-        // samt de tekniska API-värdena vid CSV-import.
+        // samt de tekniska API-värdena vid CSV-import. Allt okänt blir Användare,
+        // som är den minst behörighetsgivande rollen.
         if (r === 'redaktör' || r === 'redaktor' || r === 'lärare' || r === 'larare' || r === 'teacher') return 'teacher';
-        if (r === 'admin' || r === 'administrator') return 'admin';
-        return 'student';
+        if (r === 'admin' || r === 'administratör' || r === 'administrator') return 'admin';
+        return 'användare';
     }
 
     function downloadSampleCsv() {
@@ -705,7 +707,7 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
         const mappedUsers = users.map(u => ({
             email: u.email,
             name: u.name,
-            role: u.role || 'student',
+            role: u.role || 'användare',
             organization: u.organization || ''
         }));
 

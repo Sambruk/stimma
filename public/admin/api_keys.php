@@ -676,7 +676,7 @@ Authorization: Bearer stm_din_api_nyckel_har</code></pre>
     {
       "email": "anna.svensson@domän.se",
       "name": "Anna Svensson",
-      "role": "teacher",
+      "role": "redaktör",
       "organization": "Kommun/Förvaltning/Avdelning"
     }
   ]
@@ -688,8 +688,9 @@ Authorization: Bearer stm_din_api_nyckel_har</code></pre>
                     <tbody>
                         <tr><td><code>email</code></td><td>string</td><td>Ja</td><td>E-postadress på nyckelns domän eller någon av dess underdomäner</td></tr>
                         <tr><td><code>name</code></td><td>string</td><td>Ja</td><td>Användarens namn</td></tr>
-                        <tr><td><code>role</code></td><td>string</td><td>Nej</td><td><code>student</code> = Användare (standard), <code>teacher</code> = Redaktör, <code>admin</code></td></tr>
+                        <tr><td><code>role</code></td><td>string</td><td>Nej</td><td><code>användare</code> (standard), <code>redaktör</code> eller <code>admin</code>. De äldre värdena <code>student</code> och <code>teacher</code> fungerar fortfarande</td></tr>
                         <tr><td><code>organization</code></td><td>string</td><td>Nej</td><td>Organisationshierarki separerad med / (t.ex. "Kommun/Förvaltning/Avdelning")</td></tr>
+                        <tr><td><code>delete</code></td><td>bool</td><td>Nej</td><td><strong>Raderar användaren permanent.</strong> Endast <code>email</code> behöver anges på en sådan post</td></tr>
                     </tbody>
                 </table>
 
@@ -705,6 +706,25 @@ Authorization: Bearer stm_din_api_nyckel_har</code></pre>
                     <code>kommun.se</code>-användare markeras användarna på <code>utb.kommun.se</code> som inaktiva,
                     eftersom de saknas i listan. Sätt <code>"deactivate_missing": false</code> om ni behöver synka
                     en del i taget.
+                </div>
+
+                <h6>Radera en användare</h6>
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    Sätt <code>"delete": true</code> på en post för att <strong>radera kontot permanent</strong>
+                    i stället för att inaktivera det:
+                    <pre class="bg-light p-2 rounded mt-2 mb-2"><code>{"users": [{"email": "anna.svensson@domän.se", "delete": true}]}</code></pre>
+                    <ul class="mb-0">
+                        <li><strong>Raderingen går inte att ångra.</strong> Personens <strong>diplom raderas med kontot</strong> —
+                            genomförd utbildning går inte att styrka i efterhand. Inaktivera i stället om utbildningsbeviset ska finnas kvar.</li>
+                        <li>Framsteg, quizsvar, kursanmälningar, org-taggar och märken följer med.</li>
+                        <li>Signerade PUB-avtal raderas <em>inte</em> — de är organisationens handling med egen rättslig grund.</li>
+                        <li>Adressen måste tillhöra nyckelns domän eller en underdomän, precis som vid vanlig synk.</li>
+                        <li>Superadmin-konton kan inte raderas via API. Sådana begäranden räknas i <code>deletes_refused</code>.</li>
+                        <li>Att radera någon som redan är borta ger inget fel — synken kan köras om utan risk.</li>
+                        <li>En payload som bara innehåller raderingsposter inaktiverar <em>inte</em> övriga användare,
+                            trots att <code>deactivate_missing</code> är <code>true</code> som standard.</li>
+                    </ul>
                 </div>
 
                 <h6>Beteende</h6>

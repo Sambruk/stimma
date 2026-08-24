@@ -506,7 +506,7 @@ function computeCourseStatus(array $prog, $hasCert, $isRegistered) {
 }
 
 /**
- * Etikett + ikon för en status. Håller studentvy och adminvy synkade.
+ * Etikett + ikon för en status. Håller användarvy och adminvy synkade.
  *
  * @param string $status
  * @return array ['label'=>string,'icon'=>string,'class'=>string]
@@ -525,11 +525,11 @@ function learningPathStatusMeta($status) {
 }
 
 // =============================================================================
-// Sammansättning — studentvy
+// Sammansättning — användarvy
 // =============================================================================
 
 /**
- * Studentvyns enda ingång. Returnerar användarens synliga lärvägar med status
+ * Användarvyns enda ingång. Returnerar användarens synliga lärvägar med status
  * per kurs och samlad procent.
  *
  * Sex queries totalt oavsett antal lärvägar och kurser:
@@ -731,7 +731,7 @@ function countUsersForDomains(array $domains) {
 /**
  * Statusmatris för adminvyn: M användare × lärvägens kurser.
  *
- * Till skillnad från studentvyn filtreras INGA kurser bort — adminen ska se
+ * Till skillnad från användarvyn filtreras INGA kurser bort — adminen ska se
  * hela lärvägen som den är definierad. Fyra queries oavsett antal användare.
  *
  * @param array $courses Rader från getLearningPathCourses()

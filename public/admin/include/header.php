@@ -16,9 +16,10 @@ if (!isLoggedIn()) {
 }
 
 // Hämta användarinformation för att visa admin/redaktör status i menyn
-$user = queryOne("SELECT is_admin, is_editor, role FROM " . DB_DATABASE . ".users WHERE email = ?", [$_SESSION['user_email']]);
+$user = queryOne("SELECT is_admin, is_editor, is_viewer, role FROM " . DB_DATABASE . ".users WHERE email = ?", [$_SESSION['user_email']]);
 $isAdmin = $user && $user['is_admin'] == 1;
 $isEditor = $user && $user['is_editor'] == 1;
+$isViewer = $user && $user['is_viewer'] == 1;
 $isSuperAdmin = $user && $user['role'] === 'super_admin';
 
 // Hämta användarens domän och PUB-avtalsstatus (org-scope om grupperad)
@@ -134,12 +135,15 @@ $current_page = basename($_SERVER['PHP_SELF']);
         </div>
         <div class="d-flex flex-column h-100">
             <ul class="nav flex-column">
-                <?php if ($isAdmin || $isEditor): ?>
+                <?php if ($isAdmin || $isEditor || $isViewer): ?>
                 <li class="nav-item">
                     <a href="index.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'index.php' ? 'active' : '' ?>">
                         <i class="bi bi-graph-up me-2"></i> Översikt
                     </a>
                 </li>
+                <?php endif; ?>
+                <?php /* Kursbyggande — läsbehörig redigerar inget och ska inte se dessa. */ ?>
+                <?php if ($isAdmin || $isEditor): ?>
                 <li class="nav-item">
                     <a href="courses.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= ($current_page === 'courses.php' || $current_page === 'lessons.php') ? 'active' : '' ?>">
                         <i class="bi bi-journal-text me-2"></i> Kurser
@@ -160,11 +164,17 @@ $current_page = basename($_SERVER['PHP_SELF']);
                         <i class="bi bi-tags me-2"></i> Taggar
                     </a>
                 </li>
+                <?php endif; ?>
+                <?php if ($isAdmin || $isEditor || $isViewer): ?>
                 <li class="nav-item">
                     <a href="course_stats.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'course_stats.php' ? 'active' : '' ?>">
                         <i class="bi bi-diagram-3 me-2"></i> Kursstatistik
                     </a>
                 </li>
+                <?php endif; ?>
+                <?php /* Diplom kräver admin eller läsbehörig. Redaktören hade länken men
+                        blev utkastad av behörighetskontrollen i certificates.php. */ ?>
+                <?php if ($isAdmin || $isViewer): ?>
                 <li class="nav-item">
                     <a href="certificates.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'certificates.php' ? 'active' : '' ?>">
                         <i class="bi bi-award me-2"></i> Diplom
@@ -178,12 +188,14 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     </a>
                 </li>
                 <?php endif; ?>
-                <?php if ($isAdmin || $isSuperAdmin): ?>
+                <?php if ($isAdmin || $isSuperAdmin || $isViewer): ?>
                 <li class="nav-item">
                     <a href="users.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'users.php' ? 'active' : '' ?>">
                         <i class="bi bi-people me-2"></i> Användare
                     </a>
                 </li>
+                <?php endif; ?>
+                <?php if ($isAdmin || $isSuperAdmin): ?>
                 <li class="nav-item">
                     <a href="organization_icon.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'organization_icon.php' ? 'active' : '' ?>">
                         <i class="bi bi-palette me-2"></i> Varumärke

@@ -21,13 +21,14 @@ if (!isLoggedIn()) {
 }
 
 // Hämta aktuell användares information
-$currentUser = queryOne("SELECT id, email, role, is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
+$currentUser = queryOne("SELECT id, email, role, is_admin, is_editor, is_viewer FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
 $currentUserDomain = substr(strrchr($currentUser['email'], "@"), 1);
 $isSuperAdmin = $currentUser['role'] === 'super_admin';
 $isCurrentUserAdmin = $currentUser['is_admin'] == 1;
 
 // Kontrollera behörighet
-if (!$isSuperAdmin && !$isCurrentUserAdmin) {
+$isViewer = $currentUser['is_viewer'] == 1;
+if (!$isSuperAdmin && !$isCurrentUserAdmin && !$isViewer) {
     $_SESSION['message'] = 'Du har inte behörighet att exportera användare.';
     $_SESSION['message_type'] = 'danger';
     header('Location: users.php');
@@ -51,6 +52,11 @@ if ($isSuperAdmin && isset($_GET['domain']) && $_GET['domain'] !== '') {
 }
 
 // Hämta användare
+// Taggfiltret från users.php förs vidare hit, annars innehåller CSV:n andra rader
+// än den lista exporten utgick från.
+$orgTagFilter = getOwnOrgTagFilter($currentUser['id']);
+$orgTagClauseUsers = buildOrgTagFilterClause($orgTagFilter['selected'], 'u.id');
+
 if ($isSuperAdmin && empty($selectedDomain)) {
     $users = queryAll("
         SELECT u.email, u.name, u.role, u.is_admin, u.is_editor, u.is_synced, u.sync_status,
@@ -61,10 +67,10 @@ if ($isSuperAdmin && empty($selectedDomain)) {
                 FROM " . DB_DATABASE . ".user_org_tags uot WHERE uot.user_id = u.id) as org_tags
         FROM " . DB_DATABASE . ".users u
         LEFT JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id AND p.status = 'completed'
-        WHERE 1=1 $syncWhere
+        WHERE {$orgTagClauseUsers['fragment']} $syncWhere
         GROUP BY u.id
         ORDER BY user_domain ASC, u.email ASC
-    ");
+    ", $orgTagClauseUsers['params']);
     $filenameDomain = 'alla-organisationer';
 } else {
     $filterDomain = $isSuperAdmin ? $selectedDomain : $currentUserDomain;
@@ -77,10 +83,10 @@ if ($isSuperAdmin && empty($selectedDomain)) {
                 FROM " . DB_DATABASE . ".user_org_tags uot WHERE uot.user_id = u.id) as org_tags
         FROM " . DB_DATABASE . ".users u
         LEFT JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id AND p.status = 'completed'
-        WHERE u.email LIKE ? $syncWhere
+        WHERE u.email LIKE ? AND {$orgTagClauseUsers['fragment']} $syncWhere
         GROUP BY u.id
         ORDER BY u.email ASC
-    ", ['%@' . $filterDomain]);
+    ", array_merge(['%@' . $filterDomain], $orgTagClauseUsers['params']));
     $filenameDomain = $filterDomain;
 }
 
@@ -119,7 +125,7 @@ $roleLabels = [
     'super_admin' => 'Superadmin',
     'admin' => 'Admin',
     'teacher' => 'Redaktör',
-    'student' => 'Användare'
+    'student' => 'Användare' // lagrat värde, visas som Användare
 ];
 
 foreach ($users as $user) {

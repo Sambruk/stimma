@@ -133,6 +133,10 @@ foreach ($users as $i => $u) {
         continue;
     }
     $u['email'] = $email; // normalisera
+    // Raderingsflaggan är en API-funktion och gäller inte här. Synkverktyget matas
+    // från en uppladdad lista, där en felaktig kolumn annars hade kunnat radera
+    // konton förbi adminpanelens egna spärrar (t.ex. "radera inte dig själv").
+    unset($u['delete']);
     $grouped[$emailDomain][] = $u;
 }
 

@@ -122,6 +122,11 @@ function domainCoversEmailDomain($keyDomain, $emailDomain) {
  * Kontrollerar att varje användare har giltig e-post som matchar domänen,
  * giltig roll, och att det inte finns dubbletter.
  *
+ * Poster märkta med "delete": true är begäran om radering. För dem krävs bara
+ * e-postadressen — källsystemet har sällan namnet kvar för någon som redan
+ * lämnat organisationen, och att kräva det hade gjort flaggan oanvändbar i just
+ * det läge den finns för. Domänkontrollen gäller däremot fullt ut.
+ *
  * @param array $users Användararray från request body
  * @param string $domain Domänen som API-nyckeln tillhör
  * @return array ['valid' => bool, 'errors' => [...]]
@@ -161,15 +166,20 @@ function validateSyncUsers($users, $domain) {
         }
         $seenEmails[$email] = true;
 
+        // Raderingsposter: e-posten räcker, resten av fälten ignoreras.
+        if (isUserSyncDeleteRequest($user)) {
+            continue;
+        }
+
         // Validera namn
         if (empty($user['name'])) {
             $errors[] = "Användare #{$idx} ({$email}): namn saknas.";
         }
 
-        // Validera roll
-        $allowedRoles = ['student', 'teacher', 'admin'];
-        if (!empty($user['role']) && !in_array($user['role'], $allowedRoles)) {
-            $errors[] = "Användare #{$idx} ({$email}): ogiltig roll '{$user['role']}'. Tillåtna: student, teacher, admin.";
+        // Validera roll. normalizeSyncRole() avgör vad som är giltigt, så att
+        // valideringen och synken inte kan ha olika uppfattning om saken.
+        if (!empty($user['role']) && normalizeSyncRole($user['role']) === null) {
+            $errors[] = "Användare #{$idx} ({$email}): ogiltig roll '{$user['role']}'. Tillåtna: användare, redaktör, admin.";
         }
     }
 

@@ -1,0 +1,37 @@
+-- Migration 046: Räknare för raderade användare i synkloggen
+-- Skapad: 2026-08-24
+--
+-- Bakgrund: synk-API:et kunde tidigare bara skapa, uppdatera och inaktivera.
+-- När en person slutar vill källsystemet ibland kunna begära verklig radering,
+-- inte bara inaktivering — typiskt vid en begäran om radering enligt GDPR.
+-- Detta sker med per-användarflaggan "delete": true i users-listan.
+--
+-- Designbeslut:
+--
+-- 1. PER ANVÄNDARE, INTE PÅ SAKNADE.
+--    Flaggan sätts på den enskilda posten i payloaden. Alternativet — att låta
+--    saknade användare raderas i stället för att inaktiveras — hade gjort ett
+--    trasigt eller ofullständigt AD-utdrag till en massradering. Källsystemet
+--    måste peka ut var och en som ska bort.
+--
+-- 2. RADERINGEN ÄR VERKLIG OCH OÅTERKALLELIG.
+--    Diplom (certificates) har ON DELETE CASCADE och följer med. Det är
+--    avsiktligt: en radering ska inte lämna kvar personuppgifter. Genomförd
+--    utbildning går därmed inte att styrka i efterhand.
+--
+-- 3. PUB-AVTAL RADERAS INTE.
+--    pub_agreement_artifacts är ett signerat avtal med undertecknarens namn,
+--    e-post, IP och PDF-hash. Det är organisationens handling, inte användarens
+--    inlärningsdata, och har egen rättslig grund för bevarande. Raden blir kvar
+--    med ett user_id som pekar på ett borttaget konto — artefakten är
+--    självbärande och innehåller alla uppgifter den behöver.
+--
+-- 4. RÄKNAREN LOGGAS.
+--    users_deleted skrivs till sync_log så att en radering går att spåra i
+--    efterhand även när användarraden är borta.
+--
+-- Rollback:
+--   ALTER TABLE sync_log DROP COLUMN users_deleted;
+
+ALTER TABLE sync_log
+    ADD COLUMN users_deleted INT(11) NOT NULL DEFAULT 0 AFTER users_deactivated;

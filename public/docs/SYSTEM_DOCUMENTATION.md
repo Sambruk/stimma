@@ -27,7 +27,7 @@ Stimma är en PHP-baserad e-learning plattform för mikroutbildning. Systemet ä
 - **Multi-tenant arkitektur** - Organisationsseparation baserad på e-postdomän
 - **Lösenordsfri autentisering** - E-postbaserade inloggningslänkar
 - **AI-integration** - Kursgenerering och bildgenerering med OpenAI
-- **Rollbaserad åtkomstkontroll** - Student, Redaktör, Admin, Superadmin
+- **Rollbaserad åtkomstkontroll** - Användare, Redaktör, Läsbehörig, Admin, Superadmin
 
 ### Teknisk stack
 
@@ -273,12 +273,27 @@ CREATE TABLE users (
     last_login_at DATETIME,
     is_admin TINYINT(1) DEFAULT 0,
     is_editor TINYINT(1) DEFAULT 0,
+    is_viewer TINYINT(1) NOT NULL DEFAULT 0,
     role ENUM('student', 'teacher', 'admin', 'super_admin') DEFAULT 'student',
     preferences JSON,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME ON UPDATE CURRENT_TIMESTAMP
 );
 ```
+
+**Om roller:** behörighet bärs av flaggorna `is_admin`, `is_editor` och `is_viewer`,
+inte av `role`. Enum-kolumnen är i praktiken dekorativ — det finns konton med
+`role='student'` och `is_admin=1`. Grinden i `admin/include/auth_check.php` prövar
+flaggorna. `is_viewer` (läsbehörig, se `migrations/045_viewer_role.sql`) ger läsande
+åtkomst till statistik, diplom och användarlista inom domänscopet; varje skrivande
+åtgärd stoppas serverside i respektive sida, inte bara genom dolda knappar.
+
+**Org-taggfilter:** `getOwnOrgTagFilter()` i `include/functions.php` läser ett valfritt
+filter (`org_tags[]`) på den inloggades egna taggar, skuret mot `getUserOrgTags()` så
+att en manipulerad parameter inte kan välja främmande taggar.
+`buildOrgTagFilterClause()` bygger villkoret och `combineSqlClauses()` väver ihop det
+med domänklausulen — därför slår filtret igenom i alla frågor på en sida utan att
+varje enskild query behöver ändras. Utan filter är villkoret `1=1`.
 
 #### courses
 Kursdefinitioner.
@@ -501,6 +516,24 @@ CREATE TABLE activity_log (
 |----------|-------|-------------|------|
 | `/api/sync_users.php` | POST | Synkronisera användarlista per domän | Bearer stm_... |
 | `/api/course_status.php` | GET | Kontrollera kursstatus för en användare | Bearer stm_... |
+
+**Terminologi:** rollen heter **Användare** i gränssnittet, i dokumentationen och i
+API:et. Enum-värdet i databasen är fortfarande `student` — det är gammalt, i praktiken
+dekorativt, och att byta det hade krävt en migration genom varje query som nämner
+rollen utan att någon användare blir hjälpt. Översättningen sker i stället vid
+systemgränsen i `normalizeSyncRole()` (`include/functions.php`), som tar emot
+`användare`/`anvandare`, `redaktör`/`redaktor` och `admin` — och fortfarande de äldre
+`student`/`teacher`, så att befintliga integrationer inte går sönder.
+
+**Radering via synk:** posten `{"email": "...", "delete": true}` raderar kontot
+permanent. Tolkningen av flaggan ligger i `isUserSyncDeleteRequest()`
+(`include/api_helpers.php`) så att validering och synk inte kan tolka den olika.
+Själva raderingen görs av `deleteUserCompletely()` (`include/functions.php`), som
+även adminpanelens raderingsknapp använder — tidigare fanns logiken bara i
+`admin/users.php` och missade `quiz_answers`. Diplom följer med via
+`ON DELETE CASCADE`; `pub_agreement_artifacts` raderas avsiktligt inte. Superadmins
+kan inte raderas via API och räknas i `deletes_refused`. Se
+`migrations/046_sync_delete_flag.sql`.
 
 **Domänomfång:** en API-nyckel utfärdas för organisationens primärdomän och gäller även
 alla underdomäner (`kommun.se` täcker `utb.kommun.se`). Matchningen kräver punkt före

@@ -23,8 +23,12 @@ $userEmail = $_SESSION['user_email'];
 $userDomain = substr(strrchr($userEmail, "@"), 1);
 $isAdmin = $currentUser && $currentUser['is_admin'] == 1;
 $isEditor = $currentUser && $currentUser['is_editor'] == 1;
+$isViewer = $currentUser && $currentUser['is_viewer'] == 1;
+// Läsbehörig ser hela kurslistan i domänscopet, som admin — en redaktör begränsas
+// till kurser hen äger eller redigerar, vilket för en läsbehörig blir tomt.
+$hasFullCourseView = $isAdmin || $isViewer;
 
-if (!$isAdmin && !$isEditor) {
+if (!$isAdmin && !$isEditor && !$isViewer) {
     $_SESSION['message'] = 'Du har inte behörighet att se kursstatistik.';
     $_SESSION['message_type'] = 'danger';
     header('Location: index.php');
@@ -46,8 +50,14 @@ $domainFilterQs = buildDomainFilterQuery($selectedDomains);
 // kurser som listas).
 $courseDomClause = buildDomainInClause($orgScopeDomains, 'c.organization_domain');
 
+// Valfritt filter på den inloggades egna org-taggar.
+$orgTagFilter = getOwnOrgTagFilter($currentUser['id']);
+$availableOrgTags = $orgTagFilter['available'];
+$selectedOrgTags = $orgTagFilter['selected'];
+$orgTagFilterQs = buildOrgTagFilterQuery($selectedOrgTags);
+
 // Hämta kurser baserat på behörighet
-if ($isAdmin) {
+if ($hasFullCourseView) {
     $courses = query(
         "SELECT c.*, (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = c.id) AS lesson_count
          FROM " . DB_DATABASE . ".courses c
@@ -67,14 +77,25 @@ if ($isAdmin) {
     );
 }
 
-// Om redaktör försöker se en kurs de inte har tillgång till
+// Om redaktör eller läsbehörig försöker se en kurs de inte har tillgång till.
+// Redaktören prövas mot ägarskap/redaktörskap. Läsbehörig äger inga kurser och
+// prövas i stället mot domänscopet — annars hade kurs-id i URL:en räckt för att
+// läsa statistik för en annan organisations kurs.
 if ($selectedCourseId && !$isAdmin) {
-    $hasAccess = queryOne(
-        "SELECT c.id FROM " . DB_DATABASE . ".courses c
-         LEFT JOIN " . DB_DATABASE . ".course_editors ce ON c.id = ce.course_id
-         WHERE c.id = ? AND (c.author_id = ? OR ce.email = ?)",
-        [$selectedCourseId, $currentUser['id'], $userEmail]
-    );
+    if ($isViewer) {
+        $hasAccess = queryOne(
+            "SELECT c.id FROM " . DB_DATABASE . ".courses c
+             WHERE c.id = ? AND {$courseDomClause['fragment']}",
+            array_merge([$selectedCourseId], $courseDomClause['params'])
+        );
+    } else {
+        $hasAccess = queryOne(
+            "SELECT c.id FROM " . DB_DATABASE . ".courses c
+             LEFT JOIN " . DB_DATABASE . ".course_editors ce ON c.id = ce.course_id
+             WHERE c.id = ? AND (c.author_id = ? OR ce.email = ?)",
+            [$selectedCourseId, $currentUser['id'], $userEmail]
+        );
+    }
     if (!$hasAccess) {
         $_SESSION['message'] = 'Du har inte behörighet att se statistik för denna kurs.';
         $_SESSION['message_type'] = 'danger';
@@ -94,8 +115,12 @@ require_once 'include/header.php';
     <div class="card shadow mb-4">
         <div class="card-header py-3 d-flex justify-content-between align-items-center">
             <h6 class="m-0 font-weight-bold text-muted">Kursöversikt</h6>
-            <?php if (count($orgScopeDomains) > 1): ?>
-            <form method="GET" class="mb-0">
+            <?php if (count($orgScopeDomains) > 1 || !empty($availableOrgTags)): ?>
+            <form method="GET" class="mb-0 d-flex gap-2">
+                <?php if ($selectedCourseId): ?>
+                <input type="hidden" name="course_id" value="<?= (int)$selectedCourseId ?>">
+                <?php endif; ?>
+                <?php if (count($orgScopeDomains) > 1): ?>
                 <div class="dropdown">
                     <button class="btn btn-light btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" title="Filtrera på domän/organisation">
                         <i class="bi bi-funnel me-1"></i><?= empty($selectedDomains) ? 'Alla domäner' : (count($selectedDomains) . ' valda') ?>
@@ -114,6 +139,27 @@ require_once 'include/header.php';
                         </div>
                     </div>
                 </div>
+                <?php endif; ?>
+                <?php if (!empty($availableOrgTags)): ?>
+                <div class="dropdown">
+                    <button class="btn btn-light btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" title="Filtrera på din organisationstillhörighet">
+                        <i class="bi bi-diagram-3 me-1"></i><?= empty($selectedOrgTags) ? 'Hela domänen' : (count($selectedOrgTags) . ' valda') ?>
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end p-2" style="min-width: 260px; max-height: 320px; overflow:auto;">
+                        <div class="small text-muted px-1 mb-1">Visa endast användare i din organisationsdel:</div>
+                        <?php foreach ($availableOrgTags as $t): ?>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="org_tags[]" value="<?= htmlspecialchars($t) ?>" id="tagf_<?= md5($t) ?>" <?= in_array($t, $selectedOrgTags, true) ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="tagf_<?= md5($t) ?>"><?= htmlspecialchars($t) ?></label>
+                        </div>
+                        <?php endforeach; ?>
+                        <div class="d-flex gap-2 mt-2 border-top pt-2">
+                            <button type="submit" class="btn btn-primary btn-sm flex-fill">Tillämpa</button>
+                            <a href="course_stats.php<?= $selectedCourseId ? '?course_id=' . (int)$selectedCourseId : '' ?>" class="btn btn-outline-secondary btn-sm">Rensa</a>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
             </form>
             <?php endif; ?>
         </div>
@@ -270,8 +316,16 @@ require_once 'include/header.php';
 
     // Org-scope e-postfilter — följer domänfiltret (valda domäner om aktivt,
     // annars hela scopet).
-    $statsUserEmailClause = buildEmailDomainInClause($activeDomains, 'u.email');
-    $statsUserEmailClauseUnprefixed = buildEmailDomainInClause($activeDomains, 'email');
+    // Domän- och taggfilter vävs ihop till en klausul så att båda slår igenom i
+    // samtliga användarfrågor nedan. Utan taggval är tillägget "1=1".
+    $statsUserEmailClause = combineSqlClauses(
+        buildEmailDomainInClause($activeDomains, 'u.email'),
+        buildOrgTagFilterClause($selectedOrgTags, 'u.id')
+    );
+    $statsUserEmailClauseUnprefixed = combineSqlClauses(
+        buildEmailDomainInClause($activeDomains, 'email'),
+        buildOrgTagFilterClause($selectedOrgTags, 'id')
+    );
 
     if ($hasCourseOrgTags) {
         // Gruppera per org-tagg — utvidgat till alla orgens domäner

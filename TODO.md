@@ -345,3 +345,93 @@ Felsökning av att Säter inte får åtkomst till API:et med `sater.se`.
 - [ ] Om Säter fortfarande får 401: nyckeln visas bara vid skapandet — regenerera och överlämna på nytt
 - [ ] Överväg: `ensureAiQuotaRow()` skapar separat AI-kvot per e-postdomän, så edu.sater.se får en egen
       50k-kvot skild från sater.se. Inkonsekvent med att organisationen nu behandlas som en enhet.
+
+## Rollen "Läsbehörig" + org-taggfilter (2026-08-24)
+
+- [x] Kartlägg befintliga roller — behörighet bärs av is_admin/is_editor, inte av users.role
+- [x] migrations/045_viewer_role.sql: kolumnen `is_viewer` + index (applicerad)
+- [x] auth_check.php släpper in läsbehörig i adminytan
+- [x] statistics.php: läsbehörig ser hela kurslistan i sitt DOMÄNSCOPE (admin ser alla kurser i hela
+      systemet — den listan är inte domänavgränsad, så läsbehörig fick en egen, snävare gren)
+- [x] course_stats.php: samma, plus domänprövning av kurs-id i URL:en för läsbehörig
+- [x] certificates.php: läsbehörig får förhandsgranska, skrivande POST stoppas serverside
+- [x] users.php: läsbehörig ser listan, alla skrivande POST stoppas serverside, knappar/modal dolda
+- [x] export_users.php + export_statistics.php öppnade för läsbehörig
+- [x] users.php: ny kolumn + toggle för att sätta läsbehörig (annars går rollen inte att tilldela)
+- [x] E-postnotifiering vid rolländring fick svenskt namn för 'viewer'
+- [x] Menyn: läsbehörig ser Översikt, Kursstatistik, Diplom, Användare
+- [x] BUGGFIX: redaktörer såg "Diplom" i menyn men kastades ut av certificates.php — länken flyttad
+- [x] Org-taggfilter (`org_tags[]`) på statistics.php, course_stats.php och users.php,
+      för BÅDE läsbehörig och domänadmin. Valfritt; utan val visas allt som förut.
+      Erbjuder bara den inloggades egna taggar, och valet skärs mot dem.
+- [x] Filtret följer med till CSV-exporterna så filen matchar den lista man tittade på
+- [x] Dokumentation: USER_GUIDE.md (roller + filteravsnitt), SYSTEM_DOCUMENTATION.md (schema + helpers)
+- [x] Testat: rendering som läsbehörig, förfalskade POST-anrop stoppade, regressionstest som admin,
+      taggfiltret snävar in och skalar bort främmande taggar. Testdata städad.
+
+### Kvarstår / noterat
+- [ ] Org-taggar lagras platt — "Kommun/Förvaltning/Avdelning" blir tre fristående taggar.
+      Ett hierarkiskt filter ("allt under Förvaltningen") går inte att uttrycka förrän
+      datamodellen bär vägen. Överväg en `path`-kolumn i user_org_tags.
+- [ ] export_users.php filtrerar på `$currentUserDomain` medan users.php använder hela
+      org-scopet. En admin på primärdomänen med flera domäner exporterar därför färre rader
+      än listan visar. Pre-existerande, orört.
+- [ ] statistics.php listar ALLA kurser i hela systemet för admin, inte bara den egna
+      organisationens. Pre-existerande; läsbehörig fick en domänavgränsad gren i stället.
+
+## Raderingsflagga i synk-API:et (2026-08-24)
+
+- [x] Beslut: per-användarflagga `"delete": true` i users-listan (inte "radera saknade" —
+      ett trasigt AD-utdrag hade då blivit en massradering)
+- [x] Beslut: diplom raderas med kontot (CASCADE), ingen blockering
+- [x] migrations/046_sync_delete_flag.sql: `sync_log.users_deleted` (applicerad)
+- [x] `isUserSyncDeleteRequest()` i api_helpers.php — en enda tolkning av flaggan, delad av
+      validering och synk. Accepterar true/1/"true"/"1"
+- [x] `deleteUserCompletely()` i functions.php — komplett radering, delad av API och adminpanel
+- [x] BUGGFIX: adminpanelens radering missade `quiz_answers` — personuppgifter blev kvar efter
+      "radering". Rättat genom att båda vägarna nu använder samma funktion
+- [x] `pub_agreement_artifacts` raderas AVSIKTLIGT inte (signerat avtal, egen rättslig grund)
+- [x] validateSyncUsers: raderingsposter kräver bara e-post, men domänkontrollen gäller fullt ut
+- [x] Superadmins kan inte raderas via API — räknas och rapporteras som `deletes_refused`
+- [x] Raderade adresser läggs inte i `$processedEmails`, så en payload med bara raderingar
+      inaktiverar inte resten av organisationen
+- [x] `sync_users_direct.php` (adminverktyget) strippar flaggan — den är en API-funktion
+- [x] Dokumentation: api_keys.php on-page, USER_GUIDE.md, SYSTEM_DOCUMENTATION.md
+- [x] Testat skarpt mot endpointen: radering med spårrensning, idempotens, sträng-"true",
+      delete:false, främmande domän, superadmin-skydd, ingen massinaktivering. Testdata städad.
+
+### Noterat
+- [ ] `certificates` har ON DELETE CASCADE. Om utbildningsbevis behöver överleva en radering
+      krävs en avidentifierad kopia (kurs + datum utan person) — inte beslutat.
+
+## Terminologi: "student" → "Användare" (2026-08-24)
+
+- [x] Genomsökning av hela kodbasen (exkl. tinymce-bibliotek)
+- [x] API:et tar nu emot `användare` / `redaktör` / `admin` som primära rollvärden.
+      `student` och `teacher` accepteras fortfarande — Säter m.fl. har redan integrerat
+      mot de gamla värdena och ska inte få sin synk sönder av ett terminologibyte.
+- [x] `normalizeSyncRole()` gör översättningen på ETT ställe, vid systemgränsen
+- [x] Felmeddelandet vid ogiltig roll listar de nya termerna
+- [x] BUGGFIX: `isUserSyncDeleteRequest()` låg i api_helpers.php men anropades från
+      `performUserSync()` i functions.php. Adminpanelens synkverktyg laddar inte
+      api_helpers.php → fatalt fel vid varje synk därifrån. Båda hjälparna flyttade
+      till functions.php, där performUserSync bor.
+- [x] api_keys.php (API-dokumentationen i UI:t): rollvärden + delete-flaggan
+- [x] admin/user_guide.php: exempel-JSON, rolltabell, delete-raden, CSS-klassnamn
+- [x] admin/sync_tool.php: CSV-import, rollmeny, badge-klass, normalizeRole
+- [x] admin/domains.php: internt `students` → `regular_users` (kolumnrubriken hette
+      redan "Användare")
+- [x] USER_GUIDE.md, SYSTEM_DOCUMENTATION.md, PUB_BILAGA_1_INSTRUKTION.md
+- [x] include/learning_paths.php: "studentvy" → "användarvy" i kommentarer
+- [x] Testat: nya och gamla rollvärden ger rätt lagrad roll, ogiltig roll ger nytt
+      felmeddelande, synk via adminverktygets include-set fungerar. Testdata städad.
+
+### Medvetet ORÖRT
+- `users.role` är fortfarande ENUM('student','teacher','admin','super_admin').
+  Enum-värdet är dekorativt (behörighet bärs av is_admin/is_editor/is_viewer) och ett
+  byte hade krävt en migration genom varje query som nämner rollen, utan nytta för
+  någon användare eller API-anropare. Översättningen sker vid systemgränsen i stället.
+- USER_GUIDE.md rad 249: "Student" är en XP-nivåtitel (Nybörjare → Lärling → Student →
+  Utforskare → Expert → Mästare), inte en roll. Ska inte heta "Användare".
+- migrations/008: AI-promptens "studenten fyller i" syftar på den som läser kursen.
+  Prompten ligger i databasen; migrationsfilen bara seedar den. Inte ändrad.

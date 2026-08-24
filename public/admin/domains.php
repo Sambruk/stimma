@@ -197,7 +197,7 @@ function getUserStatsByDomain() {
             COUNT(*) as total,
             SUM(CASE WHEN is_admin = 1 OR role IN ('admin', 'super_admin') THEN 1 ELSE 0 END) as admins,
             SUM(CASE WHEN is_editor = 1 AND is_admin = 0 AND role NOT IN ('admin', 'super_admin') THEN 1 ELSE 0 END) as editors,
-            SUM(CASE WHEN is_admin = 0 AND is_editor = 0 AND (role IS NULL OR role NOT IN ('admin', 'super_admin')) THEN 1 ELSE 0 END) as students
+            SUM(CASE WHEN is_admin = 0 AND is_editor = 0 AND (role IS NULL OR role NOT IN ('admin', 'super_admin')) THEN 1 ELSE 0 END) as regular_users
         FROM " . DB_DATABASE . ".users
         GROUP BY LOWER(SUBSTRING_INDEX(email, '@', -1))
         ORDER BY total DESC
@@ -208,7 +208,7 @@ function getUserStatsByDomain() {
             'total' => (int)$row['total'],
             'admins' => (int)$row['admins'],
             'editors' => (int)$row['editors'],
-            'students' => (int)$row['students']
+            'regular_users' => (int)$row['regular_users']
         ];
     }
 
@@ -375,7 +375,7 @@ require_once 'include/header.php';
                                     </thead>
                                     <tbody>
                                         <?php foreach ($filteredDomains as $domain):
-                                            $stats = $userStats[$domain] ?? ['total' => 0, 'admins' => 0, 'editors' => 0, 'students' => 0];
+                                            $stats = $userStats[$domain] ?? ['total' => 0, 'admins' => 0, 'editors' => 0, 'regular_users' => 0];
                                             $pubInfo = $pubSettings[$domain] ?? ['has_pub_agreement' => 0, 'pub_agreement_date' => null];
                                             $hasPub = $pubInfo['has_pub_agreement'] == 1;
                                         ?>
@@ -448,8 +448,8 @@ require_once 'include/header.php';
                                                     <?php endif; ?>
                                                 </td>
                                                 <td class="text-center">
-                                                    <?php if ($stats['students'] > 0): ?>
-                                                        <span class="badge bg-info"><?= $stats['students'] ?></span>
+                                                    <?php if ($stats['regular_users'] > 0): ?>
+                                                        <span class="badge bg-info"><?= $stats['regular_users'] ?></span>
                                                     <?php else: ?>
                                                         <span class="text-muted">-</span>
                                                     <?php endif; ?>
@@ -479,14 +479,14 @@ require_once 'include/header.php';
                                     // Beräkna totalsummor
                                     $totalAdmins = 0;
                                     $totalEditors = 0;
-                                    $totalStudents = 0;
+                                    $totalRegularUsers = 0;
                                     $totalUsers = 0;
                                     $totalPub = 0;
                                     foreach ($filteredDomains as $domain) {
-                                        $stats = $userStats[$domain] ?? ['total' => 0, 'admins' => 0, 'editors' => 0, 'students' => 0];
+                                        $stats = $userStats[$domain] ?? ['total' => 0, 'admins' => 0, 'editors' => 0, 'regular_users' => 0];
                                         $totalAdmins += $stats['admins'];
                                         $totalEditors += $stats['editors'];
-                                        $totalStudents += $stats['students'];
+                                        $totalRegularUsers += $stats['regular_users'];
                                         $totalUsers += $stats['total'];
                                         if (isset($pubSettings[$domain]) && $pubSettings[$domain]['has_pub_agreement'] == 1) {
                                             $totalPub++;
@@ -500,7 +500,7 @@ require_once 'include/header.php';
                                             <td class="text-center"><?= $totalPub ?></td>
                                             <td class="text-center"><?= $totalAdmins ?></td>
                                             <td class="text-center"><?= $totalEditors ?></td>
-                                            <td class="text-center"><?= $totalStudents ?></td>
+                                            <td class="text-center"><?= $totalRegularUsers ?></td>
                                             <td class="text-center"><?= $totalUsers ?></td>
                                             <td></td>
                                         </tr>
