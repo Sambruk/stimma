@@ -506,8 +506,25 @@ bort. Det verkliga felet är att inget i systemet berättar att fältet uteblivi
 - [x] users.php renderad som Säter-admin: 48 redigeringsknappar, modal och nytt
       formulärfält på plats, och båda Säter-användarnas taggar syns i listan.
 
+### Rättat samma dag: felaktigt påstående om hierarkin
+- [x] Jag skrev i API-dokumentationen att "ett filter på Förvaltningen inte träffar
+      avdelningarna under den". **Det stämmer inte.** Varje användare bär ALLA nivåer
+      i sin egen väg, så ett filter på en högre nivå träffar dem längre ned.
+      Verifierat: filter på "Säters kommun" gav båda testanvändarna, filter på
+      "Skolförvaltningen" bara den ena.
+- [x] Det som FAKTISKT inte går: skilja två grenar som delar namn på understa nivån.
+      `Skolförvaltningen/IT` och `Vårdförvaltningen/IT` ger båda taggen `IT`, och ett
+      filter på `IT` träffar båda. `user_org_tags` har bara `(user_id, tag)` — ingen
+      förälder, ingen ordning.
+- [x] Rättat i api_keys.php och i kodkommentarerna för `getOwnOrgTagFilter()` och
+      `splitOrgTags()`.
+
 ### Kvarstår
-- [ ] Taggar är fortfarande platta. Redigeringsmodalen visar dem i snedstrecksform men
-      ordningen är alfabetisk, inte den ursprungliga hierarkin — den lagras inte.
+- [ ] Redigeringsmodalen visar taggarna i snedstrecksform men i alfabetisk ordning,
+      inte den ursprungliga vägen — ordningen lagras inte. Kräver en kolumn i
+      `user_org_tags` för att lösas ordentligt.
+- [ ] Äkta hierarki (skilja grenar med samma lövnamn, visa träd, "allt under X" som
+      relation i stället för sammanträffande) kräver att vägen bärs i datamodellen.
+      Obeslutat om behovet finns.
 - [ ] `ensureAiQuotaRow()` skapar fortfarande separat AI-kvot per e-postdomän
       (kvarstående punkt sedan domänomfånget).

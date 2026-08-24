@@ -739,9 +739,17 @@ Authorization: Bearer stm_din_api_nyckel_har</code></pre>
                 <h6>Organisationstaggar</h6>
                 <div class="alert alert-info">
                     <i class="bi bi-diagram-3 me-2"></i>
-                    Varje del av <code>"Kommun/Förvaltning/Avdelning"</code> blir en egen tagg. Taggarna är
-                    <strong>platta</strong> — hierarkin lagras inte, så ett filter på "Förvaltningen" träffar
-                    inte automatiskt avdelningarna under den.
+                    Varje del av <code>"Kommun/Förvaltning/Avdelning"</code> blir en egen, fristående tagg.
+                    <strong>Släktskapet mellan nivåerna lagras inte</strong> — snedstrecket är ett sätt att
+                    ange flera taggar på en gång, inte ett träd.
+                    <br><br>
+                    Ett filter på en högre nivå fungerar ändå i praktiken, eftersom användaren bär
+                    <em>alla</em> nivåer i sin egen väg: den som har <code>Kommun/Förvaltning/Avdelning</code>
+                    hittas av ett filter på <code>Förvaltning</code>. Två saker följer däremot av att vägen
+                    inte lagras: <strong>samma namn på två ställen i organisationen går inte att skilja åt</strong>
+                    (både <code>Skolförvaltningen/IT</code> och <code>Vårdförvaltningen/IT</code> ger taggen
+                    <code>IT</code>, och ett filter på <code>IT</code> träffar båda), och en post som bara
+                    skickar den understa nivån hittas inte av ett filter på en högre.
                     <ul class="mb-0 mt-2">
                         <li><strong>Fältet saknas i posten</strong> → befintliga taggar lämnas orörda. En synk
                             utan organisationskolumn kan alltså inte råka nollställa taggar som satts för hand.</li>

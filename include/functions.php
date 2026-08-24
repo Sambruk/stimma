@@ -1343,9 +1343,15 @@ function buildDomainFilterQuery(array $selectedDomains) {
  * Valet skärs alltid mot de egna taggarna, så en manipulerad GET-parameter kan
  * inte smyga in en tagg personen inte tillhör.
  *
- * OBS om datamodellen: taggar lagras platt. performUserSync() splittar
- * "Kommun/Förvaltning/Avdelning" på "/" och sparar tre fristående rader, så en
- * hierarkisk träffbild ("allt under Förvaltningen") går inte att uttrycka här.
+ * OBS om datamodellen: taggar lagras platt. splitOrgTags() delar
+ * "Kommun/Förvaltning/Avdelning" på "/" och sparar tre fristående rader —
+ * user_org_tags har bara (user_id, tag), ingen förälder och ingen ordning.
+ *
+ * "Allt under Förvaltningen" fungerar ändå i praktiken, eftersom varje användare
+ * bär ALLA nivåer i sin egen väg. Det som inte går är att skilja två grenar som
+ * delar namn på understa nivån: Skolförvaltningen/IT och Vårdförvaltningen/IT ger
+ * båda taggen IT, och ett filter på IT träffar båda. Ett äkta hierarkiskt filter
+ * kräver att datamodellen bär vägen.
  *
  * @param int $userId Inloggad användares id
  * @return array{available:array,selected:array,filtered:bool}
@@ -3157,8 +3163,9 @@ function readSyncOrganization(array $userData) {
 /**
  * Dela upp ett organisationsvärde i platta taggar.
  *
- * "Kommun/Förvaltning/Avdelning" blir tre fristående rader. Hierarkin bevaras
- * alltså inte — se getOwnOrgTagFilter() för vad det betyder för filtreringen.
+ * "Kommun/Förvaltning/Avdelning" blir tre fristående rader. Snedstrecket är alltså
+ * en inmatningsform för flera taggar, inte ett träd: varken förälder eller ordning
+ * lagras. Se getOwnOrgTagFilter() för vad det betyder för filtreringen.
  *
  * @param string $organization
  * @return array
