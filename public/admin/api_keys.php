@@ -10,9 +10,58 @@ require_once '../include/config.php';
 require_once '../include/database.php';
 require_once '../include/functions.php';
 require_once '../include/auth.php';
+require_once '../include/api_helpers.php'; // domainCoversEmailDomain()
 
 // Kontrollera att användaren är inloggad och är admin
 require_once 'include/auth_check.php';
+
+/**
+ * Hitta den primärdomän i systemet som täcker $domain, om $domain är en underdomän.
+ *
+ * En API-nyckel utfärdas alltid för organisationens primärdomän och gäller då hela
+ * organisationen inklusive underdomäner. Därför ska en underdomän aldrig få en egen
+ * nyckel — den skulle vara överflödig, och två nycklar med överlappande omfång gör
+ * det omöjligt att resonera om vem som får avaktivera vem vid synk.
+ *
+ * "Primärdomän" avgörs utifrån vad som faktiskt finns i systemet: om någon annan känd
+ * domän är ett äkta suffix till $domain, är $domain en underdomän till den. Finns ingen
+ * sådan domän behandlas $domain som primär, vilket är rätt även för en organisation som
+ * bara använder t.ex. utb.kommun.se.
+ *
+ * @param string $domain Domänen som ska prövas
+ * @return string|null Den täckande primärdomänen, eller null om $domain själv är primär
+ */
+function findCoveringPrimaryDomain($domain) {
+    $domain = strtolower(trim((string)$domain));
+    if ($domain === '') {
+        return null;
+    }
+
+    $known = query(
+        "SELECT DISTINCT SUBSTRING_INDEX(email, '@', -1) AS domain FROM " . DB_DATABASE . ".users
+         UNION
+         SELECT DISTINCT domain FROM " . DB_DATABASE . ".domain_settings
+         UNION
+         SELECT DISTINCT domain FROM " . DB_DATABASE . ".api_keys"
+    );
+
+    $best = null;
+    foreach ($known as $row) {
+        $candidate = strtolower(trim($row['domain']));
+        if ($candidate === '' || $candidate === $domain) {
+            continue;
+        }
+        // Är $domain en underdomän till $candidate?
+        if (domainCoversEmailDomain($candidate, $domain)) {
+            // Välj den kortaste träffen — den ligger närmast toppen av namnrymden.
+            if ($best === null || strlen($candidate) < strlen($best)) {
+                $best = $candidate;
+            }
+        }
+    }
+
+    return $best;
+}
 
 // Hämta användarens information
 $currentUser = queryOne("SELECT * FROM " . DB_DATABASE . ".users WHERE email = ?", [$_SESSION['user_email']]);
@@ -55,6 +104,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
+        // Synkgrinden prövas mot API-nyckelns domän, alltså primärdomänen. Att sätta
+        // sync_enabled på en underdomän skulle se ut att göra något utan att ha effekt.
+        $coveringDomain = findCoveringPrimaryDomain($targetDomain);
+        if ($coveringDomain !== null) {
+            $_SESSION['message'] = "Synk styrs på primärdomänen. Ändra inställningen för {$coveringDomain} "
+                . "— den gäller även {$targetDomain}.";
+            $_SESSION['message_type'] = 'warning';
+            header('Location: api_keys.php');
+            exit;
+        }
+
         // Uppdatera eller skapa domain_settings
         $existing = queryOne("SELECT id FROM " . DB_DATABASE . ".domain_settings WHERE domain = ?", [$targetDomain]);
         if ($existing) {
@@ -87,6 +147,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$isSuperAdmin && $targetDomain !== $userDomain) {
             $_SESSION['message'] = 'Du kan bara skapa API-nycklar för din egen domän.';
             $_SESSION['message_type'] = 'danger';
+            header('Location: api_keys.php');
+            exit;
+        }
+
+        // Endast primärdomäner får ha nycklar. En underdomän täcks redan av
+        // primärdomänens nyckel och ska därför inte kunna få en egen.
+        $coveringDomain = findCoveringPrimaryDomain($targetDomain);
+        if ($coveringDomain !== null) {
+            $_SESSION['message'] = "{$targetDomain} är en underdomän till {$coveringDomain}. "
+                . "API-nycklar utfärdas bara för primärdomänen, och nyckeln för {$coveringDomain} "
+                . "gäller redan för {$targetDomain}.";
+            $_SESSION['message_type'] = 'warning';
             header('Location: api_keys.php');
             exit;
         }
@@ -272,12 +344,15 @@ if ($isSuperAdmin) {
 // Hämta sync_enabled status och nyckelinfo för domänerna
 $domainSyncStatus = [];
 $domainKeyInfo = [];
+$domainCoveredBy = []; // underdomän => primärdomän vars nyckel gäller
 foreach ($allDomains as $d) {
     $ds = queryOne("SELECT sync_enabled FROM " . DB_DATABASE . ".domain_settings WHERE domain = ?", [$d['domain']]);
     $domainSyncStatus[$d['domain']] = $ds ? (int)$ds['sync_enabled'] : 0;
 
     $dk = queryOne("SELECT id, api_key_prefix, is_active FROM " . DB_DATABASE . ".api_keys WHERE domain = ?", [$d['domain']]);
     $domainKeyInfo[$d['domain']] = $dk ?: null;
+
+    $domainCoveredBy[$d['domain']] = findCoveringPrimaryDomain($d['domain']);
 }
 
 require_once 'include/header.php';
@@ -308,14 +383,30 @@ require_once 'include/header.php';
                                 $dom = $d['domain'];
                                 $syncEnabled = $domainSyncStatus[$dom] ?? 0;
                                 $keyInfo = $domainKeyInfo[$dom] ?? null;
+                                $coveredBy = $domainCoveredBy[$dom] ?? null;
+                                $parentKey = $coveredBy ? ($domainKeyInfo[$coveredBy] ?? null) : null;
                             ?>
                             <tr>
-                                <td><strong><?= htmlspecialchars($dom) ?></strong></td>
                                 <td>
-                                    <?php if ($syncEnabled): ?>
+                                    <strong><?= htmlspecialchars($dom) ?></strong>
+                                    <?php if ($coveredBy): ?>
+                                        <br><small class="text-muted"><i class="bi bi-diagram-2 me-1"></i>Underdomän till <?= htmlspecialchars($coveredBy) ?></small>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?php
+                                    // Synkgrinden i api/sync_users.php prövas mot API-nyckelns domän, alltså
+                                    // primärdomänen. En underdomäns egen sync_enabled styr därför ingenting —
+                                    // visa det ärvda läget i stället för ett värde som inte har någon effekt.
+                                    $effectiveSync = $coveredBy ? ($domainSyncStatus[$coveredBy] ?? 0) : $syncEnabled;
+                                    ?>
+                                    <?php if ($effectiveSync): ?>
                                         <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Aktiverad</span>
                                     <?php else: ?>
                                         <span class="badge bg-secondary"><i class="bi bi-x-circle me-1"></i>Inaktiverad</span>
+                                    <?php endif; ?>
+                                    <?php if ($coveredBy): ?>
+                                        <br><small class="text-muted">Ärvd från <?= htmlspecialchars($coveredBy) ?></small>
                                     <?php endif; ?>
                                 </td>
                                 <td>
@@ -326,6 +417,12 @@ require_once 'include/header.php';
                                         <?php else: ?>
                                             <span class="badge bg-danger ms-1">Inaktiv</span>
                                         <?php endif; ?>
+                                    <?php elseif ($coveredBy): ?>
+                                        <?php if ($parentKey): ?>
+                                            <span class="text-muted">Täcks av <code><?= htmlspecialchars($parentKey['api_key_prefix']) ?>...</code> (<?= htmlspecialchars($coveredBy) ?>)</span>
+                                        <?php else: ?>
+                                            <span class="text-muted">Täcks av nyckeln för <?= htmlspecialchars($coveredBy) ?> — ingen skapad än</span>
+                                        <?php endif; ?>
                                     <?php elseif ($syncEnabled): ?>
                                         <span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle me-1"></i>Saknas!</span>
                                     <?php else: ?>
@@ -334,6 +431,7 @@ require_once 'include/header.php';
                                 </td>
                                 <td>
                                     <div class="d-flex gap-2">
+                                        <?php if (!$coveredBy): ?>
                                         <form method="POST" class="d-inline">
                                             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                                             <input type="hidden" name="action" value="toggle_sync">
@@ -343,7 +441,12 @@ require_once 'include/header.php';
                                                 <?= $syncEnabled ? 'Inaktivera synk' : 'Aktivera synk' ?>
                                             </button>
                                         </form>
-                                        <?php if (!$keyInfo): ?>
+                                        <?php endif; ?>
+                                        <?php if (!$keyInfo && $coveredBy): ?>
+                                        <span class="text-muted small align-self-center">
+                                            Nyckel hanteras på <?= htmlspecialchars($coveredBy) ?>
+                                        </span>
+                                        <?php elseif (!$keyInfo): ?>
                                         <form method="POST" class="d-inline">
                                             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                                             <input type="hidden" name="action" value="generate_key">
@@ -583,12 +686,26 @@ Authorization: Bearer stm_din_api_nyckel_har</code></pre>
                 <table class="table table-sm">
                     <thead><tr><th>Fält</th><th>Typ</th><th>Obligatoriskt</th><th>Beskrivning</th></tr></thead>
                     <tbody>
-                        <tr><td><code>email</code></td><td>string</td><td>Ja</td><td>E-postadress (måste matcha domänen)</td></tr>
+                        <tr><td><code>email</code></td><td>string</td><td>Ja</td><td>E-postadress på nyckelns domän eller någon av dess underdomäner</td></tr>
                         <tr><td><code>name</code></td><td>string</td><td>Ja</td><td>Användarens namn</td></tr>
                         <tr><td><code>role</code></td><td>string</td><td>Nej</td><td><code>student</code> = Användare (standard), <code>teacher</code> = Redaktör, <code>admin</code></td></tr>
                         <tr><td><code>organization</code></td><td>string</td><td>Nej</td><td>Organisationshierarki separerad med / (t.ex. "Kommun/Förvaltning/Avdelning")</td></tr>
                     </tbody>
                 </table>
+
+                <h6>Domänomfång</h6>
+                <div class="alert alert-info">
+                    <i class="bi bi-diagram-2 me-2"></i>
+                    En API-nyckel utfärdas för organisationens <strong>primärdomän</strong> och gäller då även alla
+                    <strong>underdomäner</strong>. En nyckel för <code>kommun.se</code> får alltså synka både
+                    <code>anna@kommun.se</code> och <code>bo@utb.kommun.se</code>. Underdomäner har inga egna nycklar
+                    och ingen egen synkinställning.
+                    <br><br>
+                    Det innebär också att <strong>en synk måste innehålla hela organisationen</strong>. Skickas bara
+                    <code>kommun.se</code>-användare markeras användarna på <code>utb.kommun.se</code> som inaktiva,
+                    eftersom de saknas i listan. Sätt <code>"deactivate_missing": false</code> om ni behöver synka
+                    en del i taget.
+                </div>
 
                 <h6>Beteende</h6>
                 <ul>

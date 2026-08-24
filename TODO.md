@@ -319,3 +319,29 @@
 - [x] Flytta alla nyckeltal från Statistik till Dashboard/Översikt
 - [x] Uppdatera användarhandboken med nya funktioner (deadline, testmail, dashboard)
 - [x] Designa om användarhandboken med snyggare layout, ikoner och visuella element
+
+## API-åtkomst Säters kommun (2026-08-24)
+
+Felsökning av att Säter inte får åtkomst till API:et med `sater.se`.
+
+- [x] Verifiera att API-nyckel finns för `sater.se` (aktiv, skapad 2026-08-21)
+- [x] Verifiera att endpointen nås utifrån (`/api/sync_users.php` svarar 401/405 korrekt)
+- [x] Verifiera att Authorization-headern når PHP genom nginx + Apache (bekräftat: skiljer på "saknad" och "ogiltig" nyckel)
+- [x] Konstatera att `last_used_at` är NULL och `sync_log` saknar sater-poster → ingen lyckad autentisering någonsin
+- [x] Granska webbserverloggen sedan 2026-08-17 → inget anrop mot `/api/sync_users.php` från Säter har nått fram
+- [x] Kontrollera `domain_settings.sync_enabled` för `sater.se` → slogs på 2026-08-24 10:55 (var AV 21–24 aug)
+- [x] Beslut taget: endast primärdomänen får API-nyckel, och nyckeln gäller även underdomäner
+- [x] `domainCoversEmailDomain()` i `include/api_helpers.php` — exakt match eller suffix föregånget av punkt
+- [x] `validateSyncUsers()` använder den nya matchningen
+- [x] `api/course_status.php` använder den nya matchningen
+- [x] `performUserSync()` fick `$includeSubdomains` — avaktiveringsomfånget följer nu nyckelns omfång
+      (RIGHT()/CHAR_LENGTH() i stället för LIKE, eftersom `_` är jokertecken i LIKE)
+- [x] `api/sync_users.php` skickar `true` för underdomäner; admin-synkverktyget behåller exakt omfång per domän
+- [x] `admin/api_keys.php`: underdomäner kan inte längre få egen nyckel eller egen synk-toggle, och visar
+      i stället vilken primärdomän som täcker dem
+- [x] Dokumentation uppdaterad (on-page i api_keys.php, USER_GUIDE.md, SYSTEM_DOCUMENTATION.md)
+- [x] Testat end-to-end mot skarp endpoint med tillfällig testdomän — alla spår städade efteråt
+- [ ] Be Säter testa på nytt med sin befintliga nyckel (gäller nu även edu.sater.se)
+- [ ] Om Säter fortfarande får 401: nyckeln visas bara vid skapandet — regenerera och överlämna på nytt
+- [ ] Överväg: `ensureAiQuotaRow()` skapar separat AI-kvot per e-postdomän, så edu.sater.se får en egen
+      50k-kvot skild från sater.se. Inkonsekvent med att organisationen nu behandlas som en enhet.

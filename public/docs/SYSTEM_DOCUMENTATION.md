@@ -502,6 +502,13 @@ CREATE TABLE activity_log (
 | `/api/sync_users.php` | POST | Synkronisera användarlista per domän | Bearer stm_... |
 | `/api/course_status.php` | GET | Kontrollera kursstatus för en användare | Bearer stm_... |
 
+**Domänomfång:** en API-nyckel utfärdas för organisationens primärdomän och gäller även
+alla underdomäner (`kommun.se` täcker `utb.kommun.se`). Matchningen kräver punkt före
+domänen, så `storkommun.se` täcks inte. Underdomäner kan inte få egna nycklar och har
+ingen egen `sync_enabled` — grinden prövas mot nyckelns domän. Implementationen finns i
+`domainCoversEmailDomain()` i `include/api_helpers.php`; avaktiveringen av saknade
+användare använder samma omfång via `$includeSubdomains` i `performUserSync()`.
+
 ### Admin AJAX-endpoints
 
 | Endpoint | Metod | Beskrivning | Behörighet |

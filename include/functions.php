@@ -2928,9 +2928,14 @@ function sendPermissionChangeNotification($userEmail, $changeType, $newStatus, $
  * @param bool $deactivateMissing Om true, markera saknade synkade användare som inaktiva
  * @param int|null $apiKeyId API-nyckel-ID (null vid admin-sessionssynk)
  * @param string $ipAddress IP-adress
+ * @param bool $includeSubdomains Om true omfattar synken även underdomäner till $domain.
+ *        API-synken sätter detta eftersom en nyckel utfärdas för primärdomänen och gäller
+ *        hela organisationen. Admin-synkverktyget grupperar redan per exakt domän och
+ *        anropar en gång per domän — där måste omfånget förbli exakt, annars skulle
+ *        synken av sater.se avaktivera edu.sater.se-användare som ligger i en annan grupp.
  * @return array ['success' => bool, 'summary' => [...], 'sync_id' => int, 'error' => string|null]
  */
-function performUserSync(array $users, string $domain, bool $deactivateMissing, ?int $apiKeyId, string $ipAddress): array {
+function performUserSync(array $users, string $domain, bool $deactivateMissing, ?int $apiKeyId, string $ipAddress, bool $includeSubdomains = false): array {
     $startTime = microtime(true);
     $userCount = count($users);
     $created = 0;
@@ -3016,10 +3021,26 @@ function performUserSync(array $users, string $domain, bool $deactivateMissing, 
             }
         }
 
-        // Markera saknade användare som inaktiva
+        // Markera saknade användare som inaktiva.
+        // Omfånget här MÅSTE vara detsamma som det omfång anroparen fick skicka in
+        // användare för. Annars blir resultatet fel åt ena eller andra hållet: för
+        // smalt omfång lämnar kvar borttagna underdomänanvändare som aktiva för
+        // alltid, för brett omfång avaktiverar det användare anroparen inte råder över.
+        // Suffixjämförelsen görs med RIGHT() i stället för LIKE eftersom '_' är ett
+        // jokertecken i LIKE och förekommer i domännamn.
         if ($deactivateMissing && !empty($processedEmails)) {
             $placeholders = implode(',', array_fill(0, count($processedEmails), '?'));
-            $params = array_merge($processedEmails, [$domain]);
+
+            if ($includeSubdomains) {
+                $domainCondition = "(SUBSTRING_INDEX(email, '@', -1) = ?
+                                     OR RIGHT(SUBSTRING_INDEX(email, '@', -1), CHAR_LENGTH(?) + 1) = CONCAT('.', ?))";
+                $domainParams = [$domain, $domain, $domain];
+            } else {
+                $domainCondition = "SUBSTRING_INDEX(email, '@', -1) = ?";
+                $domainParams = [$domain];
+            }
+
+            $params = array_merge($processedEmails, $domainParams);
 
             $stmt = $db->prepare(
                 "UPDATE " . DB_DATABASE . ".users
@@ -3028,7 +3049,7 @@ function performUserSync(array $users, string $domain, bool $deactivateMissing, 
                    AND sync_status = 'active'
                    AND role != 'super_admin'
                    AND email NOT IN ($placeholders)
-                   AND SUBSTRING_INDEX(email, '@', -1) = ?"
+                   AND $domainCondition"
             );
             $stmt->execute($params);
             $deactivated = $stmt->rowCount();

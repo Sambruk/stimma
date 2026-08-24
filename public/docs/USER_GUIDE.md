@@ -761,14 +761,17 @@ inte längre finns med i listan som inaktiva. **Inloggning påverkas aldrig** �
 
 1. Gå till **API-nycklar** i adminmenyn.
 2. I sektionen **Synkronisering per domän** högst upp: klicka **Aktivera synk**
-   för den domän du vill synka. (API-anrop avvisas om synk inte är aktiverad.)
+   för organisationens primärdomän. (API-anrop avvisas om synk inte är aktiverad.)
+   Underdomäner ärver inställningen och har därför ingen egen knapp.
 3. Klicka **Skapa ny nyckel**, ange en beskrivning (t.ex. "AD-synk") och välj
    domän. Vanlig admin ser sin egen domän; superadmin kan välja valfri.
 4. Nyckeln visas **bara en gång** i ett popup-fönster — kopiera den direkt och
    lägg in den i ditt externa system. Tappar du bort den får du regenerera en ny.
    - Nyckeln har formatet `stm_` följt av 60 tecken.
-   - **En aktiv nyckel per domän.** *Regenerera* skapar en ny och inaktiverar
-     den gamla omedelbart; *Inaktivera* pausar utan att radera; *Radera* tar bort.
+   - **En aktiv nyckel per organisation**, utfärdad på primärdomänen. Underdomäner
+     kan inte få egna nycklar — de täcks av primärdomänens. *Regenerera* skapar en
+     ny och inaktiverar den gamla omedelbart; *Inaktivera* pausar utan att radera;
+     *Radera* tar bort.
 
 #### Steg 2 – Anropa synk-API:t
 
@@ -792,9 +795,24 @@ Content-Type: application/json
 
 | Fält | Krav | Värden |
 |---|---|---|
-| `email` | Obligatoriskt | Måste tillhöra **nyckelns domän** |
+| `email` | Obligatoriskt | Måste tillhöra **nyckelns domän eller någon av dess underdomäner** |
 | `name` | Obligatoriskt | För- och efternamn |
 | `role` | Valfritt | `student` = Användare (standard), `teacher` = Redaktör, `admin` |
+
+**Domänomfång — nyckeln gäller hela organisationen:**
+
+En API-nyckel utfärdas alltid för organisationens **primärdomän**, och gäller då
+även alla **underdomäner**. En nyckel för `kommun.se` får alltså synka både
+`anna@kommun.se` och `bo@utb.kommun.se`. Underdomäner har inga egna nycklar och
+ingen egen synkinställning — allt styrs på primärdomänen.
+
+> **Viktigt:** eftersom nyckeln omfattar hela organisationen måste en synk innehålla
+> *alla* användare i den. Skickas bara `kommun.se`-användare markeras användarna på
+> `utb.kommun.se` som inaktiva eftersom de saknas i listan. Sätt
+> `"deactivate_missing": false` om ni behöver synka en del i taget.
+
+Matchningen kräver punkt före domänen, så en nyckel för `kommun.se` ger ingen
+åtkomst till `storkommun.se`.
 
 **Övriga inställningar:**
 

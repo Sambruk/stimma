@@ -54,12 +54,12 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     apiResponse(400, ['success' => false, 'error' => 'Ogiltig e-postadress.']);
 }
 
-// 5. Kontrollera domänmatch
+// 5. Kontrollera domänmatch (nyckelns domän täcker även underdomäner)
 $emailDomain = substr(strrchr($email, '@'), 1);
-if ($emailDomain !== $domain) {
+if (!domainCoversEmailDomain($domain, $emailDomain)) {
     apiResponse(403, [
         'success' => false,
-        'error' => "E-postdomänen '{$emailDomain}' matchar inte API-nyckelns domän '{$domain}'."
+        'error' => "E-postdomänen '{$emailDomain}' tillhör varken '{$domain}' eller någon underdomän till '{$domain}'."
     ]);
 }
 

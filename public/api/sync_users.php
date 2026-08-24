@@ -87,8 +87,11 @@ if (!$validation['valid']) {
     ]);
 }
 
-// 6. Utför synk via delad funktion
-$result = performUserSync($users, $domain, $deactivateMissing, $apiKeyId, $ipAddress);
+// 6. Utför synk via delad funktion.
+// Sista argumentet: nyckeln är utfärdad för primärdomänen och omfattar hela
+// organisationen, alltså även underdomäner — både när användare läggs till och
+// när saknade användare avaktiveras.
+$result = performUserSync($users, $domain, $deactivateMissing, $apiKeyId, $ipAddress, true);
 
 if ($result['success']) {
     // Logga i activity_log

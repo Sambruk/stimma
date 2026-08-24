@@ -87,6 +87,36 @@ function checkRateLimit($apiKeyId) {
 }
 
 /**
+ * Avgör om en API-nyckels domän täcker en e-postdomän
+ *
+ * En nyckel utfärdas alltid för organisationens primärdomän (t.ex. sater.se)
+ * och gäller då även alla underdomäner (edu.sater.se, utb.sater.se, ...).
+ *
+ * Matchningen är antingen exakt, eller ett suffix som föregås av punkt. Punkten
+ * är nödvändig: utan den skulle nyckeln för sater.se även täcka storsater.se,
+ * som är en helt annan organisation.
+ *
+ * @param string $keyDomain Domänen som API-nyckeln är utfärdad för
+ * @param string $emailDomain Domändelen av en e-postadress
+ * @return bool
+ */
+function domainCoversEmailDomain($keyDomain, $emailDomain) {
+    $keyDomain = strtolower(trim((string)$keyDomain));
+    $emailDomain = strtolower(trim((string)$emailDomain));
+
+    if ($keyDomain === '' || $emailDomain === '') {
+        return false;
+    }
+
+    if ($emailDomain === $keyDomain) {
+        return true;
+    }
+
+    $suffix = '.' . $keyDomain;
+    return substr($emailDomain, -strlen($suffix)) === $suffix;
+}
+
+/**
  * Validera användararray för synk
  *
  * Kontrollerar att varje användare har giltig e-post som matchar domänen,
@@ -117,10 +147,10 @@ function validateSyncUsers($users, $domain) {
             continue;
         }
 
-        // Kontrollera domänmatch
+        // Kontrollera domänmatch (nyckelns domän täcker även underdomäner)
         $emailDomain = substr(strrchr($email, '@'), 1);
-        if ($emailDomain !== $domain) {
-            $errors[] = "Användare #{$idx}: e-post '{$email}' matchar inte domänen '{$domain}'.";
+        if (!domainCoversEmailDomain($domain, $emailDomain)) {
+            $errors[] = "Användare #{$idx}: e-post '{$email}' tillhör varken '{$domain}' eller någon underdomän till '{$domain}'.";
             continue;
         }
 
