@@ -160,14 +160,14 @@ Hur länge du förblir inloggad beror på om du kryssar i **"Kom ihåg mig"** vi
 
 | Alternativ | Beteende |
 |------------|----------|
-| **Utan "Kom ihåg mig"** | Du loggas ut när du stänger webbläsaren |
-| **Med "Kom ihåg mig"** | Du förblir inloggad i **30 dagar**, även om du stänger webbläsaren |
+| **Utan "Kom ihåg mig"** | Inloggningen ligger bara på servern och rensas efter en stunds inaktivitet, cirka en halvtimme |
+| **Med "Kom ihåg mig"** | Du förblir inloggad i **7 dagar räknat från ditt senaste besök**, även om du stänger webbläsaren |
 
 **Rekommendation:**
 - **Personlig dator/mobil**: Kryssa i "Kom ihåg mig" för bekvämlighet
 - **Delad/offentlig dator**: Kryssa **inte** i "Kom ihåg mig" för säkerhetens skull
 
-**Obs:** Om du väljer "Kom ihåg mig" och använder Stimma regelbundet förnyas din inloggning automatiskt, så du behöver aldrig logga in igen så länge du besöker sidan inom 30 dagar.
+**Obs:** Sjudagarsklockan börjar om vid varje besök. Använder du Stimma minst en gång i veckan behöver du därför aldrig logga in på nytt — inloggningen förnyas automatiskt så länge du kommer tillbaka inom sju dagar.
 
 ---
 

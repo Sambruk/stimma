@@ -399,6 +399,30 @@ Felsökning av att Säter inte får åtkomst till API:et med `sater.se`.
       läsning, inte bara den egna — users-joinen filtrerade inte progress. Kurs 58 ur
       Åtvidabergs vy: 183 användare före, 75 efter. (Upptäckt 2026-08-25.)
 
+## Inloggningstid — text mot verklighet (2026-08-25)
+
+- [x] Kontrollerat vad som faktiskt gäller: REMEMBER_TOKEN_HOURS=168 (7 dygn), men
+      validateRememberToken() anropar createRememberToken() vid varje automatisk
+      inloggning → glidande fönster. Produktionsdata bekräftar: user 2 skapades
+      2025-12-02 och fick ny token 2026-08-25, 265 dagar senare.
+- [x] Utan "kom ihåg mig" gäller INTE 24 timmar. renewSession() anropas aldrig
+      (död kod), så SESSION_LIFETIME_HOURS=24 styr ingenting. Sessionen dör när
+      PHP:s gc rensar filen i /tmp: gc_maxlifetime=1440 s. Äldsta levande
+      www-data-session vid kontrollen var 76 min; allt äldre var borta.
+- [x] Texten rättad på tre ställen: public/index.php (kryssrutan),
+      admin/user_guide.php och docs/USER_GUIDE.md — de påstod tre olika saker
+      (7 dagar / 24 timmar / 30 dagar respektive "tills du stänger webbläsaren").
+
+### Kvarstår / noterat
+- [ ] `.env` sätter SESSION_LIFETIME=0 för att sessionskakan ska dö med webbläsaren,
+      men config.php:96 använder `getenv('SESSION_LIFETIME') ?: 30` och "0" är falsy
+      i PHP → konstanten blir 30, alltså 30 dygns kaka. Serversessionen dör långt
+      innan, så effekten är begränsad, men värdet i .env gör inte det den utger sig
+      för. Fix: `getenv(...) === false ? 30 : (int)getenv(...)`.
+- [ ] renewSession() i functions.php är död kod. Antingen anropa den (och då får
+      SESSION_LIFETIME_HOURS verkan) eller ta bort den — i dag ser den ut som en
+      säkerhetskontroll som inte finns.
+
 ## Raderingsflagga i synk-API:et (2026-08-24)
 
 - [x] Beslut: per-användarflagga `"delete": true` i users-listan (inte "radera saknade" —

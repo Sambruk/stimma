@@ -182,8 +182,12 @@ if (!$isLoggedIn):
                                 <div class="form-check mb-3 text-start">
                                     <input class="form-check-input" type="checkbox" id="remember_me" name="remember_me" value="1" checked>
                                     <label class="form-check-label" for="remember_me">
-                                        Kom ihåg mig i 7 dagar
+                                        Kom ihåg mig på den här enheten
                                     </label>
+                                    <div class="form-text small">
+                                        Du hålls inloggad så länge du besöker Stimma minst var sjunde dag.
+                                        Utan detta loggas du ut efter en stunds inaktivitet.
+                                    </div>
                                 </div>
                                 <button type="submit" class="btn btn-primary w-100">Skicka inloggningslänk</button>
                             </form>
