@@ -60,7 +60,14 @@
   - [x] Dokumentation: admin/user_guide.php + docs/USER_GUIDE.md + CHANGELOG.md (v2.1.0)
   - [x] E2E-verifierat: synlighet per org/domän/public_only, IDOR (edit, statistik, sortering, kurssmuggling
         vid spara), kaskad vid kursradering, tomma tillstånd, konstant antal queries (35 oavsett antal lärvägar)
-- [ ] Uppföljning: migrera index.php:214-276 till buildCourseVisibilityClause() (kräver före/efter-regressionstest av kurskatalogen för huvuddomänadmin, sub-domänanvändare med org-taggar och public_only)
+- [x] Uppföljning: migrera index.php:214-276 till buildCourseVisibilityClause() (kräver före/efter-regressionstest av kurskatalogen för huvuddomänadmin, sub-domänanvändare med org-taggar och public_only)
+      KLART 2026-08-25. 59 rader inline-logik ersatta med ett anrop. Regressionstest:
+      alla 887 användare jämförda gammal mot ny logik → 0 skillnader (461 med org-taggar,
+      425 utan, 1 public_only). Syntetiska fall i transaktion med rollback för de grenar
+      produktionsdatan saknar: publik registrering för domänanvändare, is_global, kurs
+      delad med utvald domän, org-tagg på kurs, public_only med 0/1/2 kurser, okänt
+      användar-id → alla lika. Sidan renderad för sex konton, kursinnehållet identiskt.
+      OBS: helpern slår upp användaren själv, så index.php gör en extra users-query.
 - [x] Statistik: filtrera per domän/organisation, flera samtidigt (2026-06-12)
   - [x] include/functions.php: getStatsDomainScope() + buildDomainFilterQuery(), val skärs alltid mot användarens scope
   - [x] admin/statistics.php: multi-select-dropdown, alla user-frågor mot valda domäner, filter följer med i export-länk

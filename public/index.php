@@ -213,66 +213,20 @@ else:
     // Get user's email, access_mode och domain
     $user = queryOne("SELECT email, access_mode FROM " . DB_DATABASE . ".users WHERE id = ?", [$userId]);
     $userDomain = substr(strrchr($user['email'], "@"), 1);
-    $isPublicOnly = ($user['access_mode'] ?? 'domain') === 'public_only';
 
-    // Publika kurs-IDs som användaren har access till (både för public_only och
-    // vanliga domain-användare som registrerat sig för externa publika kurser)
-    $publicCourseIds = getPublicCourseIdsForUser($userId);
+    // Vilka kurser användaren får se avgörs på ETT ställe: domänscope, org-taggar,
+    // shared-domains, publik registrering och globala kurser. Reglerna låg förr
+    // utskrivna här också, vilket innebar att varje ändring av synligheten måste
+    // göras på två ställen för att katalogen och lärvägarna skulle vara överens.
+    $courseVisibility = buildCourseVisibilityClause($userId, 'c');
+    $courseScopeFragment = $courseVisibility['fragment'];
+    $courseScopeParams = $courseVisibility['params'];
+    $isPublicOnly = $courseVisibility['is_public_only'];
 
-    if ($isPublicOnly) {
-        // public_only-användare ser ENDAST kurser från public_course_access.
-        // Ingen domänscope, inga org-taggar, ingen kurskatalog.
-        $courseScopeFragment = empty($publicCourseIds)
-            ? "c.id IN (NULL)"
-            : "c.id IN (" . implode(',', array_fill(0, count($publicCourseIds), '?')) . ")";
-        $courseScopeParams = $publicCourseIds;
-        $orgTagFilter = "";
-        $orgTagExtraParams = [];
-        $orgScopeDomains = [];
-        $tagDomainClause = ['fragment' => "t.organization_domain IN (NULL)", 'params' => []];
-    } else {
-        // Domain-användare: domänscope UNION ev. publika kurser.
-        $orgScopeDomains = getOrgScopeDomains($user['email']);
-        $courseDomainClause = buildDomainInClause($orgScopeDomains, 'c.organization_domain');
-        $tagDomainClause = buildDomainInClause($orgScopeDomains, 't.organization_domain');
-
-        // Hämta användarens organisationstaggar
-        $userOrgTags = getUserOrgTags($userId);
-        $userOrgTagValues = array_column($userOrgTags, 'tag');
-
-        if (!empty($userOrgTagValues)) {
-            $placeholders = implode(',', array_fill(0, count($userOrgTagValues), '?'));
-            $orgTagFilter = "AND (
-                NOT EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_org_tags cot WHERE cot.course_id = c.id)
-                OR EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_org_tags cot WHERE cot.course_id = c.id AND cot.tag IN ($placeholders))
-            )";
-            $orgTagExtraParams = $userOrgTagValues;
-        } else {
-            $orgTagFilter = "AND NOT EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_org_tags cot WHERE cot.course_id = c.id)";
-            $orgTagExtraParams = [];
-        }
-
-        // Shared-domain-filter: kurs syns om den antingen delas med hela orgen
-        // (inga rader i course_shared_domains) ELLER användarens domän finns i
-        // listan av valda domäner.
-        $sharedDomainFilter = "AND (
-            NOT EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_shared_domains csd WHERE csd.course_id = c.id)
-            OR EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_shared_domains csd WHERE csd.course_id = c.id AND csd.domain = ?)
-        )";
-        $sharedDomainExtraParams = [$userDomain];
-
-        // Bygg scope som "(domänmatch OCH org-tag-filter OCH shared-domain-filter)
-        // ELLER publik-access ELLER global kurs (is_global=1, satt av superadmin)"
-        $globalFragment = "c.is_global = 1";
-        if (!empty($publicCourseIds)) {
-            $publicPlaceholders = implode(',', array_fill(0, count($publicCourseIds), '?'));
-            $courseScopeFragment = "(({$courseDomainClause['fragment']} $orgTagFilter $sharedDomainFilter) OR c.id IN ($publicPlaceholders) OR $globalFragment)";
-            $courseScopeParams = array_merge($courseDomainClause['params'], $orgTagExtraParams, $sharedDomainExtraParams, $publicCourseIds);
-        } else {
-            $courseScopeFragment = "(({$courseDomainClause['fragment']} $orgTagFilter $sharedDomainFilter) OR $globalFragment)";
-            $courseScopeParams = array_merge($courseDomainClause['params'], $orgTagExtraParams, $sharedDomainExtraParams);
-        }
-    }
+    // Taggmolnet hämtas per domän. För public_only är scopet tomt, vilket ger
+    // "IN (NULL)" — en sådan användare tillhör ingen organisation och ska inte
+    // se några orgtaggar alls.
+    $tagDomainClause = buildDomainInClause($courseVisibility['org_scope_domains'], 't.organization_domain');
 
     // Fetch active lessons and courses
     $lessons = query("

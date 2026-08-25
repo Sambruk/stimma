@@ -2211,10 +2211,10 @@ function getPublicCourseIdsForUser($userId) {
 /**
  * Bygg det kompletta synlighetsfragmentet för kurser för en given användare.
  *
- * Logiken är identisk med den som index.php:214-276 bygger inline. Den finns
- * här som en återanvändbar helper för nyare vyer (lärvägar). index.php har
- * ännu inte migrerats hit — se TODO.md. Ändras reglerna måste BÅDA ställena
- * uppdateras tills migreringen är gjord.
+ * Detta är den enda platsen där kurssynligheten definieras. index.php byggde
+ * förr samma regler inline; sedan 2026-08-25 anropar även den hit, så en ändring
+ * av synligheten görs på ett ställe och slår igenom i både kurskatalogen och
+ * lärvägarna.
  *
  * Regler:
  *   public_only-användare  → ENDAST kurser från public_course_access
