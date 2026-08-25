@@ -45,53 +45,70 @@ if ($syncFilter === 'synced') {
     $syncWhere = ' AND u.is_synced = 1 AND u.sync_status = \'inactive\'';
 }
 
-// Bestäm domänfilter
+// Bestäm domänfilter — MÅSTE följa samma scope som users.php, annars innehåller
+// CSV:n färre rader än den lista exporten utgick från. En admin på orgens
+// primärdomän ser alla orgens domäner i listan och ska få med dem i exporten.
+$adminScopeDomains = getEffectiveOrgScopeDomains($currentUser['email']);
+
 $selectedDomain = '';
 if ($isSuperAdmin && isset($_GET['domain']) && $_GET['domain'] !== '') {
     $selectedDomain = $_GET['domain'];
+    // Validera mot faktiskt förekommande domäner, precis som users.php gör,
+    // så att en okänd domän faller tillbaka till "alla" i stället för tom fil.
+    $domainResults = queryAll("
+        SELECT DISTINCT SUBSTRING_INDEX(email, '@', -1) as domain
+        FROM " . DB_DATABASE . ".users
+    ");
+    if (!in_array($selectedDomain, array_column($domainResults, 'domain'), true)) {
+        $selectedDomain = '';
+    }
 }
 
-// Hämta användare
+// För superadmin styrs scopet av den valda domänen i dropdownen (per-domän).
+// För vanlig admin och läsbehörig används orgens samtliga domäner.
+if ($isSuperAdmin) {
+    $filterDomains = !empty($selectedDomain) ? [$selectedDomain] : [];
+} else {
+    $filterDomains = $adminScopeDomains;
+}
+
 // Taggfiltret från users.php förs vidare hit, annars innehåller CSV:n andra rader
 // än den lista exporten utgick från.
 $orgTagFilter = getOwnOrgTagFilter($currentUser['id']);
 $orgTagClauseUsers = buildOrgTagFilterClause($orgTagFilter['selected'], 'u.id');
 
 if ($isSuperAdmin && empty($selectedDomain)) {
-    $users = queryAll("
-        SELECT u.email, u.name, u.role, u.is_admin, u.is_editor, u.is_synced, u.sync_status,
-               u.verified_at, u.created_at,
-               COUNT(p.id) as completed_lessons,
-               SUBSTRING_INDEX(u.email, '@', -1) as user_domain,
-               (SELECT GROUP_CONCAT(uot.tag ORDER BY uot.tag SEPARATOR ', ')
-                FROM " . DB_DATABASE . ".user_org_tags uot WHERE uot.user_id = u.id) as org_tags
-        FROM " . DB_DATABASE . ".users u
-        LEFT JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id AND p.status = 'completed'
-        WHERE {$orgTagClauseUsers['fragment']} $syncWhere
-        GROUP BY u.id
-        ORDER BY user_domain ASC, u.email ASC
-    ", $orgTagClauseUsers['params']);
+    $userClause = $orgTagClauseUsers;
     $filenameDomain = 'alla-organisationer';
+    $logScope = ' (alla organisationer)';
 } else {
-    $filterDomain = $isSuperAdmin ? $selectedDomain : $currentUserDomain;
-    $users = queryAll("
-        SELECT u.email, u.name, u.role, u.is_admin, u.is_editor, u.is_synced, u.sync_status,
-               u.verified_at, u.created_at,
-               COUNT(p.id) as completed_lessons,
-               SUBSTRING_INDEX(u.email, '@', -1) as user_domain,
-               (SELECT GROUP_CONCAT(uot.tag ORDER BY uot.tag SEPARATOR ', ')
-                FROM " . DB_DATABASE . ".user_org_tags uot WHERE uot.user_id = u.id) as org_tags
-        FROM " . DB_DATABASE . ".users u
-        LEFT JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id AND p.status = 'completed'
-        WHERE u.email LIKE ? AND {$orgTagClauseUsers['fragment']} $syncWhere
-        GROUP BY u.id
-        ORDER BY u.email ASC
-    ", array_merge(['%@' . $filterDomain], $orgTagClauseUsers['params']));
-    $filenameDomain = $filterDomain;
+    $userClause = combineSqlClauses(
+        buildEmailDomainInClause($filterDomains, 'u.email'),
+        $orgTagClauseUsers
+    );
+    // Flerdomänsscope förekommer bara för admin på primärdomänen, så den egna
+    // domänen är samtidigt orgens huvuddomän och duger som filnamn.
+    $filenameDomain = count($filterDomains) === 1 ? $filterDomains[0] : $currentUserDomain;
+    $logScope = ' för ' . implode(', ', $filterDomains);
 }
 
+// Hämta användare
+$users = queryAll("
+    SELECT u.email, u.name, u.role, u.is_admin, u.is_editor, u.is_synced, u.sync_status,
+           u.verified_at, u.created_at,
+           COUNT(p.id) as completed_lessons,
+           SUBSTRING_INDEX(u.email, '@', -1) as user_domain,
+           (SELECT GROUP_CONCAT(uot.tag ORDER BY uot.tag SEPARATOR ', ')
+            FROM " . DB_DATABASE . ".user_org_tags uot WHERE uot.user_id = u.id) as org_tags
+    FROM " . DB_DATABASE . ".users u
+    LEFT JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id AND p.status = 'completed'
+    WHERE {$userClause['fragment']} $syncWhere
+    GROUP BY u.id
+    ORDER BY user_domain ASC, u.email ASC
+", $userClause['params']);
+
 // Logga exporten
-logActivity($_SESSION['user_email'], "Exporterade användarlista" . ($filenameDomain !== 'alla-organisationer' ? " för " . $filenameDomain : " (alla organisationer)"));
+logActivity($_SESSION['user_email'], "Exporterade användarlista" . $logScope);
 
 // Generera CSV
 $filename = 'stimma-anvandare-' . $filenameDomain . '-' . date('Y-m-d') . '.csv';

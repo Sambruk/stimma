@@ -373,9 +373,12 @@ Felsökning av att Säter inte får åtkomst till API:et med `sater.se`.
 - [ ] Org-taggar lagras platt — "Kommun/Förvaltning/Avdelning" blir tre fristående taggar.
       Ett hierarkiskt filter ("allt under Förvaltningen") går inte att uttrycka förrän
       datamodellen bär vägen. Överväg en `path`-kolumn i user_org_tags.
-- [ ] export_users.php filtrerar på `$currentUserDomain` medan users.php använder hela
+- [x] export_users.php filtrerar på `$currentUserDomain` medan users.php använder hela
       org-scopet. En admin på primärdomänen med flera domäner exporterar därför färre rader
-      än listan visar. Pre-existerande, orört.
+      än listan visar. FIXAT 2026-08-25: exporten använder nu
+      getEffectiveOrgScopeDomains() + buildEmailDomainInClause(), samma som listan.
+      ITSAM-admin: 31 rader före → 231 efter, exakt lika många som listan visar.
+      Superadmin med okänd domän i ?domain= gav förr tom fil, faller nu tillbaka till alla.
 - [ ] statistics.php listar ALLA kurser i hela systemet för admin, inte bara den egna
       organisationens. Pre-existerande; läsbehörig fick en domänavgränsad gren i stället.
 
