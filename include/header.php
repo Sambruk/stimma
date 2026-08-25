@@ -185,19 +185,25 @@
     // Roll-flaggor och user-data — användbart för sidebar.php och org-bar
     $isAdmin = false;
     $isCourseEditor = false;
+    // Läsbehörig släpps in i adminytan av admin/include/auth_check.php och måste
+    // därför också räknas här — annars finns sidorna men ingen väg dit.
+    $isViewer = false;
     $headerUserName = '';
     $headerUserRole = 'student';
     $headerUserOrgTags = [];
 
     if (isset($_SESSION['user_id'])) {
-        $user = queryOne("SELECT name, is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
+        $user = queryOne("SELECT name, is_admin, is_editor, is_viewer FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
         $isAdmin = $user ? (bool)$user['is_admin'] : false;
         $isCourseEditor = $user ? (bool)$user['is_editor'] : false;
+        $isViewer = $user ? (bool)$user['is_viewer'] : false;
         $headerUserName = $user['name'] ?? '';
         if ($isAdmin) {
             $headerUserRole = 'admin';
         } elseif ($isCourseEditor) {
             $headerUserRole = 'editor';
+        } elseif ($isViewer) {
+            $headerUserRole = 'viewer';
         }
         $headerUserOrgTags = getUserOrgTags($_SESSION['user_id']);
     }
@@ -268,6 +274,8 @@
                         <span class="badge bg-danger">Admin</span>
                     <?php elseif ($headerUserRole === 'editor'): ?>
                         <span class="badge bg-warning text-dark">Redaktör</span>
+                    <?php elseif ($headerUserRole === 'viewer'): ?>
+                        <span class="badge bg-info text-dark">Läsbehörig</span>
                     <?php else: ?>
                         <span class="badge bg-secondary">Användare</span>
                     <?php endif; ?>

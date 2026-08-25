@@ -17,6 +17,19 @@ require_once '../include/auth.php';
 // Include centralized authentication and authorization check
 require_once 'include/auth_check.php';
 
+// auth_check.php släpper in admin, redaktör OCH läsbehörig. Att skapa eller
+// ändra en kurs är en skrivande åtgärd och läsbehörig ska inte hit.
+// Utan den här grinden kunde en läsbehörig öppna "Skapa ny kurs" och spara:
+// userCanModifyCourse() nedan skyddar bara redigering av en BEFINTLIG kurs
+// (den ligger inne i if (isset($_GET['id']))), medan skapandegrenen saknar
+// egen behörighetskontroll.
+if ($isViewer && !$isAdmin && !$isEditor) {
+    $_SESSION['message'] = 'Rollen Läsbehörig ger läsrättigheter och kan inte skapa eller ändra kurser.';
+    $_SESSION['message_type'] = 'danger';
+    header('Location: index.php');
+    exit;
+}
+
 // Hämta användarens e-post för användning i kursbehörigheter
 $userEmail = $_SESSION['user_email'];
 

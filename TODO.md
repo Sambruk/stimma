@@ -399,6 +399,39 @@ Felsökning av att Säter inte får åtkomst till API:et med `sater.se`.
       läsning, inte bara den egna — users-joinen filtrerade inte progress. Kurs 58 ur
       Åtvidabergs vy: 183 användare före, 75 efter. (Upptäckt 2026-08-25.)
 
+## Läsbehörig: menyval och behörighetsgrindar (2026-08-25)
+
+- [x] Rapporterat: anders.eriksson@sater.se (is_viewer=1) fick inget menyval till
+      adminytan. Orsak: include/sidebar.php byggde $showAdminLink av is_admin ||
+      is_editor, och include/header.php slog bara upp de två flaggorna.
+      admin/include/auth_check.php släppte in rollen hela tiden — sidorna fanns,
+      men ingen väg dit. Åtgärdat i båda filerna, rollmärket "Läsbehörig" tillagt.
+- [x] admin/index.php visade AI-widgetens "Se detaljer" för alla, men ai_usage.php
+      kräver admin → död länk för läsbehörig och redaktör. Gatead.
+- [x] admin/statistics.php var inte länkad från någonstans i hela appen — bara
+      nåbar genom att skriva in adressen, trots att sidan underhålls och har en
+      egen gren för läsbehörig. Tillagd i adminmenyn som "Statistik per användare"
+      för admin/redaktör/läsbehörig. Visar framsteg per användare, vilket
+      course_stats.php ("Kursstatistik") inte gör — de överlappar alltså inte.
+- [x] 🔴 SÄKERHET: edit_course.php släppte in läsbehörig. userCanModifyCourse()
+      ligger inne i `if (isset($_GET['id']))` och skyddar bara redigering av en
+      BEFINTLIG kurs — utan ?id= renderades "Skapa ny kurs" med fungerande
+      POST-formulär och INSERT-gren utan någon behörighetskontroll. En läsande
+      roll kunde alltså skapa kurser. Grind tillagd överst i filen.
+- [x] Övriga skrivande sidor kontrollerade: sync_tool.php har egen admin-grind,
+      edit_lesson.php har ett skyddsnät på POST (kräver författare eller
+      kursredaktör). Båda håller. courses.php visar bara listan för läsbehörig.
+
+### Kvarstår / noterat
+- [ ] Rotorsaken kvarstår som mönster: is_viewer lades till i den DELADE
+      auth_check.php utan att varje adminsida granskades för vad det öppnade.
+      Nästa roll som läggs till där riskerar samma sak. Överväg att dela upp
+      auth_check i en läsande och en skrivande grind i stället för att varje
+      skrivande sida ska komma ihåg att neka själv.
+- [ ] sync_tool.php och edit_lesson.php inkluderar header.php FÖRE sin
+      behörighetskontroll, så en obehörig får ~6 kB sidhuvud renderat före
+      omdirigeringen. Fungerar, men kontrollen borde ligga före utskrift.
+
 ## Inloggningstid — text mot verklighet (2026-08-25)
 
 - [x] Kontrollerat vad som faktiskt gäller: REMEMBER_TOKEN_HOURS=168 (7 dygn), men

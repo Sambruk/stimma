@@ -15,19 +15,24 @@ $rdActive = $rdActive ?? '';
 
 // Roll-flaggor — beräknas redan i header.php men vi backar upp här om
 // någon inkluderar sidebar.php direkt.
-if (!isset($isAdmin) || !isset($isCourseEditor)) {
+if (!isset($isAdmin) || !isset($isCourseEditor) || !isset($isViewer)) {
     $isAdmin = false;
     $isCourseEditor = false;
+    $isViewer = false;
     if (isset($_SESSION['user_id'])) {
         $sbUser = queryOne(
-            "SELECT is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE id = ?",
+            "SELECT is_admin, is_editor, is_viewer FROM " . DB_DATABASE . ".users WHERE id = ?",
             [$_SESSION['user_id']]
         );
         $isAdmin = $sbUser ? (bool)$sbUser['is_admin'] : false;
         $isCourseEditor = $sbUser ? (bool)$sbUser['is_editor'] : false;
+        $isViewer = $sbUser ? (bool)$sbUser['is_viewer'] : false;
     }
 }
-$showAdminLink = ($isAdmin || $isCourseEditor) && empty($isHeaderPublicOnly);
+// Samma tre roller som admin/include/auth_check.php släpper in. Listan måste
+// hållas i takt med den, annars får någon roll sidor utan meny eller meny utan
+// sidor.
+$showAdminLink = ($isAdmin || $isCourseEditor || $isViewer) && empty($isHeaderPublicOnly);
 
 // Användarinitialer för avatar
 $rdUserName = $headerUserName ?? '';

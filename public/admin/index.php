@@ -402,9 +402,13 @@ $aiWidgetLabel = $aiWidgetScope['label'] ?: ($_SESSION['user_email'] ?? 'din org
                         </h6>
                         <small class="text-muted"><?= htmlspecialchars($aiWidgetLabel) ?> · <?= date('Y-m') ?></small>
                     </div>
+                    <?php /* ai_usage.php kräver admin. Läsbehörig och redaktör fick
+                            knappen men kastades ut av behörighetskontrollen. */ ?>
+                    <?php if ($isAdmin): ?>
                     <a href="ai_usage.php" class="btn btn-sm btn-outline-primary">
                         <i class="bi bi-bar-chart me-1"></i>Se detaljer
                     </a>
+                    <?php endif; ?>
                 </div>
                 <div class="d-flex align-items-center gap-3 mb-2">
                     <div class="flex-grow-1">

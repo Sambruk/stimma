@@ -171,6 +171,15 @@ $current_page = basename($_SERVER['PHP_SELF']);
                         <i class="bi bi-diagram-3 me-2"></i> Kursstatistik
                     </a>
                 </li>
+                <?php /* statistics.php saknade helt länk och gick bara att nå genom att
+                        skriva in adressen, trots att sidan underhålls och har en egen
+                        gren för läsbehörig. Den visar framsteg per användare, vilket
+                        Kursstatistik ovan inte gör. */ ?>
+                <li class="nav-item">
+                    <a href="statistics.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'statistics.php' ? 'active' : '' ?>">
+                        <i class="bi bi-bar-chart-line me-2"></i> Statistik per användare
+                    </a>
+                </li>
                 <?php endif; ?>
                 <?php /* Diplom kräver admin eller läsbehörig. Redaktören hade länken men
                         blev utkastad av behörighetskontrollen i certificates.php. */ ?>
