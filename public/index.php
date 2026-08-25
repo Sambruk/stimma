@@ -185,8 +185,8 @@ if (!$isLoggedIn):
                                         Kom ihåg mig på den här enheten
                                     </label>
                                     <div class="form-text small">
-                                        Du hålls inloggad så länge du besöker Stimma minst var sjunde dag.
-                                        Utan detta loggas du ut efter en stunds inaktivitet.
+                                        Du hålls inloggad så länge du besöker Stimma minst en gång i månaden.
+                                        Utan detta loggas du ut efter en arbetsdag.
                                     </div>
                                 </div>
                                 <button type="submit" class="btn btn-primary w-100">Skicka inloggningslänk</button>

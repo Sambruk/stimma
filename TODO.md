@@ -413,15 +413,26 @@ Felsökning av att Säter inte får åtkomst till API:et med `sater.se`.
       admin/user_guide.php och docs/USER_GUIDE.md — de påstod tre olika saker
       (7 dagar / 24 timmar / 30 dagar respektive "tills du stänger webbläsaren").
 
+- [x] Beslut 2026-08-25: kom-ihåg-mig höjs till 30 dygn, glidande utan tak. Utan
+      kryss gäller 8 timmar (en arbetsdag). REMEMBER_TOKEN_HOURS=720,
+      SESSION_LIFETIME_HOURS=8.
+- [x] `session.gc_maxlifetime` sätts nu i config.php till SESSION_LIFETIME_HOURS.
+      PHP:s standard 1440 s var kortare än kakan lovade — det var den verkliga
+      orsaken till att man åkte ut efter en halvtimme.
+- [x] Falsy-buggen borta: SESSION_LIFETIME (dygn) är helt ersatt av
+      SESSION_LIFETIME_HOURS, som läses med `=== false` i stället för `?:`.
+
 ### Kvarstår / noterat
-- [ ] `.env` sätter SESSION_LIFETIME=0 för att sessionskakan ska dö med webbläsaren,
-      men config.php:96 använder `getenv('SESSION_LIFETIME') ?: 30` och "0" är falsy
-      i PHP → konstanten blir 30, alltså 30 dygns kaka. Serversessionen dör långt
-      innan, så effekten är begränsad, men värdet i .env gör inte det den utger sig
-      för. Fix: `getenv(...) === false ? 30 : (int)getenv(...)`.
-- [ ] renewSession() i functions.php är död kod. Antingen anropa den (och då får
-      SESSION_LIFETIME_HOURS verkan) eller ta bort den — i dag ser den ut som en
-      säkerhetskontroll som inte finns.
+- [ ] renewSession() i functions.php är fortfarande död kod. Den ser ut som en
+      sessionsutgångskontroll men anropas inte från någonstans. Ta bort den eller
+      koppla in den — nu när gc_maxlifetime styr utgången fyller den ingen funktion.
+- [ ] De 333 befintliga remember-tokens har kvar sina 7-dagarsutgångar. De blir
+      30 dagar automatiskt vid nästa besök. Vill man ge alla 30 dagar direkt:
+      `UPDATE remember_tokens SET expires_at = DATE_ADD(NOW(), INTERVAL 30 DAY)
+      WHERE expires_at > NOW();` — inte gjort, ändrar inloggningsläget för alla.
+- [ ] Glidande fönster utan tak betyder att en aktiv användare aldrig loggas ut.
+      Medvetet valt. Vill man ha en bortre gräns krävs ett tak på hur gammal den
+      ursprungliga inloggningen får vara, inte bara på token.
 
 ## Raderingsflagga i synk-API:et (2026-08-24)
 

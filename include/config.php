@@ -93,8 +93,19 @@ define('AI_RATE_LIMIT_MINUTES', getenv('AI_RATE_LIMIT_MINUTES') ?: 5);
 // Auth Configuration
 define('AUTH_TOKEN_EXPIRY_MINUTES', getenv('AUTH_TOKEN_EXPIRY_MINUTES') ?: 15);
 define('SESSION_REGENERATE_MINUTES', getenv('SESSION_REGENERATE_MINUTES') ?: 30);
-define('SESSION_LIFETIME', getenv('SESSION_LIFETIME') ?: 30);
-define('SESSION_LIFETIME_HOURS', getenv('SESSION_LIFETIME_HOURS') ?: 24);
+// Sessionens livslängd i timmar. Ett enda värde styr både hur länge
+// sessionskakan gäller och hur länge en overksam session får ligga kvar på
+// servern — de två måste hänga ihop, annars pekar kakan på en session som
+// redan är städad. SESSION_LIFETIME (dygn) fanns tidigare men användes bara
+// för kakan och är ersatt av det här värdet.
+//
+// getenv() ger sträng, och "0" är falsy i PHP: `getenv(...) ?: 8` hade tyst
+// gjort om ett medvetet nollvärde till 8. Därför === false.
+$sessionLifetimeHoursEnv = getenv('SESSION_LIFETIME_HOURS');
+define('SESSION_LIFETIME_HOURS',
+    ($sessionLifetimeHoursEnv === false || $sessionLifetimeHoursEnv === '')
+        ? 8
+        : (int)$sessionLifetimeHoursEnv);
 
 // Session settings - skip for CLI
 if (php_sapi_name() !== 'cli' && session_status() === PHP_SESSION_NONE) {
@@ -108,6 +119,12 @@ if (php_sapi_name() !== 'cli' && session_status() === PHP_SESSION_NONE) {
         || (int)($_SERVER['HTTP_X_FORWARDED_PORT'] ?? 0) === 443;
     $httponly = true;
 
+    // Hur länge en overksam session får ligga kvar på servern innan PHP:s
+    // garbage collector rensar filen. Standard är 1440 sekunder (24 minuter),
+    // alltså långt kortare än vad sessionskakan lovar — utan detta loggades man
+    // ut efter en halvtimmes inaktivitet trots en giltig kaka.
+    ini_set('session.gc_maxlifetime', SESSION_LIFETIME_HOURS * 3600);
+
     // Use only cookies for session handling
     ini_set('session.use_cookies', 1);
     ini_set('session.use_only_cookies', 1);
@@ -118,7 +135,7 @@ if (php_sapi_name() !== 'cli' && session_status() === PHP_SESSION_NONE) {
 
     // Set session cookie parameters
     session_set_cookie_params([
-        'lifetime' => SESSION_LIFETIME * 24 * 60 * 60,
+        'lifetime' => SESSION_LIFETIME_HOURS * 60 * 60,
         'path' => '/',
         'domain' => '',
         'secure' => $secure,

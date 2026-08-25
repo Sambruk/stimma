@@ -340,7 +340,7 @@ require_once 'include/header.php';
                                             </span>
                                             <div>
                                                 <strong>Utan "Kom ihåg mig"</strong>
-                                                <p class="text-muted small mb-0">Din inloggning ligger bara på servern och rensas efter <strong>en stunds inaktivitet</strong> (cirka en halvtimme). Efter det behöver du logga in igen med en ny e-postlänk.</p>
+                                                <p class="text-muted small mb-0">Du förblir inloggad i <strong>8 timmar</strong> — en arbetsdag. Efter det behöver du logga in igen med en ny e-postlänk.</p>
                                             </div>
                                         </div>
                                     </div>
@@ -351,7 +351,7 @@ require_once 'include/header.php';
                                             </span>
                                             <div>
                                                 <strong>Med "Kom ihåg mig"</strong>
-                                                <p class="text-muted small mb-0">Du förblir inloggad i <strong>7 dagar från ditt senaste besök</strong>. Klockan börjar om varje gång du använder Stimma, så du behöver aldrig logga in igen så länge du kommer tillbaka inom en vecka. Perfekt om du använder din egen dator eller mobil.</p>
+                                                <p class="text-muted small mb-0">Du förblir inloggad i <strong>30 dagar från ditt senaste besök</strong>. Klockan börjar om varje gång du använder Stimma, så du behöver aldrig logga in igen så länge du kommer tillbaka inom en månad. Perfekt om du använder din egen dator eller mobil.</p>
                                             </div>
                                         </div>
                                     </div>

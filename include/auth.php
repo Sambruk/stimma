@@ -284,13 +284,13 @@ function logout() {
  * Skapa en "kom ihåg mig" token för användaren
  *
  * @param int $userId Användarens ID
- * @param int|null $hours Antal timmar token ska vara giltig (standard från REMEMBER_TOKEN_HOURS eller 168 = 7 dagar)
+ * @param int|null $hours Antal timmar token ska vara giltig (standard från REMEMBER_TOKEN_HOURS eller 720 = 30 dagar)
  * @return bool True om det lyckades
  */
 function createRememberToken($userId, $hours = null) {
-    // Använd miljövariabel eller standardvärde (168 timmar = 7 dagar)
+    // Använd miljövariabel eller standardvärde (720 timmar = 30 dagar)
     if ($hours === null) {
-        $hours = (int)(getenv('REMEMBER_TOKEN_HOURS') ?: 168);
+        $hours = (int)(getenv('REMEMBER_TOKEN_HOURS') ?: 720);
     }
 
     // Generera en säker token
@@ -373,7 +373,10 @@ function validateRememberToken() {
     $user = queryOne("SELECT * FROM " . DB_DATABASE . ".users WHERE id = ?", [$userId]);
 
     if ($user) {
-        // Förnya token (använder REMEMBER_TOKEN_HOURS från .env)
+        // Förnya token vid varje automatisk inloggning: fönstret är glidande, så
+        // 30 dagar räknas från senaste besöket och inte från inloggningen. Den som
+        // använder Stimma regelbundet loggas därmed aldrig ut. Medvetet valt
+        // 2026-08-25 — vill man ha en bortre gräns krävs ett tak på token-ålder.
         createRememberToken($userId);
 
         logActivity($user['email'], "Automatisk inloggning via kom-ihåg-mig cookie");
