@@ -72,23 +72,21 @@ $page_title = 'Statistik';
 // Hämta vald kurs om sådan finns
 $selectedCourseId = isset($_GET['course_id']) ? (int)$_GET['course_id'] : null;
 
-// Hämta kurser baserat på behörighet
-if ($isAdmin) {
-    // Admin ser alla kurser
-    $courses = query("SELECT id, title FROM " . DB_DATABASE . ".courses WHERE status = 'active' ORDER BY title ASC");
+// Kursurvalet för admin och läsbehörig: organisationens egna kurser plus det
+// som delats hit eller är globalt. Avgränsningen gäller HELA scopet, inte det
+// valda domänfiltret — annars hade en kurs som ägs av huvuddomänen försvunnit
+// när en admin filtrerar fram en enskild medlemskommun vars användare läst den.
+$statsCourseScope = buildOrgCourseScopeClause($orgScopeDomains, 'c');
 
-    // Hämta kurs-IDs för statistikfrågor (alla kurser)
-    $courseIds = array_column($courses, 'id');
-} elseif ($isViewer) {
-    // Läsbehörig ser alla kurser inom sitt domänscope. Till skillnad från admin
-    // avgränsas listan på organisation: en läsande roll ska inte kunna läsa av
-    // vilka kurser andra organisationer har, ens som titlar.
-    $statsCourseDomClause = buildDomainInClause($orgScopeDomains, 'c.organization_domain');
+// Hämta kurser baserat på behörighet
+if ($isAdmin || $isViewer) {
+    // Både admin och läsbehörig avgränsas på organisation: ingen av rollerna ska
+    // kunna läsa av vilka kurser andra organisationer har, ens som titlar.
     $courses = query(
         "SELECT c.id, c.title FROM " . DB_DATABASE . ".courses c
-         WHERE c.status = 'active' AND {$statsCourseDomClause['fragment']}
+         WHERE c.status = 'active' AND {$statsCourseScope['fragment']}
          ORDER BY c.title ASC",
-        $statsCourseDomClause['params']
+        $statsCourseScope['params']
     );
     $courseIds = array_column($courses, 'id');
 } else {
@@ -104,16 +102,16 @@ if ($isAdmin) {
     $courseIds = array_column($courses, 'id');
 }
 
-// Om redaktör eller läsbehörig försöker se en kurs de inte har tillgång till.
-// Redaktören prövas mot ägarskap/redaktörskap, läsbehörig mot domänscopet —
-// annars hade ett kurs-id i URL:en räckt för att nå en annan organisations kurs.
-if ($selectedCourseId && !$isAdmin) {
-    if ($isViewer) {
-        $viewerCourseClause = buildDomainInClause($orgScopeDomains, 'c.organization_domain');
+// Om någon försöker se en kurs de inte har tillgång till. Redaktören prövas mot
+// ägarskap/redaktörskap, admin och läsbehörig mot organisationens kursscope —
+// annars hade ett kurs-id i URL:en räckt för att nå en annan organisations kurs
+// förbi den avgränsade kurslistan ovan.
+if ($selectedCourseId) {
+    if ($isAdmin || $isViewer) {
         $hasAccess = queryOne(
             "SELECT c.id FROM " . DB_DATABASE . ".courses c
-             WHERE c.id = ? AND {$viewerCourseClause['fragment']}",
-            array_merge([$selectedCourseId], $viewerCourseClause['params'])
+             WHERE c.id = ? AND {$statsCourseScope['fragment']}",
+            array_merge([$selectedCourseId], $statsCourseScope['params'])
         );
     } else {
         $hasAccess = queryOne("SELECT c.id FROM " . DB_DATABASE . ".courses c
@@ -184,16 +182,19 @@ if (!empty($courseIds)) {
             c.id as course_id,
             c.title as course_title,
             COUNT(DISTINCT l.id) as total_lessons,
-            COUNT(DISTINCT CASE WHEN p.status = 'completed' THEN p.id END) as completed_count,
-            COUNT(DISTINCT p.user_id) as users_started
+            COUNT(DISTINCT CASE WHEN p.status = 'completed' AND u.id IS NOT NULL THEN p.id END) as completed_count,
+            COUNT(DISTINCT u.id) as users_started
         FROM " . DB_DATABASE . ".courses c
         LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id AND l.status = 'active'
         LEFT JOIN " . DB_DATABASE . ".progress p ON l.id = p.lesson_id
+        -- u är non-null bara för användare inom scopet. Räkningarna nedan hänger
+        -- därför på u, inte på p: annars summeras andra organisationers läsning
+        -- in i den egna kursstatistiken.
         LEFT JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id AND {$userEmailClauseU['fragment']}
-        WHERE c.status = 'active'
+        WHERE c.status = 'active' AND {$statsCourseScope['fragment']}
         GROUP BY c.id, c.title
         ORDER BY c.title ASC";
-        $courseStats = query($courseStatsQuery, $userEmailClauseU['params']);
+        $courseStats = query($courseStatsQuery, array_merge($userEmailClauseU['params'], $statsCourseScope['params']));
     } else {
         // För redaktörer: statistik för alla användare på deras kurser
         $courseStats = query("SELECT

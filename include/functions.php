@@ -1263,6 +1263,58 @@ function buildDomainInClause(array $domains, $column) {
 }
 
 /**
+ * Bygg klausulen för vilka kurser en organisation ska kunna följa upp.
+ *
+ * Används av admin- och uppföljningssidor (statistik) där kurslistan ska vara
+ * avgränsad till den egna organisationen — en admin i en kommun ska inte se
+ * vilka kurser andra kommuner har, ens som titlar. Tre fall räknas in:
+ *
+ *   1. Kurser organisationen själv äger (organization_domain i scopet)
+ *   2. Globala kurser (is_global = 1), som är avsedda för alla
+ *   3. Kurser som uttryckligen delats med någon av scopets domäner
+ *      (course_shared_domains)
+ *   4. Kurser som någon i scopet FAKTISKT har läst i
+ *
+ * Punkt 4 är inte en dubblett av 1–3. En sub-domänadmin har bara sin egen domän
+ * i scopet, medan medarbetarna läser kurser som huvudorganisationen äger — utan
+ * punkt 4 hade deras arbete försvunnit ur uppföljningen. Titeln på en främmande
+ * kurs röjs alltså bara när de egna medarbetarna redan läser den, aldrig som en
+ * öppen katalog över andra organisationers kurser.
+ *
+ * @param array<string> $domains Organisationens domänscope
+ * @param string $alias Tabellalias för courses i den anropande frågan
+ * @return array{fragment:string, params:array}
+ */
+function buildOrgCourseScopeClause(array $domains, $alias = 'c') {
+    $a = preg_replace('/[^a-zA-Z0-9_]/', '', $alias);
+    if ($a === '') {
+        $a = 'c';
+    }
+
+    if (empty($domains)) {
+        // Utan domänscope återstår bara det som är globalt för alla.
+        return ['fragment' => "($a.is_global = 1)", 'params' => []];
+    }
+
+    $own = buildDomainInClause($domains, "$a.organization_domain");
+    $placeholders = implode(',', array_fill(0, count($domains), '?'));
+    $lowered = array_values(array_map('strtolower', $domains));
+
+    return [
+        'fragment' => "({$own['fragment']}
+                        OR $a.is_global = 1
+                        OR EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_shared_domains csd
+                                   WHERE csd.course_id = $a.id AND csd.domain IN ($placeholders))
+                        OR EXISTS (SELECT 1 FROM " . DB_DATABASE . ".lessons lscope
+                                   JOIN " . DB_DATABASE . ".progress pscope ON pscope.lesson_id = lscope.id
+                                   JOIN " . DB_DATABASE . ".users uscope ON uscope.id = pscope.user_id
+                                   WHERE lscope.course_id = $a.id
+                                     AND LOWER(SUBSTRING_INDEX(uscope.email, '@', -1)) IN ($placeholders)))",
+        'params' => array_merge($own['params'], array_values($domains), $lowered),
+    ];
+}
+
+/**
  * Bygg en parametriserad IN-klausul för en e-postkolumn där vi vill matcha
  * användare vars e-postdomän finns i listan.
  *

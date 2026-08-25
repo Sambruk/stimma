@@ -379,8 +379,18 @@ Felsökning av att Säter inte får åtkomst till API:et med `sater.se`.
       getEffectiveOrgScopeDomains() + buildEmailDomainInClause(), samma som listan.
       ITSAM-admin: 31 rader före → 231 efter, exakt lika många som listan visar.
       Superadmin med okänd domän i ?domain= gav förr tom fil, faller nu tillbaka till alla.
-- [ ] statistics.php listar ALLA kurser i hela systemet för admin, inte bara den egna
-      organisationens. Pre-existerande; läsbehörig fick en domänavgränsad gren i stället.
+- [x] statistics.php listar ALLA kurser i hela systemet för admin, inte bara den egna
+      organisationens. FIXAT 2026-08-25: ny helper buildOrgCourseScopeClause() i
+      functions.php avgränsar kurslistan till egna kurser + globala + hitdelade +
+      kurser de egna användarna faktiskt läst. Admin och läsbehörig delar nu samma
+      gren. ITSAM-admin: 28 kurser före → 6 efter. Fjärde armen (faktiskt läst)
+      behövs för sub-domänadmins, som annars tappat allt utom sin enda egna kurs.
+- [x] statistics.php: åtkomstkontrollen för ?course_id= hoppades över för admin, så
+      ett kurs-id i URL:en nådde vilken kurs som helst förbi kurslistan. Gäller nu
+      även admin, mot samma kursscope. (Upptäckt 2026-08-25.)
+- [x] statistics.php: users_started och completed_count räknade ALLA organisationers
+      läsning, inte bara den egna — users-joinen filtrerade inte progress. Kurs 58 ur
+      Åtvidabergs vy: 183 användare före, 75 efter. (Upptäckt 2026-08-25.)
 
 ## Raderingsflagga i synk-API:et (2026-08-24)
 
