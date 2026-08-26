@@ -3079,6 +3079,44 @@ function sendPermissionChangeNotification($userEmail, $changeType, $newStatus, $
 // ---------------------------------------------------------------------------
 
 /**
+ * Tolka värdet i läsbehörighetskolumnen vid batch-uppdatering.
+ *
+ * Läsbehörighet är INTE en roll. users.role är en enum (student/teacher/admin/
+ * super_admin) utan sådant värde — behörigheten bärs av den separata kolumnen
+ * users.is_viewer, som i användarlistan är en egen på/av-knapp vid sidan av
+ * rollen. Därför tolkas den som en ja/nej-flagga och inte via normalizeSyncRole().
+ *
+ * Tomt värde ger null, alltså fel. En ifylld fil med en blank cell är tvetydig,
+ * och att gissa "ja" hade delat ut behörighet någon inte bett om.
+ *
+ * @param mixed $value Värdet från filen eller JSON-posten
+ * @return int|null 1 = läsbehörig, 0 = inte läsbehörig, null = otolkbart
+ */
+function parseViewerFlagValue($value) {
+    if (is_bool($value)) {
+        return $value ? 1 : 0;
+    }
+    if (is_int($value)) {
+        return $value === 1 ? 1 : ($value === 0 ? 0 : null);
+    }
+    if (!is_string($value)) {
+        return null;
+    }
+
+    $v = mb_strtolower(trim($value));
+    if ($v === '') {
+        return null;
+    }
+
+    $sant  = ['ja', 'j', 'true', '1', 'x', 'yes', 'y', 'läsbehörig', 'lasbehorig'];
+    $falskt = ['nej', 'n', 'false', '0', 'no', 'ta bort', 'ingen'];
+
+    if (in_array($v, $sant, true))  return 1;
+    if (in_array($v, $falskt, true)) return 0;
+    return null;
+}
+
+/**
  * Normalisera ett rollvärde från synk-API:et till det värde som lagras.
  *
  * Rollen heter "Användare" i hela gränssnittet och i dokumentationen. Internt

@@ -242,6 +242,49 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
             </div>
         </div>
 
+        <!-- Läsbehörighet i batch -->
+        <div class="card mb-3">
+            <div class="card-header bg-info text-dark">
+                <h6 class="m-0"><i class="bi bi-eye me-2"></i>Läsbehörighet i batch</h6>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted mb-3">
+                    Läsbehörig är ingen roll utan en separat behörighet, därför ligger den inte i
+                    rollistan ovan. Här sätter eller tar du bort den för många konton i taget.
+                    <strong>Inget annat på kontot ändras</strong> — inte rollen, namnet,
+                    organisationstaggarna eller synkstatusen. Konton som inte nämns i filen
+                    lämnas orörda.
+                </p>
+                <div class="alert alert-light border small py-2 mb-3">
+                    <strong>Filformat:</strong> <code>email;läsbehörig</code><br>
+                    Andra kolumnen är <code>ja</code> eller <code>nej</code>. Utelämnar du kolumnen
+                    helt tolkas varje rad som <code>ja</code>. Rubrikrad hoppas över.
+                    <div class="mt-1">
+                        <a href="#" id="sampleViewerCsvLink"><i class="bi bi-file-earmark-text me-1"></i>Ladda ner exempelfil</a>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small mb-1">Välj fil</label>
+                    <input type="file" id="viewerFileInput" class="form-control form-control-sm" accept=".csv,.txt">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small mb-1">Avgränsare</label>
+                    <select id="viewerDelimiter" class="form-select form-select-sm">
+                        <option value=";">Semikolon (;)</option>
+                        <option value=",">Komma (,)</option>
+                        <option value="\t">Tab</option>
+                    </select>
+                </div>
+                <div id="viewerPreview" class="d-none mb-3">
+                    <p class="fw-bold small mb-1">Förhandsvisning:</p>
+                    <div id="viewerPreviewTable" class="small"></div>
+                </div>
+                <button class="btn btn-info btn-sm w-100" id="viewerApplyBtn" disabled>
+                    <i class="bi bi-check2-square me-1"></i>Uppdatera läsbehörighet
+                </button>
+            </div>
+        </div>
+
         <!-- Synk-logg -->
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
@@ -381,6 +424,10 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
     $('#exportCsvBtn').addEventListener('click', exportCsv);
     $('#sampleCsvBtn').addEventListener('click', downloadSampleCsv);
     $('#sampleCsvLink').addEventListener('click', (e) => { e.preventDefault(); downloadSampleCsv(); });
+    $('#sampleViewerCsvLink').addEventListener('click', (e) => { e.preventDefault(); downloadSampleViewerCsv(); });
+    $('#viewerFileInput').addEventListener('change', handleViewerFile);
+    $('#viewerDelimiter').addEventListener('change', previewViewerFile);
+    $('#viewerApplyBtn').addEventListener('click', applyViewerBatch);
     $('#csvFileInput').addEventListener('change', handleCsvFile);
     $('#csvDelimiter').addEventListener('change', () => { if (csvParsedData) previewCsv(); });
     $('#csvImportConfirmBtn').addEventListener('click', confirmCsvImport);
@@ -772,6 +819,151 @@ $canSync = $isSuperAdmin || $isOnPrimaryDomain;
     }
 
     // Log
+    // ---------------------------------------------------------------
+    // Läsbehörighet i batch
+    //
+    // Helt skild från användarlistan ovan: den här filen skickas till en egen
+    // endpoint som bara rör users.is_viewer. Ingenting delas med synk-payloaden,
+    // så en fil här kan aldrig råka ändra roll, namn eller organisationstaggar.
+    // ---------------------------------------------------------------
+    let viewerParsedData = null;
+
+    function handleViewerFile(e) {
+        const file = e.target.files[0];
+        if (!file) {
+            viewerParsedData = null;
+            $('#viewerPreview').classList.add('d-none');
+            $('#viewerApplyBtn').disabled = true;
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            viewerParsedData = ev.target.result;
+            previewViewerFile();
+        };
+        reader.readAsText(file, 'UTF-8');
+    }
+
+    function parseViewerRows() {
+        if (!viewerParsedData) return [];
+        let delim = $('#viewerDelimiter').value;
+        if (delim === '\\t') delim = '\t';
+
+        const lines = viewerParsedData.split(/\r?\n/).filter(l => l.trim() && !l.trim().startsWith('#'));
+        if (lines.length === 0) return [];
+
+        const first = lines[0].toLowerCase();
+        const hasHeader = first.includes('email') || first.includes('e-post') || first.includes('läsbehörig') || first.includes('lasbehorig');
+        const dataLines = hasHeader ? lines.slice(1) : lines;
+
+        return dataLines.map(line => {
+            const cols = line.split(delim).map(c => c.trim().replace(/^["']|["']$/g, ''));
+            const row = {email: cols[0] || ''};
+            // Saknas kolumnen helt betyder raden "ge läsbehörighet". Finns den men
+            // är tom skickas den vidare som tom sträng, så servern kan säga ifrån
+            // i stället för att gissa.
+            if (cols.length > 1) row.viewer = cols[1];
+            return row;
+        }).filter(r => r.email);
+    }
+
+    function previewViewerFile() {
+        const rows = parseViewerRows();
+        if (rows.length === 0) {
+            $('#viewerPreview').classList.add('d-none');
+            $('#viewerApplyBtn').disabled = true;
+            return;
+        }
+
+        const etikett = (v) => {
+            if (v === undefined) return '<span class="badge bg-success">Ja</span> <small class="text-muted">(kolumn saknas)</small>';
+            const t = String(v).toLowerCase();
+            if (['ja','j','true','1','x','yes','y','läsbehörig','lasbehorig'].includes(t)) return '<span class="badge bg-success">Ja</span>';
+            if (['nej','n','false','0','no','ta bort','ingen'].includes(t)) return '<span class="badge bg-secondary">Nej</span>';
+            return '<span class="badge bg-danger">Oläsbart</span>';
+        };
+
+        let html = '<table class="table table-sm table-bordered mb-0"><thead><tr><th>E-post</th><th>Läsbehörig</th></tr></thead><tbody>';
+        rows.slice(0, 5).forEach(r => {
+            html += `<tr><td>${esc(r.email)}</td><td>${etikett(r.viewer)}</td></tr>`;
+        });
+        html += '</tbody></table>';
+        if (rows.length > 5) html += `<small class="text-muted">...och ${rows.length - 5} fler, ${rows.length} totalt</small>`;
+
+        $('#viewerPreviewTable').innerHTML = html;
+        $('#viewerPreview').classList.remove('d-none');
+        $('#viewerApplyBtn').disabled = false;
+    }
+
+    async function applyViewerBatch() {
+        const rows = parseViewerRows();
+        if (rows.length === 0) return;
+
+        const btn = $('#viewerApplyBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Uppdaterar...';
+        addLogEntry('info', `Uppdaterar läsbehörighet för ${rows.length} adress(er)...`);
+
+        try {
+            const resp = await fetch('ajax/set_viewer_batch.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN},
+                body: JSON.stringify({entries: rows})
+            });
+            const data = await resp.json();
+
+            if (data.success) {
+                addLogEntry('success',
+                    `Läsbehörighet uppdaterad: ${data.satta} fick den, ${data.borttagna} fick den borttagen, ` +
+                    `${data.oforandrade} hade redan rätt värde. Inget annat på kontona har ändrats.`);
+                if ((data.saknas || []).length > 0) {
+                    addLogEntry('error',
+                        `⚠ ${data.saknas.length} adress(er) finns inte som konto och hoppades över. ` +
+                        `Skapa kontot via synken först. Först 10: ${data.saknas.slice(0, 10).join(', ')}`);
+                }
+                if ((data.utanfor_scope || []).length > 0) {
+                    addLogEntry('error',
+                        `⚠ ${data.utanfor_scope.length} adress(er) tillhör inte organisationens domäner och hoppades över. ` +
+                        `Först 10: ${data.utanfor_scope.slice(0, 10).join(', ')}`);
+                }
+            } else {
+                let msg = `Fel: ${data.error || 'Okänt fel'}`;
+                if (data.validation_errors) msg += '\n' + data.validation_errors.join('\n');
+                addLogEntry('error', msg);
+            }
+        } catch (err) {
+            addLogEntry('error', 'Nätverksfel: ' + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check2-square me-1"></i>Uppdatera läsbehörighet';
+        }
+    }
+
+    function downloadSampleViewerCsv() {
+        const lines = [
+            '# Stimma – exempelfil för läsbehörighet i batch',
+            '# ------------------------------------------------------------------',
+            '# Sätter eller tar bort BARA läsbehörigheten. Roll, namn,',
+            '# organisationstaggar och synkstatus lämnas orörda, och konton som',
+            '# inte nämns här påverkas inte alls.',
+            '#',
+            '# Kolumner (semikolon emellan):',
+            '#   1. email       – adressen till ett BEFINTLIGT konto',
+            '#   2. läsbehörig  – ja eller nej. Utelämnas kolumnen tolkas raden som ja.',
+            '#',
+            '# Ta bort de här raderna som börjar med # innan du laddar upp filen.',
+            'email;läsbehörig',
+            'anna.andersson@dinkommun.se;ja',
+            'bengt.bengtsson@dinkommun.se;nej'
+        ];
+        const blob = new Blob(['\ufeff' + lines.join('\n')], {type: 'text/csv;charset=utf-8'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'stimma-lasbehorighet-exempel.csv';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
     function addLogEntry(type, message) {
         const now = new Date().toLocaleTimeString('sv-SE');
         const cls = type === 'success' ? 'log-success' : type === 'error' ? 'log-error' : 'log-info';

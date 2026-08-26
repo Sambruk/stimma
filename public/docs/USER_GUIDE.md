@@ -80,7 +80,15 @@ radera användare, ändra andras roller och styra API-nycklar.
 - **Export till CSV** av både användarlista och statistik
 
 **Läsbehörig kommer inte åt:** kursredigering, lärvägar, taggar, påminnelser,
-API-nycklar, synkverktyg, PUB-avtal eller varumärkesinställningar. Varje skrivande
+API-nycklar, synkverktyg, PUB-avtal eller varumärkesinställningar.
+
+**Läsbehörig är ingen roll utan en separat behörighet.** Rollfältet har tre
+värden — Användare, Redaktör och Admin — och läsbehörigheten ligger vid sidan av
+dem, som en egen på/av-knapp i användarlistan. Därför går den inte att välja i
+synkverktygets rollista. Ska den sättas för många konton på en gång finns
+**Admin → Synkverktyg → Läsbehörighet i batch**: en filuppladdning med
+`email;läsbehörig` som bara ändrar den behörigheten och lämnar resten av kontot
+orört. Varje skrivande
 åtgärd stoppas på servern, inte bara genom att knappen döljs.
 
 Rollen sätts av en administratör på **Användare**-sidan och kan inte tilldelas via

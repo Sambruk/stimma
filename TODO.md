@@ -399,6 +399,36 @@ Felsökning av att Säter inte får åtkomst till API:et med `sater.se`.
       läsning, inte bara den egna — users-joinen filtrerade inte progress. Kurs 58 ur
       Åtvidabergs vy: 183 användare före, 75 efter. (Upptäckt 2026-08-25.)
 
+## Läsbehörighet i batch via synkverktyget (2026-08-26)
+
+- [x] Fråga: går det att välja Roll = Läsbehörig i synkverktyget? Nej. Rullgardinen
+      har Användare/Redaktör/Admin, normalizeSyncRole() känner bara student/teacher/
+      admin, och performUserSync() skriver role/is_admin/is_editor — is_viewer rörs
+      aldrig. Samma sak i JSON-API:et.
+- [x] Slutsats: läsbehörig är INGEN roll. users.role är enum('student','teacher',
+      'admin','super_admin') och behörigheten bärs av den separata kolumnen
+      users.is_viewer, som i användarlistan är en egen på/av-knapp. Alla åtta
+      läsbehöriga har roll 'student' plus flaggan.
+- [x] Därför INTE gjord till ett fjärde rollvärde: alla åtta är synkade konton, så
+      en synk som ägde is_viewer hade tagit bort behörigheten från var och en av dem
+      så fort Säters lista kördes utan den kolumnen. Samma fälla som org-taggarnas
+      tysta rensning.
+- [x] Byggt i stället: eget kort "Läsbehörighet i batch" i sync_tool.php +
+      ajax/set_viewer_batch.php. Filformat email;läsbehörig (ja/nej, kolumn
+      utelämnad = ja). Enda skrivningen är UPDATE users SET is_viewer.
+- [x] parseViewerFlagValue() i functions.php. Tomt värde ger fel, inte gissning.
+- [x] Grindar: admin på primärdomän eller superadmin, varje adress skuren mot orgens
+      domäner, CSRF, hela listan valideras före första skrivningen.
+- [x] Dokumenterat i admin/user_guide.php och docs/USER_GUIDE.md.
+
+### Kvarstår / noterat
+- [ ] JSON-API:et (api/sync_users.php) har fortfarande ingen väg att sätta
+      läsbehörighet. Samma övervägande gäller där: ett eget fält som bara verkar
+      när det anges, inte ett rollvärde. Inte byggt — ingen har efterfrågat det.
+- [ ] Testanteckning: session.use_strict_mode = 1 gör att PHP vägrar sessions-id
+      servern inte själv utfärdat, och sessionsfiler måste ägas av www-data. En
+      handgjord sessionsfil för test måste alltså skapas med `docker exec -u www-data`.
+
 ## Läsbehörig: menyval och behörighetsgrindar (2026-08-25)
 
 - [x] Rapporterat: anders.eriksson@sater.se (is_viewer=1) fick inget menyval till

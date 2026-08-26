@@ -1893,6 +1893,14 @@ $apiBaseUrl = $apiScheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'stimma.sambruk.se'
                     </div>
                 </div>
 
+                <div class="tip-box info my-3">
+                    <div class="tip-icon"><i class="bi bi-eye-fill"></i></div>
+                    <div class="tip-content">
+                        <strong>Läsbehörighet i batch</strong>
+                        <p class="mb-0 mt-1">Läsbehörig är ingen roll utan en separat behörighet, och finns därför inte i rollistan. Längst ner till höger i verktyget finns i stället <strong>Läsbehörighet i batch</strong>: ladda upp en fil med <code>email;läsbehörig</code> där andra kolumnen är <code>ja</code> eller <code>nej</code>. Utelämnas kolumnen tolkas varje rad som <code>ja</code>. Uppdateringen rör <em>bara</em> läsbehörigheten — roll, namn, organisationstaggar och synkstatus lämnas orörda, och konton som inte nämns i filen påverkas inte alls. Adresser som saknar konto hoppas över; skapa kontot med synken först.</p>
+                    </div>
+                </div>
+
                 <h6 class="mt-3 mb-2"><i class="bi bi-play-circle me-1"></i>Köra synken</h6>
                 <ul>
                     <li><strong>Inaktivera saknade</strong>: av som standard (säkert läge). På = användare som inte finns i listan markeras inaktiva.</li>
