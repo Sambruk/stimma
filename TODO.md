@@ -421,10 +421,13 @@ Felsökning av att Säter inte får åtkomst till API:et med `sater.se`.
       domäner, CSRF, hela listan valideras före första skrivningen.
 - [x] Dokumenterat i admin/user_guide.php och docs/USER_GUIDE.md.
 
+- [x] BESLUT 2026-08-26: JSON-API:et ska INTE kunna sätta läsbehörighet.
+      Bedömt som ointressant — behörigheten delas ut av Stimma-administratören,
+      inte av kundens katalogsystem. API-synken lämnar därmed is_viewer orörd,
+      vilket också betyder att den aldrig kan råka nollställas därifrån.
+      Dokumenterat på båda ställena där API-fälten listas.
+
 ### Kvarstår / noterat
-- [ ] JSON-API:et (api/sync_users.php) har fortfarande ingen väg att sätta
-      läsbehörighet. Samma övervägande gäller där: ett eget fält som bara verkar
-      när det anges, inte ett rollvärde. Inte byggt — ingen har efterfrågat det.
 - [ ] Testanteckning: session.use_strict_mode = 1 gör att PHP vägrar sessions-id
       servern inte själv utfärdat, och sessionsfiler måste ägas av www-data. En
       handgjord sessionsfil för test måste alltså skapas med `docker exec -u www-data`.

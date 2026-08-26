@@ -1990,6 +1990,13 @@ Content-Type: application/json
                         </tbody>
                     </table>
                 </div>
+                <div class="tip-box info my-3">
+                    <div class="tip-icon"><i class="bi bi-eye-fill"></i></div>
+                    <div class="tip-content">
+                        <strong>Läsbehörighet sätts inte via API:et</strong>
+                        <p class="mb-0 mt-1">Läsbehörig är ingen roll utan en separat behörighet, och <code>role</code> har därför inget sådant värde. Behörigheten delas ut i användarlistan, eller för många konton i taget via <strong>Admin → Synkverktyg → Läsbehörighet i batch</strong>. En synk mot API:et lämnar läsbehörigheten orörd — den kan varken sättas eller råka tas bort därifrån.</p>
+                    </div>
+                </div>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle">
                         <thead class="table-light">

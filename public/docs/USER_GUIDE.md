@@ -847,6 +847,13 @@ Content-Type: application/json
 | `role` | Valfritt | `användare` (standard), `redaktör` eller `admin` |
 | `delete` | Valfritt | `true` **raderar kontot permanent**. Då behövs bara `email` på posten |
 
+> **Läsbehörighet sätts inte via API:et.** Läsbehörig är ingen roll utan en
+> separat behörighet, och `role` har därför inget sådant värde. Behörigheten
+> delas ut i användarlistan, eller för många konton i taget via
+> **Admin → Synkverktyg → Läsbehörighet i batch**. En synk mot API:et lämnar
+> läsbehörigheten orörd — den kan alltså varken sättas eller råka tas bort
+> därifrån.
+
 > **Äldre rollvärden:** `student` och `teacher` accepteras fortfarande och betyder
 > samma sak som `användare` respektive `redaktör`. Ni behöver alltså inte ändra en
 > synk som redan fungerar.
