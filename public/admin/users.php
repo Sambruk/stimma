@@ -37,7 +37,7 @@ $adminScopeDomains = getEffectiveOrgScopeDomains($currentUser['email']);
 
 // Valfritt filter på den inloggades egna org-taggar — samma kontroll som på
 // statistiksidorna, så att en chef kan begränsa listan till sin avdelning.
-$orgTagFilter = getOwnOrgTagFilter($currentUser['id']);
+$orgTagFilter = getOrgTagFilter($currentUser['id']);
 $availableOrgTags = $orgTagFilter['available'];
 $selectedOrgTags = $orgTagFilter['selected'];
 $orgTagFilterQs = buildOrgTagFilterQuery($selectedOrgTags);

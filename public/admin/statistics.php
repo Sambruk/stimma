@@ -40,7 +40,7 @@ $activeDomains = $domainScope['active'];      // det queries filtreras på
 $domainFilterQs = buildDomainFilterQuery($selectedDomains);
 
 // Valfritt filter på den inloggades egna org-taggar (t.ex. "IT-avdelningen").
-$orgTagFilter = getOwnOrgTagFilter($currentUser['id']);
+$orgTagFilter = getOrgTagFilter($currentUser['id']);
 $availableOrgTags = $orgTagFilter['available'];
 $selectedOrgTags = $orgTagFilter['selected'];
 $orgTagClauseU = buildOrgTagFilterClause($selectedOrgTags, 'u.id');

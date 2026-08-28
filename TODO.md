@@ -399,6 +399,35 @@ Felsökning av att Säter inte får åtkomst till API:et med `sater.se`.
       läsning, inte bara den egna — users-joinen filtrerade inte progress. Kurs 58 ur
       Åtvidabergs vy: 183 användare före, 75 efter. (Upptäckt 2026-08-25.)
 
+## Tre fynd från testet av Läsbehörig (2026-08-28)
+
+- [x] Taggfiltret erbjöd bara den inloggades EGNA taggar. Fel i praktiken: den som
+      följer upp hela organisationen bär sällan varje avdelnings tagg. getOrgTagFilter()
+      (f.d. getOwnOrgTagFilter) listar nu alla taggar inom domänscopet. Anders gick
+      från 3 valbara till 59, superadmin ser Sambruks 10. Avgränsningen ligger kvar
+      på domänen — sub-domän ser bara sin egen, ingen ser annan org.
+- [x] Läsbehörig kunde inte exportera statistik. export_statistics.php prövade rollen
+      mot ägarskap/redaktörskap precis som en redaktör (`if (!$isAdmin)`), och en
+      läsande roll äger inga kurser → alltid nekad. Samma bugg som statistics.php hade.
+      Prövas nu mot buildOrgCourseScopeClause(), och datagrenen är den domänavgränsade
+      (redaktörsgrenen listar ALLA som rört kursen oavsett domän — hade läckt andra
+      organisationers användare).
+- [x] Felmeddelandet vid Excel-export: filen var en HTML-tabell med filändelsen .xls,
+      så Excel varnade för att format och filändelse inte stämmer överens. Ny
+      include/xlsx.php skriver ett äkta xlsx-paket via ZipArchive. Verifierat att
+      openpyxl öppnar filen utan varningar.
+- [x] Exporten läser nu även org_tags[] — länken från statistics.php skickade filtret
+      men filen ignorerade det, så CSV:n innehöll fler rader än listan. Filtret skrivs
+      dessutom ut som en rad överst i filen.
+
+### Kvarstår / noterat
+- [ ] include/xlsx.php är medvetet minimal: ett blad, inline-strängar, sju format.
+      Behövs formler, flera blad eller diagram är det dags för ett riktigt bibliotek
+      i stället för att bygga vidare i den.
+- [ ] export_users.php är fortfarande CSV (semikolon + BOM). Öppnas utan varning i
+      Excel, så den är inte akut — men vill man ha samma filtyp överallt finns
+      xlsxWrite() nu att luta sig mot.
+
 ## Läsbehörighet i batch via synkverktyget (2026-08-26)
 
 - [x] Fråga: går det att välja Roll = Läsbehörig i synkverktyget? Nej. Rullgardinen

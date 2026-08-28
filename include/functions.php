@@ -1381,19 +1381,21 @@ function buildDomainFilterQuery(array $selectedDomains) {
 }
 
 /**
- * Läs ut ett valfritt filter på den inloggades EGNA organisationstaggar.
+ * Läs ut ett valfritt filter på organisationens organisationstaggar.
  *
- * En chef eller uppföljningsansvarig tillhör oftast en avdelning ("IT-avdelningen")
- * och vill kunna se statistiken för just den, i stället för hela domänen. Filtret
- * erbjuder därför bara de taggar personen själv bär — inte alla taggar som finns i
- * organisationen. Det är avsiktligt: filtret är en bekvämlighet för att hitta rätt
- * avsnitt av det man redan får se, inte en väg att navigera andras avdelningar.
+ * Filtret erbjuder ALLA taggar som förekommer inom användarens domänscope, inte
+ * bara de taggar personen själv bär. Den första versionen (2026-08-24) begränsade
+ * listan till de egna taggarna, men det visade sig fel i praktiken: en admin eller
+ * läsbehörig som ska följa upp hela organisationen bär sällan själv alla
+ * avdelningars taggar, och kunde därför inte filtrera fram dem. Ändrat 2026-08-28.
  *
- * Filtret är VALFRITT. Utan val visas allt inom domänscopet, precis som förut —
- * befintliga administratörer tappar alltså ingen sikt när kontrollen införs.
+ * Avgränsningen ligger kvar där den hör hemma — på domänscopet. En sub-domänadmin
+ * ser bara sin egen domäns taggar, och ingen ser någonsin en annan organisations.
  *
- * Valet skärs alltid mot de egna taggarna, så en manipulerad GET-parameter kan
- * inte smyga in en tagg personen inte tillhör.
+ * Filtret är VALFRITT. Utan val visas allt inom domänscopet.
+ *
+ * Valet skärs alltid mot de tillgängliga taggarna, så en manipulerad GET-parameter
+ * kan inte smyga in en tagg utanför scopet.
  *
  * OBS om datamodellen: taggar lagras platt. splitOrgTags() delar
  * "Kommun/Förvaltning/Avdelning" på "/" och sparar tre fristående rader —
@@ -1407,12 +1409,26 @@ function buildDomainFilterQuery(array $selectedDomains) {
  *
  * @param int $userId Inloggad användares id
  * @return array{available:array,selected:array,filtered:bool}
- *   available = den inloggades egna taggar (för filter-UI)
+ *   available = alla taggar inom användarens domänscope (för filter-UI)
  *   selected  = de taggar som valts (alltid en delmängd av available)
  *   filtered  = om ett filter är aktivt
  */
-function getOwnOrgTagFilter($userId) {
-    $available = array_column(getUserOrgTags($userId), 'tag');
+function getOrgTagFilter($userId) {
+    $user = queryOne("SELECT email FROM " . DB_DATABASE . ".users WHERE id = ?", [(int)$userId]);
+    $scopeDomains = $user ? getEffectiveOrgScopeDomains($user['email']) : [];
+
+    // Tomt scope ger "IN (NULL)" och därmed inga taggar — rätt utfall för en
+    // användare som inte tillhör någon organisation.
+    $scopeClause = buildEmailDomainInClause($scopeDomains, 'u.email');
+    $rows = query(
+        "SELECT DISTINCT t.tag
+         FROM " . DB_DATABASE . ".user_org_tags t
+         JOIN " . DB_DATABASE . ".users u ON u.id = t.user_id
+         WHERE {$scopeClause['fragment']}
+         ORDER BY t.tag ASC",
+        $scopeClause['params']
+    );
+    $available = array_column($rows ?: [], 'tag');
 
     $raw = isset($_GET['org_tags']) ? (array)$_GET['org_tags'] : [];
     $raw = array_map('strval', $raw);
@@ -3255,7 +3271,7 @@ function readSyncOrganization(array $userData) {
  *
  * "Kommun/Förvaltning/Avdelning" blir tre fristående rader. Snedstrecket är alltså
  * en inmatningsform för flera taggar, inte ett träd: varken förälder eller ordning
- * lagras. Se getOwnOrgTagFilter() för vad det betyder för filtreringen.
+ * lagras. Se getOrgTagFilter() för vad det betyder för filtreringen.
  *
  * @param string $organization
  * @return array

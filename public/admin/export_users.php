@@ -74,7 +74,7 @@ if ($isSuperAdmin) {
 
 // Taggfiltret från users.php förs vidare hit, annars innehåller CSV:n andra rader
 // än den lista exporten utgick från.
-$orgTagFilter = getOwnOrgTagFilter($currentUser['id']);
+$orgTagFilter = getOrgTagFilter($currentUser['id']);
 $orgTagClauseUsers = buildOrgTagFilterClause($orgTagFilter['selected'], 'u.id');
 
 if ($isSuperAdmin && empty($selectedDomain)) {

@@ -91,17 +91,24 @@ synkverktygets rollista. Ska den sättas för många konton på en gång finns
 orört. Varje skrivande
 åtgärd stoppas på servern, inte bara genom att knappen döljs.
 
-Rollen sätts av en administratör på **Användare**-sidan och kan inte tilldelas via
-AD-synkens API — de tillåtna rollerna där är fortfarande `användare`, `redaktör` och
-`admin`.
+Rollen sätts av en administratör på **Användare**-sidan, eller för många konton i
+taget via **Admin → Synkverktyg → Läsbehörighet i batch**. Den kan inte tilldelas
+via AD-synkens API — de tillåtna rollerna där är fortfarande `användare`,
+`redaktör` och `admin`.
 
-### Filtrera på din organisationsdel
+### Filtrera på organisationsdel
 
 På **Statistik**, **Kursstatistik** och **Användare** finns en filterkontroll där du
-kan begränsa vyn till de organisationstaggar **du själv tillhör**. En chef på
-IT-avdelningen kan alltså se just sin avdelning i stället för hela kommunen.
+kan begränsa vyn till en eller flera organisationstaggar. En chef på IT-avdelningen
+kan alltså se just sin avdelning i stället för hela kommunen.
 
-Filtret är valfritt — utan val visas allt inom ditt domänscope, som tidigare.
+Filtret erbjuder **alla taggar som finns inom ditt domänscope**, inte bara de du
+själv bär — den som följer upp hela organisationen bär sällan varje avdelnings
+tagg. Avgränsningen ligger kvar på domänen: en administratör på en underdomän ser
+bara sin egen domäns taggar, och ingen ser någonsin en annan organisations.
+
+Filtret är valfritt — utan val visas allt inom ditt domänscope. Väljer du en tagg
+följer valet med till exporten, så filen innehåller samma urval som listan.
 Det gäller både **Läsbehörig** och **Admin**, och erbjuder bara dina egna taggar:
 det är en genväg till rätt del av det du redan får se, inte en väg in i andras
 avdelningar. Valet följer med till CSV-exporten, så filen matchar det du tittade på.

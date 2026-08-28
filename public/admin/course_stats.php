@@ -51,7 +51,7 @@ $domainFilterQs = buildDomainFilterQuery($selectedDomains);
 $courseDomClause = buildDomainInClause($orgScopeDomains, 'c.organization_domain');
 
 // Valfritt filter på den inloggades egna org-taggar.
-$orgTagFilter = getOwnOrgTagFilter($currentUser['id']);
+$orgTagFilter = getOrgTagFilter($currentUser['id']);
 $availableOrgTags = $orgTagFilter['available'];
 $selectedOrgTags = $orgTagFilter['selected'];
 $orgTagFilterQs = buildOrgTagFilterQuery($selectedOrgTags);
