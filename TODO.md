@@ -399,6 +399,31 @@ Felsökning av att Säter inte får åtkomst till API:et med `sater.se`.
       läsning, inte bara den egna — users-joinen filtrerade inte progress. Kurs 58 ur
       Åtvidabergs vy: 183 användare före, 75 efter. (Upptäckt 2026-08-25.)
 
+## Bildprompt och lektionsbildernas sökväg (2026-08-28, forts.)
+
+- [x] Ny gemensam stilanvisning: aiImageStyleDirective() i include/ai_image_helper.php.
+      Prompten skrevs på FYRA ställen (kursomslag + lektionsbild i admin, samma två i
+      bakgrundsjobbet) och drev isär. Nu ett ställe.
+- [x] Gamla prompten bad om "clean, professional, minimalist" och "abstract or
+      conceptual" — alltså en beställning på just det intetsägande som gjorde
+      bilderna trista. Nya ber om konkret motiv, varm palett (cream/terrakotta/
+      ockra/salvia/dammblå), illustrerat anslag, och räknar upp vad som ska undvikas
+      (stockfoto, 3D, neon, kretskort, robotar). Negativa exempel biter bättre än
+      fler positiva adjektiv.
+- [x] Verifierat visuellt på två motiv, inklusive ett torrt (Socialtjänstlagen) där
+      abstrakta gradienter annars är modellens standardsvar. Provbilder kvar för
+      granskning: upload/ai_6a9199cd3fe6b.png, upload/ai_course_6a919a168635d.png
+- [x] 🔴 SEPARAT BUGG hittad vid testet: lektionsbilder gick aldrig att spara.
+      include/ai_lesson_helper.php använde `__DIR__ . '/../upload/'`, vilket från
+      include/ pekar på PROJEKTROTEN och inte public/upload. Rätt före
+      webbrotsflytten 2026-08-17, fel efter. Katalogen ägdes av root → www-data fick
+      "Kunde inte spara bildfilen" trots att bilden hämtats färdig och betalats för.
+      Samma felaktiga djup i functions.php:634, som dessutom SKAPADE katalogen.
+      Båda pekar nu på ROOT_PATH . '/public/upload/'. Den tomma felkatalogen borttagen.
+- [x] Genomgång av alla elva ställen som skriver till upload/: övriga nio ligger i
+      public/ och hade rätt djup hela tiden.
+- [x] Verifierat efter fixen: lektionsbild genom nginx 51 s, http=200, fil sparad.
+
 ## Bildgenerering: "Nätverksfel" efter modellbyte till gpt-image-2 (2026-08-28)
 
 - [x] Diagnos: modellen FUNGERAR. Bilderna genererades och sparades — filerna

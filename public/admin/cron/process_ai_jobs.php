@@ -742,9 +742,12 @@ Skriv ett komplett, informativt och engagerande lektionsinnehåll i HTML.";
 
         // Generate course cover image
         updateJobStatus($jobId, 'processing', 82, 'Genererar kursbild...');
-        $courseImagePrompt = "Educational course cover illustration for '{$courseName}'. Theme: {$tone}. Color palette inspired by {$colorTheme}. " .
-            (!empty($targetAudience) ? "Target audience: {$targetAudience}. " : "") .
-            "Clean, modern, professional design suitable for e-learning. Abstract and conceptual. No text in image.";
+        // Kursens ton och färgtema är hintar om motivet; stilanvisningen läggs
+        // sist så att den avgör bildspråket och inte konkurrerar med dem.
+        $courseImagePrompt = "Cover illustration for a course called '{$courseName}'. Subject mood: {$tone}. " .
+            "Let {$colorTheme} inform the accent colour. " .
+            (!empty($targetAudience) ? "Intended for: {$targetAudience}. " : "") .
+            aiImageStyleDirective();
         $courseImage = generateAIImageWithPrompt($courseImagePrompt, '1792x1024', $jobContext);
         if ($courseImage) {
             execute(
@@ -766,9 +769,9 @@ Skriv ett komplett, informativt och engagerande lektionsinnehåll i HTML.";
             updateJobStatus($jobId, 'processing', round($progressPercent),
                 "Genererar bild för lektion " . ($lIndex + 1) . " av {$lessonTotal}...");
 
-            $lessonImagePrompt = "Educational illustration for lesson '{$lessonRow['title']}' in course '{$courseName}'. " .
-                "Style: {$tone}, color accent: {$colorTheme}. " .
-                "Clean, suitable for e-learning. No text in image.";
+            $lessonImagePrompt = "Illustration for a lesson called '{$lessonRow['title']}', part of a course about '{$courseName}'. " .
+                "Subject mood: {$tone}. Let {$colorTheme} inform the accent colour. " .
+                aiImageStyleDirective();
             $lessonImage = generateAIImageWithPrompt($lessonImagePrompt, '1024x1024', $jobContext);
             if ($lessonImage) {
                 execute(

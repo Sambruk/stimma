@@ -498,9 +498,9 @@ function aiGenerateLessonImage(string $lessonTitle, ?string $courseName, ?int $c
     ];
     $imageModel = getModelForFeature('image', 'gpt-image-1-mini');
 
-    $prompt = "Educational illustration for a lesson about '{$lessonTitle}'" .
-              ($courseName ? " in a course about '{$courseName}'" : "") .
-              ". Clean, professional, minimalist style suitable for e-learning. No text in image.";
+    $prompt = "Illustration for a lesson about '{$lessonTitle}'" .
+              ($courseName ? ", part of a course about '{$courseName}'" : "") .
+              ". " . aiImageStyleDirective();
 
     $data = aiImageBuildPayload($imageModel, $prompt, '1024x1024');
 
@@ -538,7 +538,12 @@ function aiGenerateLessonImage(string $lessonTitle, ?string $courseName, ?int $c
         return ['success' => false, 'error' => 'Inga bilddata i API-svaret.'];
     }
 
-    $uploadDir = __DIR__ . '/../upload/';
+    // ROOT_PATH . '/public/upload/' och inte __DIR__ . '/../upload/'. Den här
+    // filen ligger i include/, så den relativa vägen pekade på projektroten —
+    // rätt före webbrotsflytten till public/ (2026-08-17), fel efter. Katalogen
+    // finns men ägs av root, så www-data fick "Kunde inte spara bildfilen" trots
+    // att bilden hämtats färdig från API:et.
+    $uploadDir = ROOT_PATH . '/public/upload/';
     if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true)) {
         logAiUsage($context, [], $imageModel, 'error');
         return ['success' => false, 'error' => 'Kunde inte skapa upload-mappen.'];

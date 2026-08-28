@@ -120,9 +120,9 @@ function generateAIImage($courseTitle, $courseDescription, $courseId = null) {
     $context = ['feature' => 'image', 'course_id' => $courseId, 'is_image' => true];
     $imageModel = getModelForFeature('image', 'gpt-image-1-mini');
 
-    $prompt = "Educational course cover illustration for a course called '{$courseTitle}'" .
-              ($courseDescription ? ". Course description: '{$courseDescription}'" : "") .
-              ". Clean, professional, modern style suitable for e-learning platform. No text in image. Abstract or conceptual visualization.";
+    $prompt = "Cover illustration for a course called '{$courseTitle}'" .
+              ($courseDescription ? ". The course is about: '{$courseDescription}'" : "") .
+              ". " . aiImageStyleDirective();
 
     $data = aiImageBuildPayload($imageModel, $prompt, '1024x1024');
 

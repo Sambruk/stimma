@@ -630,8 +630,11 @@ function logActivity($email, $message, $context = []) {
     }
 }
 
-// Sökväg till upload-mappen
-$uploadDir = __DIR__ . '/../upload/';
+// Sökväg till upload-mappen. Webbroten är public/ sedan 2026-08-17, så den
+// relativa vägen från include/ pekade på projektroten och skapade där en tom
+// katalog som www-data inte kunde skriva i. Sidor som lutar sig mot den här
+// globalen skrev alltså till fel ställe.
+$uploadDir = ROOT_PATH . '/public/upload/';
 
 // Kontrollera om mappen finns, annars skapa den
 if (!file_exists($uploadDir)) {
