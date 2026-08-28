@@ -1871,7 +1871,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 statusDiv.style.display = 'none';
                 generateAiImageBtn.disabled = false;
                 console.error('Fetch error:', error);
-                alert('Nätverksfel vid generering av bild.');
+                alert('Kontakten med servern bröts innan svaret kom fram. Bilden hinner ofta bli klar ändå — ladda om sidan och kontrollera innan du försöker igen, annars genereras en bild i onödan.');
             });
         });
     }

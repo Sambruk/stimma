@@ -399,6 +399,36 @@ Felsökning av att Säter inte får åtkomst till API:et med `sater.se`.
       läsning, inte bara den egna — users-joinen filtrerade inte progress. Kurs 58 ur
       Åtvidabergs vy: 183 användare före, 75 efter. (Upptäckt 2026-08-25.)
 
+## Bildgenerering: "Nätverksfel" efter modellbyte till gpt-image-2 (2026-08-28)
+
+- [x] Diagnos: modellen FUNGERAR. Bilderna genererades och sparades — filerna
+      ai_course_6a9192db2fe2b.png (13:53:31) och ai_course_6a9193195117c.png
+      (13:54:33) finns, ai_usage_log säger status=ok, och courses.image_url för
+      kurs 25 pekade redan på den senare. Bara webbläsaren fick aldrig veta.
+- [x] Orsak: uppmätt gpt-image-2 = ~50 s, gpt-image-1-mini = ~15 s. Stimmas
+      server-block i nginx saknade proxy_read_timeout → default 60 s. Anropet låg
+      precis på gränsen, och när det tippade över stängde nginx medan PHP körde
+      klart. Front-endens .catch() visar då 'Nätverksfel vid generering av bild.'
+- [x] Åtgärd: proxy_read_timeout/proxy_send_timeout 300s tillagt i det BEFINTLIGA
+      stimma-blocket i vibecoder-sambruk-u917.vm.elestio.app.conf. nginx -t ok,
+      reload utan krasch, sajten svarar 200.
+- [x] Verifierat skarpt genom nginx efter ändringen: POST till
+      generate_course_image.php tog 49,3 s och gav http=200 med giltig JSON.
+      Testbilden borttagen och kursens image_url återställd efteråt.
+- [x] Felmeddelandet i edit_course.php och edit_lesson.php säger nu att bilden
+      ofta blir klar ändå och att man ska ladda om innan man försöker igen —
+      annars genereras en bild i onödan, och den kostar.
+
+### Kvarstår / noterat
+- [ ] Bildgenereringen hålls i ett enda HTTP-anrop. 300 s räcker med god marginal
+      för gpt-image-2, men rätt konstruktion är samma bakgrundsjobb som
+      kursgenereringen använder (ai_course_jobs). Blir modellerna långsammare
+      eller läggs fler bilder i samma anrop är det den vägen att gå.
+- [ ] Prompten för kursomslag är generisk ("Clean, professional, modern style …
+      Abstract or conceptual visualization"). Det är den andra spaken om bilderna
+      inte blir bra — modellbytet löser inte en tunn prompt. Inte ändrad, eftersom
+      det är ett smakval.
+
 ## Tre fynd från testet av Läsbehörig (2026-08-28)
 
 - [x] Taggfiltret erbjöd bara den inloggades EGNA taggar. Fel i praktiken: den som
