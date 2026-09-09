@@ -1,6 +1,12 @@
 # Stimma - Utvecklingsuppgifter
 
 ## Pågående
+- [x] LICENSE-fil skapad 2026-09-09 — README hänvisade till GPL v2 och en LICENSE-fil som inte fanns
+      i repot. Full GPL-2.0-text tillagd i repo-roten så GitHub kan detektera licensen
+- [ ] 🔴 Sambruk/stimma är PUBLIKT igen (verifierat 2026-09-09, `visibility: public`) trots att det
+      växlades till private 2026-08-24. Följd: gamla rensade objekt är åter anonymt hämtbara via
+      commit-SHA (HTTP 200 på PUB-avtalet ae362aa och allowed_domains.txt 382e2c4). Besluta: åter till
+      private, eller begär purge hos GitHub Support
 - [ ] 🔴 Personuppgifter i det PUBLIKA GitHub-repot — historiken rensad 2026-08-21, EXPONERINGEN KVARSTÅR
   - [x] `import_users.sql`, `allowed_domains.txt` och `docs/pdf/*.pdf` rensade ur hela historiken med
         git filter-repo och force-pushade (132 commits bevarade, .git 97 MB → 11 MB, tagg v2.0.0 bevarad).
@@ -38,6 +44,8 @@
   - [x] SCORM-importen dold för alla utom superadmin (2026-08-20). Thomas underkände även kopieringsläget
         (kurs 137) och sätter sig in i SCORM-formatet innan arbetet fortsätter. Gäller både knappen/modalen
         i admin/courses.php och ajax/import_scorm.php (403 för alla utom role=super_admin)
+  - [x] Knappen "Importera SCORM" borttagen ur admin/courses.php (2026-09-04): $scormImportAllowed = false,
+        vilket också tar bort modalen. Backend (ajax/import_scorm.php, include/scorm_*.php) ligger kvar orörd
   - [ ] PAUSAD i väntan på Thomas riktning. Öppna trådar när den tas upp igen:
     - [ ] Vad var dåligt i kurs 137? (introduktionslektionen rörig, text utan layout, frågor rättas inte)
     - [ ] Ska paketets quizfrågor konverteras till riktiga Stimma-frågor? Rätt svar finns i Storylines data
