@@ -1,21 +1,61 @@
 # Stimma - Utvecklingsuppgifter
 
 ## Pågående
+- [ ] Säter-feedback 2026-09-14 (läsbehöriga på edu.sater.se) — punkt 1 och 2 åtgärdade, verifierade och pushade, mail + "7 dagar" kvar
+  - [x] Analys: `statistics.php` ("Statistik per användare") ger läsbehörig REDAKTÖRSGRENEN för
+        användarlista, kursstatistik, kursdetalj och fullt genomförda (`if ($isAdmin)` på fyra ställen,
+        läsbehöriggrenen från 2026-08-25 täckte bara kurslistan och åtkomstkontrollen). Följd: taggfilter och
+        domänfilter ignoreras helt — verifierat som både Viktoria (edu) och Anders (sater.se): 17 användare
+        i listan och 4 i kurs 89 med och utan tagg. Rubriken "Alla användare i …" på rad 654 är hårdkodad och
+        döljer att det är "användare som interagerat med kurserna"
+  - [x] Analys: varför Anders inte märker det — han använder `course_stats.php`, där filtret fungerar (kurs 89:
+        475 → 22 med taggen). För sub-domänkonton avgränsar course_stats kurslistan på `organization_domain`
+        (buildDomainInClause) i stället för buildOrgCourseScopeClause. edu.sater.se äger 0 kurser → "Inga
+        kurser hittades", och kurs-id i URL ger 302. De hänvisas alltså till den trasiga sidan
+  - [x] Fix statistics.php: `$isAdmin` → `$isAdmin || $isViewer` i de fyra datagrenarna + rubriken på användarlistan
+        visar `$userListTitle` i stället för hårdkodat "Alla användare i …"
+  - [x] Läckagekontroll: de 17 är 5 edu.sater.se + 12 sater.se (kurs 70, 83, 89) — inga andra organisationer idag,
+        men en edu-läsbehörig ser sater.se-användare utanför sitt scope. Latent läcka: redaktörsgrenen saknar
+        domänvillkor, så en global eller delad kurs hade listat alla organisationers deltagare (0 globala kurser nu)
+  - [x] Fix course_stats.php: kurslista + åtkomstkontroll via buildOrgCourseScopeClause() (som statistics.php)
+  - [x] course_stats.php: Inskrivna/Klara/summering räknas via courseStatsCountClause() — följer taggfiltret, och
+        utan filter bara scopet + kursens publika deltagare (andra organisationers deltagare räknades in förut)
+  - [x] Fix course_stats.php: kurslänkar, "Tillbaka" och Exportera för med båda filtren (`$filterQs`), aktivt filter
+        visas i kursdetaljen
+  - [x] Önskemål: taggar slår igenom vid klick — admin/include/js/filter_dropdown.js (laddas i admin-footern):
+        auto-submit, listan öppnas igen på samma scrollposition, sökfält vid ≥8 poster. Gäller statistics,
+        course_stats och users, både tagg- och domänlistor
+  - [x] Verifierat 2026-09-14 via HTTP: Viktoria (edu, läsbehörig) 433 → 21 med tagg i statistics.php, kurs 89 → 21;
+        course_stats visar 3 kurser (förut 0) och kurs 89 öppnas. Anders och Jonna (admin) 475 → 21, 6 kurser.
+        Therese (redaktör) oförändrad. Säters ofiltrerade Inskrivna oförändrade (70: 4, 83: 13, 89: 4). Inga PHP-fel
+  - [x] Verifierat i headless Chrome som Viktoria: Tillämpa dold, sökfält (55 taggar, "skola" → 20), klick laddar om
+        med listan öppen, sökningen och scrollpositionen kvar; två val i följd → 26 användare. Inga JS-fel
+  - [x] Committat och pushat 2026-09-14. public/admin/courses.php (SCORM-import avstängd 2026-09-04) är en
+        separat, äldre ocommittad ändring och följde medvetet inte med
+  - [ ] Inloggningsmail i skräpposten (nytt enligt Säter, M365-mottagare). Ej på publika blocklistor.
+        Trolig orsak: IP/domänrykte hos Microsoft efter reläincidenten 2026-08-17. Postal kan inte granskas —
+        SSH-nyckeln postal_sambruk saknas på disk. Behöver mailheaders (X-Forefront-Antispam-Report) från Säter
+  - [ ] "7 dagar på inloggningssidan": finns inte i koden eller på skarpa sidan (no-store, texten säger "en gång
+        i månaden" sedan 2026-08-25). Be om skärmdump/URL
 - [x] LICENSE-fil skapad 2026-09-09 — README hänvisade till GPL v2 och en LICENSE-fil som inte fanns
       i repot. Full GPL-2.0-text tillagd i repo-roten så GitHub kan detektera licensen
-- [ ] 🔴 Sambruk/stimma är PUBLIKT igen (verifierat 2026-09-09, `visibility: public`) trots att det
-      växlades till private 2026-08-24. Följd: gamla rensade objekt är åter anonymt hämtbara via
-      commit-SHA (HTTP 200 på PUB-avtalet ae362aa och allowed_domains.txt 382e2c4). Besluta: åter till
-      private, eller begär purge hos GitHub Support
+- [x] Sambruk/stimma är privat igen — verifierat 2026-09-14 (`visibility: private`, anonymt API-anrop 404,
+      forks 0). Var publikt 2026-09-09. Blir det publikt igen är de 31 gamla SHA:na åter nåbara, så
+      purge-ärendet hos GitHub Support behövs fortfarande
 - [ ] 🔴 Personuppgifter i det PUBLIKA GitHub-repot — historiken rensad 2026-08-21, EXPONERINGEN KVARSTÅR
   - [x] `import_users.sql`, `allowed_domains.txt` och `docs/pdf/*.pdf` rensade ur hela historiken med
         git filter-repo och force-pushade (132 commits bevarade, .git 97 MB → 11 MB, tagg v2.0.0 bevarad).
         Säkerhetskopia före rewrite: /opt/app/stimma-git-backup-20260821/ (bundle + filerna)
+  - [x] Ärendetext till GitHub Support färdigskriven 2026-09-09 med allt Support ber om (repo, 2 PR,
+        first-changed-commit 382e2c4→0531818 ur .git/filter-repo/, ingen LFS, forks 0) samt bilaga med
+        de 31 verifierat nåbara SHA:n. Ligger i `.git/github-support-arende.md` (kan inte committas).
+        Återstår: sätt repot till private och skicka ärendet på support.github.com
   - [ ] **Gamla objekt går fortfarande att hämta anonymt på GitHub via commit-SHA** — verifierat HTTP 200 på
-        raw.githubusercontent.com för både PUB-avtalet (ae362aa) och import_users.sql (689db8f).
+        raw.githubusercontent.com för PUB-avtalet (ae362aa) och för import_users.sql på 31 av 128 gamla
+        commits (382e2c4 m.fl. — 689db8f ger däremot 404, den SHA:n var felnoterad).
         Bara GitHub Support kan städa bort dem: begär "purge unreachable objects" för Sambruk/stimma
-  - [ ] **Två forkar har egna kopior**: joakimbergros/stimma och ereffner/stimma. Be ägarna radera dem —
-        annars lever datan kvar i fork-nätverket oavsett vad Support gör med huvudrepot
+  - [x] **Forkarna är borta** (verifierat 2026-09-09): joakimbergros/stimma och ereffner/stimma ger 404
+        både anonymt och med token, och syns inte i ägarnas publika repolistor. Sambruk/stimma: forks 0
   - [ ] Bedöm om detta är en personuppgiftsincident att anmäla: 93 namngivna tjänstemän hos ~49 kommuner
         och myndigheter, publikt exponerade sedan 2025-12-04 (import_users.sql) respektive 2026-02-13 (PUB-avtalet)
 - [x] SCORM-import: zip-paket → Stimma-kurs (2026-08-20). Utredning: memory/scorm_import.md

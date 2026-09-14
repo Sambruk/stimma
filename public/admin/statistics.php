@@ -131,8 +131,15 @@ if ($selectedCourseId) {
 // Bygg IN-klausul för kurs-IDs
 $courseIdsPlaceholder = !empty($courseIds) ? implode(',', array_fill(0, count($courseIds), '?')) : '0';
 
-// Hämta användare - för admin: alla i orgens domäner, för redaktör: alla som använt deras kurser
-if ($isAdmin) {
+// Hämta användare. Admin och läsbehörig: alla i organisationens scope, med domän- och
+// taggfilter. Redaktör: alla som använt redaktörens kurser.
+//
+// Läsbehörig MÅSTE ha admin-grenen här och i kursstatistiken, kursdetaljen och
+// "fullt genomförda" nedan. Redaktörsgrenen saknar både domän- och taggvillkor: den
+// listar alla som rört kurserna, oavsett organisation, och ignorerar filtret helt.
+// Så såg det ut fram till 2026-09-14 — Säters läsbehöriga fick samma 17 användare
+// vilken tagg de än valde.
+if ($isAdmin || $isViewer) {
     $usersInDomain = query("SELECT
         u.id,
         u.email,
@@ -177,7 +184,7 @@ if ($isAdmin) {
 
 // Hämta kursstatistik
 if (!empty($courseIds)) {
-    if ($isAdmin) {
+    if ($isAdmin || $isViewer) {
         $courseStatsQuery = "SELECT
             c.id as course_id,
             c.title as course_title,
@@ -228,7 +235,7 @@ if ($selectedCourseId) {
                                   ORDER BY sort_order ASC", [$selectedCourseId]);
 
         // Hämta progress för användare
-        if ($isAdmin) {
+        if ($isAdmin || $isViewer) {
             // Admin ser användare från hela organisationens samtliga domäner
             $userProgressInCourse = query("SELECT
                 u.id as user_id,
@@ -317,7 +324,7 @@ $fullyCompletedCourses = 0;
 $avgCoursesPerUser = 0;
 
 if (!empty($courseIds)) {
-    if ($isAdmin) {
+    if ($isAdmin || $isViewer) {
         // Hämta antal användare i orgen som slutfört alla lektioner i varje kurs
         $fullyCompletedResult = queryOne("
             SELECT COUNT(*) as total_completions
@@ -651,7 +658,7 @@ require_once 'include/header.php';
         <h2 class="accordion-header">
             <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#userList">
                 <i class="bi bi-people me-2"></i>
-                Alla användare i <?= htmlspecialchars($orgScopeLabel) ?>
+                <?= htmlspecialchars($userListTitle) ?>
                 <span class="badge bg-secondary ms-2"><?= count($usersInDomain) ?></span>
             </button>
         </h2>

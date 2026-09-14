@@ -55,15 +55,54 @@ $orgTagFilter = getOrgTagFilter($currentUser['id']);
 $availableOrgTags = $orgTagFilter['available'];
 $selectedOrgTags = $orgTagFilter['selected'];
 $orgTagFilterQs = buildOrgTagFilterQuery($selectedOrgTags);
+$tagFilterActive = $orgTagFilter['filtered'];
+$anyFilterActive = $domainFilterActive || $tagFilterActive;
+// Båda filtren ska följa med mellan översikt, kursdetalj och export. Tidigare
+// fördes bara domänfiltret vidare, så ett taggval försvann vid första klicket.
+$filterQs = $domainFilterQs . $orgTagFilterQs;
+
+// Kurslistan för admin och läsbehörig följer samma organisationsscope som
+// statistics.php: egna kurser, globala, delade och kurser som scopets användare
+// faktiskt läser. Att bara titta på organization_domain slog ut sub-domänkonton —
+// edu.sater.se äger inga kurser men läser huvudorganisationens, och deras
+// läsbehöriga fick "Inga kurser hittades" (2026-09-14).
+$courseScopeClause = buildOrgCourseScopeClause($orgScopeDomains, 'c');
+
+/**
+ * Vilka användare som räknas i en kurs siffror (Inskrivna, Klara, summeringen).
+ *
+ * Med ett aktivt domän- eller taggfilter: användare som matchar filtret.
+ * Utan filter: hela scopet plus kursens publika deltagare, som oftast har extern
+ * e-postdomän. Samma urval som användarlistan i kursdetaljen, så siffrorna och
+ * listan inte säger olika saker — och andra organisationers deltagare i en delad
+ * kurs räknas inte in.
+ *
+ * @param string $alias Tabellalias för users i den anropande frågan
+ * @return array{fragment:string,params:array}
+ */
+function courseStatsCountClause($alias, $courseId, array $activeDomains, array $selectedOrgTags, $anyFilterActive) {
+    $clause = combineSqlClauses(
+        buildEmailDomainInClause($activeDomains, "$alias.email"),
+        buildOrgTagFilterClause($selectedOrgTags, "$alias.id")
+    );
+    if ($anyFilterActive) {
+        return $clause;
+    }
+    return [
+        'fragment' => "({$clause['fragment']}) OR EXISTS (SELECT 1 FROM " . DB_DATABASE . ".public_course_access pcac
+                                                     WHERE pcac.user_id = $alias.id AND pcac.course_id = ?)",
+        'params' => array_merge($clause['params'], [(int)$courseId]),
+    ];
+}
 
 // Hämta kurser baserat på behörighet
 if ($hasFullCourseView) {
     $courses = query(
         "SELECT c.*, (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = c.id) AS lesson_count
          FROM " . DB_DATABASE . ".courses c
-         WHERE {$courseDomClause['fragment']}
+         WHERE {$courseScopeClause['fragment']}
          ORDER BY c.id ASC",
-        $courseDomClause['params']
+        $courseScopeClause['params']
     );
 } else {
     $courses = query(
@@ -85,8 +124,8 @@ if ($selectedCourseId && !$isAdmin) {
     if ($isViewer) {
         $hasAccess = queryOne(
             "SELECT c.id FROM " . DB_DATABASE . ".courses c
-             WHERE c.id = ? AND {$courseDomClause['fragment']}",
-            array_merge([$selectedCourseId], $courseDomClause['params'])
+             WHERE c.id = ? AND {$courseScopeClause['fragment']}",
+            array_merge([$selectedCourseId], $courseScopeClause['params'])
         );
     } else {
         $hasAccess = queryOne(
@@ -186,74 +225,44 @@ require_once 'include/header.php';
                             // Räkna inskrivna: unika användare som har progress ELLER
                             // publik registrering för kursen. UNION fångar publika
                             // deltagare som ännu inte öppnat någon lektion.
-                            if ($domainFilterActive) {
-                                // Begränsa till användare i de valda domänerna (externa
-                                // publika deltagare räknas inte med när ett filter är aktivt).
-                                $ec = buildEmailDomainInClause($activeDomains, 'uu.email');
-                                $enrolled = queryOne(
-                                    "SELECT COUNT(*) AS cnt FROM (
-                                        SELECT p.user_id FROM " . DB_DATABASE . ".progress p
-                                        JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
-                                        WHERE l.course_id = ?
-                                        UNION
-                                        SELECT user_id FROM " . DB_DATABASE . ".public_course_access WHERE course_id = ?
-                                    ) AS src
-                                    JOIN " . DB_DATABASE . ".users uu ON uu.id = src.user_id
-                                    WHERE {$ec['fragment']}",
-                                    array_merge([$course['id'], $course['id']], $ec['params'])
-                                );
-                            } else {
-                                $enrolled = queryOne(
-                                    "SELECT COUNT(*) AS cnt FROM (
-                                        SELECT p.user_id FROM " . DB_DATABASE . ".progress p
-                                        JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
-                                        WHERE l.course_id = ?
-                                        UNION
-                                        SELECT user_id FROM " . DB_DATABASE . ".public_course_access WHERE course_id = ?
-                                    ) AS u",
-                                    [$course['id'], $course['id']]
-                                );
-                            }
+                            $countClause = courseStatsCountClause('uu', $course['id'], $activeDomains, $selectedOrgTags, $anyFilterActive);
+                            $enrolled = queryOne(
+                                "SELECT COUNT(*) AS cnt FROM (
+                                    SELECT p.user_id FROM " . DB_DATABASE . ".progress p
+                                    JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
+                                    WHERE l.course_id = ?
+                                    UNION
+                                    SELECT user_id FROM " . DB_DATABASE . ".public_course_access WHERE course_id = ?
+                                ) AS src
+                                JOIN " . DB_DATABASE . ".users uu ON uu.id = src.user_id
+                                WHERE ({$countClause['fragment']})",
+                                array_merge([$course['id'], $course['id']], $countClause['params'])
+                            );
                             $enrolledCount = $enrolled ? (int)$enrolled['cnt'] : 0;
 
                             // Räkna klara (alla lektioner completed)
                             $totalLessons = (int)$course['lesson_count'];
                             $completedUsers = 0;
                             if ($totalLessons > 0) {
-                                if ($domainFilterActive) {
-                                    $ecc = buildEmailDomainInClause($activeDomains, 'uu.email');
-                                    $completed = queryOne(
-                                        "SELECT COUNT(*) AS cnt FROM (
-                                            SELECT p.user_id
-                                            FROM " . DB_DATABASE . ".progress p
-                                            JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
-                                            JOIN " . DB_DATABASE . ".users uu ON uu.id = p.user_id
-                                            WHERE l.course_id = ? AND p.status = 'completed' AND {$ecc['fragment']}
-                                            GROUP BY p.user_id
-                                            HAVING COUNT(DISTINCT p.lesson_id) >= ?
-                                        ) AS completed_users",
-                                        array_merge([$course['id']], $ecc['params'], [$totalLessons])
-                                    );
-                                } else {
-                                    $completed = queryOne(
-                                        "SELECT COUNT(*) AS cnt FROM (
-                                            SELECT p.user_id
-                                            FROM " . DB_DATABASE . ".progress p
-                                            JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
-                                            WHERE l.course_id = ? AND p.status = 'completed'
-                                            GROUP BY p.user_id
-                                            HAVING COUNT(DISTINCT p.lesson_id) >= ?
-                                        ) AS completed_users",
-                                        [$course['id'], $totalLessons]
-                                    );
-                                }
+                                $completed = queryOne(
+                                    "SELECT COUNT(*) AS cnt FROM (
+                                        SELECT p.user_id
+                                        FROM " . DB_DATABASE . ".progress p
+                                        JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
+                                        JOIN " . DB_DATABASE . ".users uu ON uu.id = p.user_id
+                                        WHERE l.course_id = ? AND p.status = 'completed' AND ({$countClause['fragment']})
+                                        GROUP BY p.user_id
+                                        HAVING COUNT(DISTINCT p.lesson_id) >= ?
+                                    ) AS completed_users",
+                                    array_merge([$course['id']], $countClause['params'], [$totalLessons])
+                                );
                                 $completedUsers = $completed ? (int)$completed['cnt'] : 0;
                             }
                         ?>
                         <tr>
                             <td><span class="text-muted"><?= (int)$course['id'] ?></span></td>
                             <td>
-                                <a href="?course_id=<?= $course['id'] . $domainFilterQs ?>" class="text-decoration-none fw-bold">
+                                <a href="?course_id=<?= $course['id'] . $filterQs ?>" class="text-decoration-none fw-bold">
                                     <?= htmlspecialchars($course['title']) ?>
                                 </a>
                             </td>
@@ -275,7 +284,7 @@ require_once 'include/header.php';
                             <td><?= $enrolledCount ?></td>
                             <td><?= $completedUsers ?></td>
                             <td>
-                                <a href="?course_id=<?= $course['id'] . $domainFilterQs ?>" class="btn btn-sm btn-outline-primary">
+                                <a href="?course_id=<?= $course['id'] . $filterQs ?>" class="btn btn-sm btn-outline-primary">
                                     <i class="bi bi-eye me-1"></i>Detaljer
                                 </a>
                             </td>
@@ -355,9 +364,9 @@ require_once 'include/header.php';
     // och syns därför inte i domän-scope-filtret ovan. Lägg dem i en egen grupp
     // så admin alltid ser vilka som är externa deltagare. Körs även när is_public=0
     // eftersom en kurs kan ha avaktiverats med kvarvarande deltagare.
-    // När ett domänfilter är aktivt hoppas externa deltagare över — de tillhör
-    // ingen av de valda domänerna.
-    if (!$domainFilterActive) {
+    // När ett domän- eller taggfilter är aktivt hoppas externa deltagare över —
+    // de tillhör ingen av de valda domänerna och bär inga org-taggar.
+    if (!$anyFilterActive) {
         $publicParticipants = query(
             "SELECT u.id, u.name, u.email
              FROM " . DB_DATABASE . ".public_course_access pca
@@ -438,26 +447,16 @@ require_once 'include/header.php';
             JOIN " . DB_DATABASE . ".lessons l ON l.id = p.lesson_id
             WHERE l.course_id = ?";
     $enrolledParams = [$selectedCourseId, $selectedCourseId, $selectedCourseId, $selectedCourseId];
-    if ($domainFilterActive) {
-        // Summeringen ska spegla de valda domänerna — räkna bara inskrivna vars
-        // e-postdomän ingår i filtret (externa publika deltagare exkluderas).
-        $eidc = buildEmailDomainInClause($activeDomains, 'uu.email');
-        $enrolledIdsRows = query(
-            "SELECT DISTINCT src.user_id FROM (
-                $enrolledUnion
-            ) AS src
-            JOIN " . DB_DATABASE . ".users uu ON uu.id = src.user_id
-            WHERE {$eidc['fragment']}",
-            array_merge($enrolledParams, $eidc['params'])
-        );
-    } else {
-        $enrolledIdsRows = query(
-            "SELECT DISTINCT user_id FROM (
-                $enrolledUnion
-            ) AS src",
-            $enrolledParams
-        );
-    }
+    // Summeringen ska spegla samma urval som användarlistan ovan.
+    $summaryClause = courseStatsCountClause('uu', $selectedCourseId, $activeDomains, $selectedOrgTags, $anyFilterActive);
+    $enrolledIdsRows = query(
+        "SELECT DISTINCT src.user_id FROM (
+            $enrolledUnion
+        ) AS src
+        JOIN " . DB_DATABASE . ".users uu ON uu.id = src.user_id
+        WHERE ({$summaryClause['fragment']})",
+        array_merge($enrolledParams, $summaryClause['params'])
+    );
     $enrolledIds = [];
     foreach ($enrolledIdsRows as $r) { $enrolledIds[(int)$r['user_id']] = true; }
 
@@ -504,12 +503,18 @@ require_once 'include/header.php';
     ?>
 
     <div class="mb-3 d-flex gap-2">
-        <a href="course_stats.php<?= $selectedDomains ? '?' . ltrim($domainFilterQs, '&') : '' ?>" class="btn btn-outline-secondary btn-sm">
+        <a href="course_stats.php<?= $filterQs !== '' ? '?' . ltrim($filterQs, '&') : '' ?>" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-arrow-left me-1"></i>Tillbaka till översikt
         </a>
-        <a href="export_statistics.php?course_id=<?= $selectedCourseId ?>&return=course_stats<?= $domainFilterQs ?>" class="btn btn-outline-success btn-sm">
+        <a href="export_statistics.php?course_id=<?= $selectedCourseId ?>&return=course_stats<?= $filterQs ?>" class="btn btn-outline-success btn-sm">
             <i class="bi bi-file-earmark-excel me-1"></i>Exportera Excel
         </a>
+        <?php if ($anyFilterActive): ?>
+        <span class="align-self-center small text-muted">
+            <i class="bi bi-funnel-fill me-1" aria-hidden="true"></i>Filtrerat på:
+            <?= htmlspecialchars(implode(', ', array_merge($selectedDomains, $selectedOrgTags))) ?>
+        </span>
+        <?php endif; ?>
     </div>
 
     <div class="card shadow mb-4">
