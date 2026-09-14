@@ -33,10 +33,27 @@
   - [x] Committat och pushat 2026-09-14. public/admin/courses.php (SCORM-import avstängd 2026-09-04) är en
         separat, äldre ocommittad ändring och följde medvetet inte med
   - [ ] Inloggningsmail i skräpposten (nytt enligt Säter, M365-mottagare). Ej på publika blocklistor.
-        Trolig orsak: IP/domänrykte hos Microsoft efter reläincidenten 2026-08-17. Postal kan inte granskas —
-        SSH-nyckeln postal_sambruk saknas på disk. Behöver mailheaders (X-Forefront-Antispam-Report) från Säter
-  - [ ] "7 dagar på inloggningssidan": finns inte i koden eller på skarpa sidan (no-store, texten säger "en gång
-        i månaden" sedan 2026-08-25). Be om skärmdump/URL
+    - [x] Header analyserad 2026-09-14 (mail till anders.eriksson@sater.se 2026-08-21, inklistrad av Jonna):
+          SPF pass (psrp.sambruk.se, 91.107.206.3), DKIM pass (d=sambruk.se, s=postal-zJnI1V), DMARC pass,
+          compauth pass. Ändå SCL 5, SFV:SPM, CAT:SPM, SFTY 9.25, dest:J (JunkEmail), ämnet fick prefixet
+          "Möjlig Spam:" av Säters policy. Alltså INTE ett autentiseringsfel — Microsofts filter bedömer
+          avsändaren/innehållet. Stämmer i tid med reläincidenten (91 000 bedrägerimail från samma IP och
+          d=sambruk.se, 21 juni–17 aug). Return-path via psrp fungerar (regressionen 2026-08-17 syns inte)
+    - [ ] Kortsiktigt hos Säter: rapportera som felklassat i Defender (Submissions) + transportregel som
+          sätter SCL -1 för noreply@sambruk.se när DKIM d=sambruk.se passerar
+    - [x] BESLUT 2026-09-14 (Thomas): Stimma ska INTE skicka via M365 — Postal behålls
+    - [x] Textversion i alla mail (multipart/alternative) — include/mail.php
+      - [x] mailHtmlToText() + mailBuildAlternative() + dot-stuffing/QP i sendSmtpMail och sendSmtpMailWithAttachment
+        (valfri param $textMessage sist; utelämnad skapas texten ur HTML:en — alla 12 anropsställen får textdel)
+      - [x] Handskriven textversion för inloggningsmailet (include/auth.php)
+      - [x] Testat 2026-09-14 mot fejk-SMTP i containern: multipart/alternative (text, html) resp. mixed(alternative, pdf),
+            HTML identisk efter avkodning, punktrader dubblerade, längsta rad 82, inga ensamma LF. Listpunkter fick
+            tom rad emellan i autotexten — rättat (</li> ger ingen radbrytning)
+      - [x] Skarpt testmail skickat 2026-09-14 09:12 UTC till thomas.wennersten@sambruk.se (Postal: 250, loggat OK)
+      - [ ] Läs headern på testmailet (SCL, SFV, CAT) och jämför med Säters SCL 5 från 2026-08-21
+      - [x] Committat och pushat 2026-09-14
+  - [x] "7 dagar på inloggningssidan": Jonna bekräftar 2026-09-14 att texten är borta (den skarpa sidan har sagt
+        "en gång i månaden" sedan 2026-08-25 — troligen en gammal flik eller cache)
 - [x] LICENSE-fil skapad 2026-09-09 — README hänvisade till GPL v2 och en LICENSE-fil som inte fanns
       i repot. Full GPL-2.0-text tillagd i repo-roten så GitHub kan detektera licensen
 - [x] Sambruk/stimma är privat igen — verifierat 2026-09-14 (`visibility: private`, anonymt API-anrop 404,

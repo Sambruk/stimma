@@ -146,7 +146,15 @@ function sendLoginToken($email) {
     $mailFromName = trim(getenv('MAIL_FROM_NAME'), '"\'') ?: 'AI-kurser';
     
     // Använd sendSmtpMail från mail.php
-    $mailSent = sendSmtpMail($email, $subject, $htmlMessage, $mailFrom, $mailFromName);
+    // Handskriven textversion i stället för den automatiska — länken ska stå ensam
+    // på en rad och inte upprepas, som den hade gjort med både knapp och klartext.
+    $textMessage = "Inloggningslänk till {$systemName}\n\n"
+        . "Öppna länken nedan för att logga in:\n\n"
+        . "{$loginUrl}\n\n"
+        . "Länken är giltig i {$tokenExpiryMinutes} minuter.\n\n"
+        . "Om du inte har begärt denna länk kan du ignorera detta meddelande.\n";
+
+    $mailSent = sendSmtpMail($email, $subject, $htmlMessage, $mailFrom, $mailFromName, $textMessage);
     
     // Logga specifikt för inloggningstoken
     if ($mailSent) {
