@@ -405,6 +405,13 @@ require_once 'include/header.php';
                                                                 title="Visa PUB-avtal för <?= htmlspecialchars($domain) ?> (tecknat <?= htmlspecialchars($artifact['signed_at']) ?>)">
                                                             <i class="bi bi-check-circle-fill"></i>
                                                         </button>
+                                                    <?php elseif ($artifact && isPubArtifactInvalidated($artifact)): ?>
+                                                        <!-- Tecknat avtal som superadmin ogiltigförklarat. Domänen saknar
+                                                             giltigt PUB-avtal, men historiken ska synas här, inte döljas. -->
+                                                        <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#<?= 'pubModal_' . preg_replace('/[^a-zA-Z0-9]/', '_', $domain) ?>"
+                                                                title="PUB-avtalet ogiltigförklarat <?= htmlspecialchars(date('Y-m-d', strtotime($artifact['invalidated_at']))) ?> – klicka för att läsa motiveringen">
+                                                            <i class="bi bi-x-circle-fill"></i>
+                                                        </button>
                                                     <?php elseif ($hasPub): ?>
                                                         <!-- Manuellt markerat PUB-avtal (ingen digital artefakt) -->
                                                         <form method="POST" action="domains.php<?= $showOnlyWithUsers ? '?filter=with_users' : '' ?>" class="d-inline">
@@ -555,13 +562,26 @@ document.addEventListener('DOMContentLoaded', function() {
 <div class="modal fade" id="<?= $modalId ?>" tabindex="-1" aria-labelledby="<?= $modalId ?>Label" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <div class="modal-header bg-success text-white">
+            <div class="modal-header <?= isPubArtifactInvalidated($artifact) ? 'bg-danger' : 'bg-success' ?> text-white">
                 <h5 class="modal-title" id="<?= $modalId ?>Label">
-                    <i class="bi bi-file-earmark-check me-2"></i>PUB-avtal – <?= htmlspecialchars($domain) ?>
+                    <i class="bi bi-file-earmark-<?= isPubArtifactInvalidated($artifact) ? 'x' : 'check' ?> me-2"></i>PUB-avtal – <?= htmlspecialchars($domain) ?>
+                    <?php if (isPubArtifactInvalidated($artifact)): ?><span class="badge bg-light text-danger ms-2">Ogiltigt</span><?php endif; ?>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Stäng"></button>
             </div>
             <div class="modal-body">
+                <?php if (isPubArtifactInvalidated($artifact)): ?>
+                <div class="alert alert-danger">
+                    <h6 class="alert-heading"><i class="bi bi-x-circle me-2"></i>Avtalet är ogiltigförklarat</h6>
+                    <p class="mb-1">
+                        <strong>Tidpunkt:</strong> <?= htmlspecialchars(date('Y-m-d H:i', strtotime($artifact['invalidated_at']))) ?><br>
+                        <strong>Av:</strong> <?= htmlspecialchars($artifact['invalidated_by_email'] ?: 'okänd') ?>
+                    </p>
+                    <p class="mb-0"><strong>Kommentar:</strong> <?= nl2br(htmlspecialchars($artifact['invalidation_comment'] ?? '')) ?></p>
+                    <hr>
+                    <p class="mb-0 small">Ogiltigförklaring och ångra sköts på sidan <strong>PUB-avtal &amp; Bilagor</strong>.</p>
+                </div>
+                <?php endif; ?>
                 <!-- Avtalsinformation -->
                 <div class="row mb-3">
                     <div class="col-12">

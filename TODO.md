@@ -1,6 +1,28 @@
 # Stimma - Utvecklingsuppgifter
 
 ## Pågående
+- [x] Ogiltigförklaring av PUB-avtal (2026-09-16, beställt av Thomas) — byggt, verifierat, committat och pushat
+  - [x] migrations/047_pub_agreement_invalidation.sql — invalidated_at, invalidated_by, invalidated_by_email,
+        invalidation_comment på pub_agreement_artifacts + index (applicerad)
+  - [x] functions.php: isPubArtifactInvalidated(), getValidPubAgreementArtifact(), invalidatePubArtifact(),
+        revalidatePubArtifact(), slackPubFlaggaOmUtanGiltigtAvtal()
+  - [x] 🔴 Ogiltigförklaringen släcker även domänens (och orgens) has_pub_agreement — grinden läser flaggan,
+        inte artefakten. Utan det hade markeringen bara varit en etikett. Orgens flagga släcks bara när INGEN
+        av orgens domäner har ett giltigt avtal
+  - [x] pub_documents.php: statuskolumn i avtalslistan + superadminåtgärd i modalen med OBLIGATORISK kommentar,
+        samt "Ångra ogiltigförklaring". CSRF och logActivity som övriga åtgärder
+  - [x] domains.php: ogiltigförklarat avtal visas med röd knapp i stället för att falla ner i "inget avtal",
+        och modalen visar tidpunkt, vem och motivering
+  - [x] Verifierat mot testdata (artefakt-id 12, testdoman-ogiltig.example): ogiltigförklaring → flaggan 1→0,
+        datum nollställt, motiveringen i domänens anteckningar, logg skriven; ångra → allt återställt.
+        userHasPubAgreement() går true → false, alltså kommer bannern tillbaka och omtecknande tillåts
+  - [x] Testdata borttagen (explicit id 12 + domain_settings-raden). 9 skarpa avtal orörda
+  - [x] Visuell kontroll i webbläsare: listan visar "Ogiltigt" med datum, modalen visar tidpunkt, vem och
+        motivering. domains.php verifierad med testdomänen tillfälligt i allowed_domains.txt (filen återställd
+        och verifierad identisk med säkerhetskopian efteråt)
+  - [x] Rättat: ångra-knappen var btn-outline-danger mot röd bakgrund och syntes knappt — nu btn-light
+  - [x] Committat och pushat 2026-09-16. public/admin/courses.php (SCORM-import avstängd 2026-09-04) lämnades
+        utanför som tidigare — separat, äldre ändring
 - [ ] Säter-feedback 2026-09-14 (läsbehöriga på edu.sater.se) — punkt 1 och 2 åtgärdade, verifierade och pushade, mail + "7 dagar" kvar
   - [x] Analys: `statistics.php` ("Statistik per användare") ger läsbehörig REDAKTÖRSGRENEN för
         användarlista, kursstatistik, kursdetalj och fullt genomförda (`if ($isAdmin)` på fyra ställen,

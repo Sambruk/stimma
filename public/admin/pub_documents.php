@@ -136,6 +136,75 @@ if ($isSuperAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    // Ogiltigförklara ett tecknat PUB-avtal. Avtalet raderas inte — det förses med
+    // tidsstämpel, vem som gjorde det och varför. Släcker även domänens PUB-flagga,
+    // annars hade markeringen inte fått någon verkan i produkten.
+    if ($action === 'invalidate_artifact') {
+        $artifactId = (int)($_POST['artifact_id'] ?? 0);
+        $comment = trim($_POST['invalidation_comment'] ?? '');
+
+        if ($comment === '') {
+            $_SESSION['message'] = 'Ange varför avtalet ogiltigförklaras. Kommentaren är obligatorisk.';
+            $_SESSION['message_type'] = 'danger';
+        } else {
+            $resultat = invalidatePubArtifact($artifactId, $_SESSION['user_email'],
+                $_SESSION['user_id'] ?? null, $comment);
+
+            if ($resultat['ok']) {
+                $art = $resultat['artifact'];
+                $_SESSION['message'] = 'PUB-avtalet för ' . e($art['org_name']) . ' (' . e($art['domain'])
+                    . ') är markerat som ogiltigt.'
+                    . (!empty($resultat['slackt_domanflagga'])
+                        ? ' Domänens PUB-status är släckt — organisationen kan teckna ett nytt avtal.'
+                        : ' Domänen har kvar sin PUB-status, eftersom ett annat giltigt avtal finns.');
+                $_SESSION['message_type'] = 'success';
+
+                logActivity($_SESSION['user_email'],
+                    "Ogiltigförklarade PUB-avtal {$art['agreement_id']} för {$art['org_name']} ({$art['domain']})", [
+                        'action' => 'pub_agreement_invalidated',
+                        'artifact_id' => (int)$art['id'],
+                        'agreement_id' => $art['agreement_id'],
+                        'domain' => $art['domain'],
+                        'comment' => $comment,
+                        'domain_flag_cleared' => !empty($resultat['slackt_domanflagga']),
+                    ]);
+            } else {
+                $_SESSION['message'] = $resultat['fel'];
+                $_SESSION['message_type'] = 'danger';
+            }
+        }
+
+        header('Location: pub_documents.php');
+        exit;
+    }
+
+    // Ångra en ogiltigförklaring.
+    if ($action === 'revalidate_artifact') {
+        $artifactId = (int)($_POST['artifact_id'] ?? 0);
+        $resultat = revalidatePubArtifact($artifactId, $_SESSION['user_email']);
+
+        if ($resultat['ok']) {
+            $art = $resultat['artifact'];
+            $_SESSION['message'] = 'Ogiltigförklaringen är ångrad. Avtalet för ' . e($art['org_name'])
+                . ' gäller igen.';
+            $_SESSION['message_type'] = 'success';
+
+            logActivity($_SESSION['user_email'],
+                "Ångrade ogiltigförklaring av PUB-avtal {$art['agreement_id']} för {$art['org_name']}", [
+                    'action' => 'pub_agreement_revalidated',
+                    'artifact_id' => (int)$art['id'],
+                    'agreement_id' => $art['agreement_id'],
+                    'domain' => $art['domain'],
+                ]);
+        } else {
+            $_SESSION['message'] = $resultat['fel'];
+            $_SESSION['message_type'] = 'danger';
+        }
+
+        header('Location: pub_documents.php');
+        exit;
+    }
+
     if ($action === 'sambruk_sign') {
         // Kräver super_admin OCH SMS-verifiering
         if (!$isSuperAdmin) {
@@ -720,6 +789,7 @@ require_once 'include/header.php';
                                         <th>Undertecknare</th>
                                         <th>Datum</th>
                                         <th>Version</th>
+                                        <th>Status</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -737,6 +807,16 @@ require_once 'include/header.php';
                                         </td>
                                         <td><?= date('Y-m-d H:i', strtotime($art['signed_at'])) ?></td>
                                         <td><?= e($art['version']) ?></td>
+                                        <td>
+                                            <?php if (isPubArtifactInvalidated($art)): ?>
+                                                <span class="badge bg-danger" title="Ogiltigförklarat <?= e(date('Y-m-d H:i', strtotime($art['invalidated_at']))) ?>">
+                                                    <i class="bi bi-x-circle me-1"></i>Ogiltigt
+                                                </span>
+                                                <br><small class="text-muted"><?= e(date('Y-m-d', strtotime($art['invalidated_at']))) ?></small>
+                                            <?php else: ?>
+                                                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Gäller</span>
+                                            <?php endif; ?>
+                                        </td>
                                     </tr>
                                     <?php endforeach; ?>
                                 </tbody>
@@ -755,6 +835,63 @@ require_once 'include/header.php';
                                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Stäng"></button>
                                     </div>
                                     <div class="modal-body">
+                                        <?php if (isPubArtifactInvalidated($art)): ?>
+                                        <div class="alert alert-danger">
+                                            <h6 class="alert-heading">
+                                                <i class="bi bi-x-circle me-2"></i>Avtalet är ogiltigförklarat
+                                            </h6>
+                                            <p class="mb-1">
+                                                <strong>Tidpunkt:</strong> <?= e(date('Y-m-d H:i', strtotime($art['invalidated_at']))) ?><br>
+                                                <strong>Av:</strong> <?= e($art['invalidated_by_email'] ?: 'okänd') ?>
+                                            </p>
+                                            <p class="mb-3"><strong>Kommentar:</strong> <?= nl2br(e($art['invalidation_comment'] ?? '')) ?></p>
+                                            <form method="POST" action="pub_documents.php" class="mb-0"
+                                                  onsubmit="return confirm('Ångra ogiltigförklaringen? Avtalet börjar gälla igen och domänens PUB-status tänds.');">
+                                                <input type="hidden" name="csrf_token" value="<?= e(generateCsrfToken()) ?>">
+                                                <input type="hidden" name="action" value="revalidate_artifact">
+                                                <input type="hidden" name="artifact_id" value="<?= (int)$art['id'] ?>">
+                                                <button type="submit" class="btn btn-light btn-sm">
+                                                    <i class="bi bi-arrow-counterclockwise me-1"></i>Ångra ogiltigförklaringen
+                                                </button>
+                                            </form>
+                                        </div>
+                                        <?php else: ?>
+                                        <div class="alert alert-light border">
+                                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                                <span>
+                                                    <span class="badge bg-success me-2"><i class="bi bi-check-circle me-1"></i>Gäller</span>
+                                                    Avtalet räknas som gällande för <?= e($art['domain']) ?>.
+                                                </span>
+                                                <button type="button" class="btn btn-outline-danger btn-sm"
+                                                        data-bs-toggle="collapse" data-bs-target="#ogiltig_<?= $idx ?>">
+                                                    <i class="bi bi-x-circle me-1"></i>Markera som ogiltigt
+                                                </button>
+                                            </div>
+                                            <div class="collapse mt-3" id="ogiltig_<?= $idx ?>">
+                                                <form method="POST" action="pub_documents.php"
+                                                      onsubmit="return confirm('Markera avtalet som ogiltigt? Domänens PUB-status släcks och organisationen kan teckna ett nytt avtal.');">
+                                                    <input type="hidden" name="csrf_token" value="<?= e(generateCsrfToken()) ?>">
+                                                    <input type="hidden" name="action" value="invalidate_artifact">
+                                                    <input type="hidden" name="artifact_id" value="<?= (int)$art['id'] ?>">
+                                                    <label for="kommentar_<?= $idx ?>" class="form-label fw-bold">
+                                                        Varför gäller avtalet inte längre? <span class="text-danger">*</span>
+                                                    </label>
+                                                    <textarea class="form-control mb-2" id="kommentar_<?= $idx ?>"
+                                                              name="invalidation_comment" rows="3" required
+                                                              placeholder="T.ex. undertecknaren var inte behörig, organisationen har bytt organisationsnummer, eller avtalet har sagts upp."></textarea>
+                                                    <p class="small text-muted">
+                                                        Avtalet raderas inte — det sparas med tidsstämpel och den här kommentaren.
+                                                        Domänens PUB-status släcks, varningen om saknat PUB-avtal visas igen och
+                                                        organisationen kan teckna ett nytt avtal.
+                                                    </p>
+                                                    <button type="submit" class="btn btn-danger btn-sm">
+                                                        <i class="bi bi-x-circle me-1"></i>Markera avtalet som ogiltigt
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                        <?php endif; ?>
+
                                         <div class="row mb-3">
                                             <div class="col-12">
                                                 <h6 class="text-muted text-uppercase small fw-bold mb-3">

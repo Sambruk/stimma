@@ -1892,6 +1892,172 @@ function getPubAgreementArtifact($domain) {
 }
 
 /**
+ * Är ett tecknat PUB-avtal ogiltigförklarat?
+ *
+ * @param array|null $artifact Rad ur pub_agreement_artifacts
+ * @return bool
+ */
+function isPubArtifactInvalidated($artifact) {
+    return !empty($artifact) && !empty($artifact['invalidated_at']);
+}
+
+/**
+ * Hämta det senaste GILTIGA PUB-avtalet för en domän.
+ *
+ * Skiljer sig från getPubAgreementArtifact(), som hämtar det senaste avtalet
+ * oavsett om det ogiltigförklarats — den används för att visa historiken.
+ *
+ * @param string $domain
+ * @return array|null
+ */
+function getValidPubAgreementArtifact($domain) {
+    return queryOne(
+        "SELECT * FROM " . DB_DATABASE . ".pub_agreement_artifacts
+         WHERE domain = ? AND invalidated_at IS NULL
+         ORDER BY signed_at DESC LIMIT 1",
+        [$domain]
+    );
+}
+
+/**
+ * Markera ett tecknat PUB-avtal som ogiltigt.
+ *
+ * Avtalet raderas inte — det är organisationens handling och ska gå att läsa i
+ * efterhand. Raden förses med tidsstämpel, vem som gjorde det och varför.
+ *
+ * 🔴 Ogiltigförklaringen släcker även domänens (och i förekommande fall
+ * organisationens) PUB-flagga. Utan det hade markeringen bara varit en etikett:
+ * grinden i produkten läser has_pub_agreement, inte artefakten. Följden är
+ * avsedd — varningsbannern kommer tillbaka och organisationen kan teckna om.
+ * Flaggan släcks bara om det inte finns något ANNAT giltigt avtal kvar.
+ *
+ * @param int $artifactId Rad-id i pub_agreement_artifacts
+ * @param string $byEmail Superadminens e-post
+ * @param int|null $byUserId Superadminens användar-id
+ * @param string $comment Obligatorisk motivering
+ * @return array{ok:bool, fel?:string, artifact?:array, slackt_domanflagga?:bool}
+ */
+function invalidatePubArtifact($artifactId, $byEmail, $byUserId, $comment) {
+    $comment = trim($comment);
+    if ($comment === '') {
+        return ['ok' => false, 'fel' => 'En kommentar krävs för att ogiltigförklara ett avtal.'];
+    }
+
+    $artifact = queryOne(
+        "SELECT * FROM " . DB_DATABASE . ".pub_agreement_artifacts WHERE id = ?", [(int)$artifactId]);
+    if (!$artifact) {
+        return ['ok' => false, 'fel' => 'Avtalet hittades inte.'];
+    }
+    if (isPubArtifactInvalidated($artifact)) {
+        return ['ok' => false, 'fel' => 'Avtalet är redan ogiltigförklarat.'];
+    }
+
+    // execute() sväljer PDOException och returnerar null; en lyckad UPDATE ger
+    // lastInsertId "0". Kontrollera därför utfallet genom att läsa tillbaka raden.
+    execute(
+        "UPDATE " . DB_DATABASE . ".pub_agreement_artifacts
+         SET invalidated_at = NOW(), invalidated_by = ?, invalidated_by_email = ?, invalidation_comment = ?
+         WHERE id = ?",
+        [$byUserId ?: null, $byEmail, $comment, (int)$artifact['id']]
+    );
+    $efter = queryOne("SELECT * FROM " . DB_DATABASE . ".pub_agreement_artifacts WHERE id = ?", [(int)$artifact['id']]);
+    if (!isPubArtifactInvalidated($efter)) {
+        return ['ok' => false, 'fel' => 'Kunde inte spara ogiltigförklaringen.'];
+    }
+
+    $slackt = slackPubFlaggaOmUtanGiltigtAvtal($artifact['domain'], $comment, $byEmail);
+
+    return ['ok' => true, 'artifact' => $efter, 'slackt_domanflagga' => $slackt];
+}
+
+/**
+ * Ångra en ogiltigförklaring och tänd PUB-flaggan igen.
+ *
+ * @param int $artifactId
+ * @param string $byEmail
+ * @return array{ok:bool, fel?:string, artifact?:array}
+ */
+function revalidatePubArtifact($artifactId, $byEmail) {
+    $artifact = queryOne(
+        "SELECT * FROM " . DB_DATABASE . ".pub_agreement_artifacts WHERE id = ?", [(int)$artifactId]);
+    if (!$artifact) {
+        return ['ok' => false, 'fel' => 'Avtalet hittades inte.'];
+    }
+    if (!isPubArtifactInvalidated($artifact)) {
+        return ['ok' => false, 'fel' => 'Avtalet är inte ogiltigförklarat.'];
+    }
+
+    execute(
+        "UPDATE " . DB_DATABASE . ".pub_agreement_artifacts
+         SET invalidated_at = NULL, invalidated_by = NULL, invalidated_by_email = NULL, invalidation_comment = NULL
+         WHERE id = ?",
+        [(int)$artifact['id']]
+    );
+    $efter = queryOne("SELECT * FROM " . DB_DATABASE . ".pub_agreement_artifacts WHERE id = ?", [(int)$artifact['id']]);
+    if (isPubArtifactInvalidated($efter)) {
+        return ['ok' => false, 'fel' => 'Kunde inte ångra ogiltigförklaringen.'];
+    }
+
+    // Tänd domänens flagga igen med avtalets ursprungliga signeringsdatum.
+    $datum = !empty($artifact['signed_at']) ? date('Y-m-d', strtotime($artifact['signed_at'])) : date('Y-m-d');
+    $befintlig = getDomainSettings($artifact['domain']);
+    $notis = trim(($befintlig['pub_agreement_notes'] ?? '') . "\n"
+        . date('Y-m-d H:i') . ': ogiltigförklaringen ångrad av ' . $byEmail . '.');
+    updatePubAgreement($artifact['domain'], true, $datum, $notis);
+
+    $org = getOrganizationByDomain($artifact['domain']);
+    if ($org) {
+        updateOrgPubAgreement($org['id'], true, $datum, $notis);
+    }
+
+    return ['ok' => true, 'artifact' => $efter];
+}
+
+/**
+ * Släck PUB-flaggan för en domän (och dess organisation) om det inte finns
+ * något giltigt tecknat avtal kvar.
+ *
+ * Organisationens flagga släcks bara när INGEN av organisationens domäner har
+ * ett giltigt avtal — annars hade en ogiltigförklaring på en underdomän slagit
+ * ut hela organisationen.
+ *
+ * @param string $domain
+ * @param string $comment Motiveringen, som förs in i domänens anteckningar
+ * @param string $byEmail
+ * @return bool True om någon flagga släcktes
+ */
+function slackPubFlaggaOmUtanGiltigtAvtal($domain, $comment, $byEmail) {
+    $slackt = false;
+    $rad = date('Y-m-d H:i') . ': PUB-avtalet ogiltigförklarat av ' . $byEmail . '. ' . $comment;
+
+    if (!getValidPubAgreementArtifact($domain)) {
+        $befintlig = getDomainSettings($domain);
+        $notis = trim(($befintlig['pub_agreement_notes'] ?? '') . "\n" . $rad);
+        // Datumet nollställs — domänen har inte längre något gällande avtal.
+        updatePubAgreement($domain, false, null, $notis);
+        $slackt = true;
+    }
+
+    $org = getOrganizationByDomain($domain);
+    if ($org) {
+        $harGiltigt = false;
+        foreach (getOrganizationDomains($org['id']) as $od) {
+            if (getValidPubAgreementArtifact($od) || ($od !== $domain && hasPubAgreement($od))) {
+                $harGiltigt = true;
+                break;
+            }
+        }
+        if (!$harGiltigt && (int)($org['has_pub_agreement'] ?? 0) === 1) {
+            $notis = trim(($org['pub_agreement_notes'] ?? '') . "\n" . $rad);
+            updateOrgPubAgreement($org['id'], false, null, $notis);
+            $slackt = true;
+        }
+    }
+
+    return $slackt;
+}
+
+/**
  * Kontrollera om ett PUB-avtalsdokument har Sambruks kontrasignering
  *
  * @param int $docId Dokument-ID i pub_agreement_documents
