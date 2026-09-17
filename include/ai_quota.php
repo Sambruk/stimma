@@ -319,7 +319,8 @@ function getAiModelPricing($model) {
     if (isset($cache[$key])) return $cache[$key];
 
     $row = queryOne(
-        "SELECT input_per_1m_cents, output_per_1m_cents, image_per_call_cents
+        "SELECT input_per_1m_cents, output_per_1m_cents, image_per_call_cents,
+                image_token_per_1m_cents
            FROM " . DB_DATABASE . ".ai_pricing WHERE LOWER(model) = ? LIMIT 1",
         [$key]
     );
@@ -327,6 +328,7 @@ function getAiModelPricing($model) {
         'input_per_1m_cents' => 0,
         'output_per_1m_cents' => 0,
         'image_per_call_cents' => 0,
+        'image_token_per_1m_cents' => 0,
     ];
     return $cache[$key];
 }
@@ -338,6 +340,16 @@ function getAiModelPricing($model) {
 function calculateAiCostCents($model, $promptTokens, $completionTokens, $isImage = false) {
     $p = getAiModelPricing($model);
     if ($isImage) {
+        // gpt-image-modellerna faktureras per bildtoken, och en bild i brett
+        // format med hög kvalitet kostar flera gånger mer än en liten i medium.
+        // Rapporterar svaret tokens använder vi dem; annars faller vi tillbaka
+        // på det fasta priset per bild (dall-e-*, och äldre loggrader).
+        $perMiljon = (int)($p['image_token_per_1m_cents'] ?? 0);
+        if ($perMiljon > 0 && (int)$completionTokens > 0) {
+            $kostnad = ((int)$completionTokens * $perMiljon / 1000000)
+                     + ((int)$promptTokens * (int)$p['input_per_1m_cents'] / 1000000);
+            return (int)round($kostnad);
+        }
         return (int)round((int)$p['image_per_call_cents']);
     }
     $cost = ((int)$promptTokens * (int)$p['input_per_1m_cents'] / 1000000)
@@ -366,8 +378,11 @@ function logAiUsage(array $context, array $usage, $model, $status = 'ok') {
         $promptT = (int)($usage['prompt_tokens'] ?? 0);
         $completionT = (int)($usage['completion_tokens'] ?? 0);
         if ($isImage) {
-            // Bild: drar fast token-ekvivalent mot kvoten, men cost_cents speglar
-            // OpenAI:s faktiska bildpris (image_per_call_cents).
+            // Bild: drar fast token-ekvivalent mot KVOTEN — en bild ska kosta
+            // lika mycket av kvoten oavsett format. cost_cents räknas däremot på
+            // de faktiska bildtokens som svaret rapporterar (se
+            // calculateAiCostCents), och prompt_tokens/completion_tokens sparas
+            // som de kom, så att uppföljningen visar vad bilden verkligen drog.
             $totalT = AI_IMAGE_TOKEN_EQUIVALENT;
         } else {
             $totalT = (int)($usage['total_tokens'] ?? ($promptT + $completionT));

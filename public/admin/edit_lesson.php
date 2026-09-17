@@ -663,13 +663,58 @@ if ($isAdmin) {
                                 <button type="button" id="generate-ai-image-btn" class="btn btn-outline-primary" title="Generera AI-bild">
                                     <i class="bi bi-stars"></i> Generera AI-bild
                                 </button>
+                                <?php
+                                require_once __DIR__ . '/../../include/ai_image_helper.php';
+                                require_once __DIR__ . '/../../include/ai_quota.php';
+                                $lektionsbildKostnad = aiImageCostLabel(aiImageEstimatedCostCents(
+                                    getModelForFeature('image', 'gpt-image-1-mini'),
+                                    aiImageSizeFor('lektion'), aiImageQualityFor('lektion')
+                                ));
+                                ?>
+                                <?php
+                                // Stilen bestäms på kursen och ärvs hit. Visa vilken det blir, och
+                                // uppdatera texten om användaren byter kurs i väljaren ovan.
+                                $bildStilNamn = aiImageStyles();
+                                $kursStilKarta = [];
+                                foreach ($courses as $kursRad) {
+                                    $nyckel = aiImageStyleKey($kursRad['image_style'] ?? '');
+                                    $kursStilKarta[(int)$kursRad['id']] = $bildStilNamn[$nyckel]['namn'];
+                                }
+                                $aktuellStil = $kursStilKarta[(int)$courseId] ?? $bildStilNamn['illustration']['namn'];
+                                ?>
+                                <div class="mt-2">
+                                    <label for="image_wish" class="form-label small mb-1">Vad ska bilden visa? <span class="text-muted fw-normal">(valfritt)</span></label>
+                                    <input type="text" class="form-control form-control-sm" id="image_wish" maxlength="300"
+                                           placeholder="T.ex. två kollegor som går igenom en checklista vid en whiteboard">
+                                    <div class="form-text small">Lämnar du fältet tomt utgår bilden från lektionens titel. Texten sparas inte.</div>
+                                </div>
+                                <?php if ($lektionsbildKostnad): ?>
+                                <div class="form-text small mt-1">
+                                    Kostar ungefär <strong><?= htmlspecialchars($lektionsbildKostnad) ?></strong> och drar mot AI-kvoten.
+                                    Bilden skapas i kursens stil: <strong id="kursets-bildstil"><?= htmlspecialchars($aktuellStil) ?></strong>
+                                    (ändras under kursens inställningar).
+                                </div>
+                                <script>
+                                // Kursens bildstil per kurs-id, för att texten ska stämma när man byter kurs.
+                                window.STIMMA_KURSSTILAR = <?= json_encode($kursStilKarta, JSON_UNESCAPED_UNICODE) ?>;
+                                document.addEventListener('DOMContentLoaded', function () {
+                                    var valjare = document.getElementById('course_id');
+                                    var etikett = document.getElementById('kursets-bildstil');
+                                    if (!valjare || !etikett) return;
+                                    valjare.addEventListener('change', function () {
+                                        var namn = window.STIMMA_KURSSTILAR[this.value];
+                                        if (namn) etikett.textContent = namn;
+                                    });
+                                });
+                                </script>
+                                <?php endif; ?>
                                 <?php endif; ?>
                             </div>
                             <div id="ai-image-status" class="mt-2" style="display: none;">
                                 <div class="spinner-border spinner-border-sm text-primary" role="status">
                                     <span class="visually-hidden">Genererar...</span>
                                 </div>
-                                <span class="ms-2 text-muted">Genererar AI-bild, detta kan ta upp till 60 sekunder...</span>
+                                <span class="ms-2 text-muted">Genererar AI-bild, detta kan ta någon minut...</span>
                             </div>
                         </div>
 
@@ -965,6 +1010,7 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('lesson_id', lessonId);
             formData.append('lesson_title', lessonTitle);
             formData.append('course_name', courseName);
+            formData.append('image_wish', document.getElementById('image_wish')?.value.trim() || '');
             formData.append('csrf_token', csrfToken);
 
             fetch('ajax/generate_lesson_image.php', {

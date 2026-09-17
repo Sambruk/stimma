@@ -46,6 +46,12 @@ if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
 $courseId = (int)($_POST['course_id'] ?? 0);
 $courseTitle = trim($_POST['course_title'] ?? '');
 $courseDescription = trim($_POST['course_description'] ?? '');
+// Bildstil väljs per kurs och ärvs av kursens lektionsbilder. Valet sparas på
+// kursen så att nästa bild — och bakgrundsjobbets bilder — följer samma stil.
+require_once '../../include/ai_image_helper.php';
+$imageStyle = aiImageStyleKey($_POST['image_style'] ?? '');
+// Valfri beskrivning av motivet. Används bara vid genereringen, sparas inte.
+$imageWish = trim($_POST['image_wish'] ?? '');
 
 if ($courseId <= 0) {
     echo json_encode(['success' => false, 'message' => 'Ogiltigt kurs-ID.']);
@@ -76,19 +82,24 @@ try {
 }
 
 // Generera AI-bild
-$result = generateAIImage($courseTitle, $courseDescription, $courseId);
+$result = generateAIImage($courseTitle, $courseDescription, $courseId, $imageStyle, $imageWish);
 
 if ($result['success']) {
-    // Uppdatera kursen med bilden
+    // Uppdatera kursen med bilden och spara stilvalet. Stilen måste sparas här
+    // och inte bara skickas med anropet: lektionsbilderna och bakgrundsjobbet
+    // läser den från kursen för att hålla ihop bildspråket.
     execute(
-        "UPDATE " . DB_DATABASE . ".courses SET image_url = ? WHERE id = ?",
-        [$result['image_url'], $courseId]
+        "UPDATE " . DB_DATABASE . ".courses SET image_url = ?, image_style = ? WHERE id = ?",
+        [$result['image_url'], $imageStyle, $courseId]
     );
 
     echo json_encode([
         'success' => true,
         'message' => 'Bild genererad!',
-        'image_url' => $result['image_url']
+        'image_url' => $result['image_url'],
+        'image_style' => $imageStyle,
+        'cost_cents' => $result['cost_cents'] ?? null,
+        'cost_text' => $result['cost_text'] ?? ''
     ]);
 } else {
     echo json_encode(['success' => false, 'message' => $result['error']]);
@@ -97,7 +108,7 @@ if ($result['success']) {
 /**
  * Generate AI image using DALL-E
  */
-function generateAIImage($courseTitle, $courseDescription, $courseId = null) {
+function generateAIImage($courseTitle, $courseDescription, $courseId = null, $imageStyle = 'illustration', $imageWish = '') {
     $apiKey = defined('AI_API_KEY') ? AI_API_KEY : '';
     $imageApiServer = 'https://api.openai.com/v1/images/generations';
 
@@ -120,11 +131,11 @@ function generateAIImage($courseTitle, $courseDescription, $courseId = null) {
     $context = ['feature' => 'image', 'course_id' => $courseId, 'is_image' => true];
     $imageModel = getModelForFeature('image', 'gpt-image-1-mini');
 
-    $prompt = "Cover illustration for a course called '{$courseTitle}'" .
-              ($courseDescription ? ". The course is about: '{$courseDescription}'" : "") .
-              ". " . aiImageStyleDirective();
+    $prompt = aiImageBuildPrompt('kurs', $courseTitle, $courseDescription, $imageStyle, $imageWish);
+    $size = aiImageSizeFor('kurs');
+    $quality = aiImageQualityFor('kurs');
 
-    $data = aiImageBuildPayload($imageModel, $prompt, '1024x1024');
+    $data = aiImageBuildPayload($imageModel, $prompt, $size, $quality);
 
     $ch = curl_init($imageApiServer);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -134,7 +145,9 @@ function generateAIImage($courseTitle, $courseDescription, $courseId = null) {
         'Content-Type: application/json',
         'Authorization: Bearer ' . $apiKey
     ]);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 120);
+    // Bred bild i hög kvalitet tar ~110 s. Nginx släpper igenom 300 s för
+    // Stimma, så 240 här ger marginal utan att hänga kvar i onödan.
+    curl_setopt($ch, CURLOPT_TIMEOUT, 240);
 
     $response = curl_exec($ch);
     $curlError = curl_error($ch);
@@ -169,13 +182,23 @@ function generateAIImage($courseTitle, $courseDescription, $courseId = null) {
         }
     }
 
-    $fileName = 'ai_course_' . uniqid() . '.png';
+    $fileName = 'ai_course_' . uniqid() . '.' . aiImageFileExtension($imageModel);
     $filePath = $uploadDir . $fileName;
 
     if (!file_put_contents($filePath, $imageContent)) {
         return ['success' => false, 'error' => 'Kunde inte spara bildfilen.'];
     }
 
-    logAiUsage($context, [], $imageModel, 'ok');
-    return ['success' => true, 'image_url' => $fileName];
+    $usage = aiImageUsageFromResponse(is_array($result) ? $result : []);
+    logAiUsage($context, $usage, $imageModel, 'ok');
+
+    $kostnad = calculateAiCostCents($imageModel, $usage['prompt_tokens'] ?? 0,
+        $usage['completion_tokens'] ?? 0, true);
+
+    return [
+        'success'    => true,
+        'image_url'  => $fileName,
+        'cost_cents' => $kostnad,
+        'cost_text'  => aiImageCostLabel($kostnad),
+    ];
 }

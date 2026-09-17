@@ -470,7 +470,7 @@ function aiLessonInsert(int $courseId, array $lessonData, int $authorId, array $
  * @param string|null $userEmail om null används $_SESSION
  * @return array ['success' => bool, 'image_url'? => string, 'error'? => string]
  */
-function aiGenerateLessonImage(string $lessonTitle, ?string $courseName, ?int $courseId = null, ?string $userEmail = null): array {
+function aiGenerateLessonImage(string $lessonTitle, ?string $courseName, ?int $courseId = null, ?string $userEmail = null, ?string $imageWish = null): array {
     require_once __DIR__ . '/ai_quota.php';
 
     $apiKey = defined('AI_API_KEY') ? AI_API_KEY : '';
@@ -498,11 +498,15 @@ function aiGenerateLessonImage(string $lessonTitle, ?string $courseName, ?int $c
     ];
     $imageModel = getModelForFeature('image', 'gpt-image-1-mini');
 
-    $prompt = "Illustration for a lesson about '{$lessonTitle}'" .
-              ($courseName ? ", part of a course about '{$courseName}'" : "") .
-              ". " . aiImageStyleDirective();
+    // Lektionsbilden ärver kursens stil, så att kursen håller ihop visuellt.
+    $imageStyle = 'illustration';
+    if ($courseId) {
+        $kursRad = queryOne("SELECT image_style FROM " . DB_DATABASE . ".courses WHERE id = ?", [(int)$courseId]);
+        $imageStyle = $kursRad['image_style'] ?? 'illustration';
+    }
 
-    $data = aiImageBuildPayload($imageModel, $prompt, '1024x1024');
+    $prompt = aiImageBuildPrompt('lektion', $lessonTitle, $courseName, $imageStyle, (string)$imageWish);
+    $data = aiImageBuildPayload($imageModel, $prompt, aiImageSizeFor('lektion'), aiImageQualityFor('lektion'));
 
     $ch = curl_init('https://api.openai.com/v1/images/generations');
     curl_setopt_array($ch, [
@@ -513,7 +517,7 @@ function aiGenerateLessonImage(string $lessonTitle, ?string $courseName, ?int $c
             'Content-Type: application/json',
             'Authorization: Bearer ' . $apiKey,
         ],
-        CURLOPT_TIMEOUT        => 120,
+        CURLOPT_TIMEOUT        => 240,
     ]);
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -548,14 +552,24 @@ function aiGenerateLessonImage(string $lessonTitle, ?string $courseName, ?int $c
         logAiUsage($context, [], $imageModel, 'error');
         return ['success' => false, 'error' => 'Kunde inte skapa upload-mappen.'];
     }
-    $fileName = 'ai_' . uniqid() . '.png';
+    $fileName = 'ai_' . uniqid() . '.' . aiImageFileExtension($imageModel);
     if (!file_put_contents($uploadDir . $fileName, $imageContent)) {
         logAiUsage($context, [], $imageModel, 'error');
         return ['success' => false, 'error' => 'Kunde inte spara bildfilen.'];
     }
 
-    logAiUsage($context, [], $imageModel, 'ok');
-    return ['success' => true, 'image_url' => $fileName];
+    $usage = aiImageUsageFromResponse(is_array($result) ? $result : []);
+    logAiUsage($context, $usage, $imageModel, 'ok');
+
+    $kostnad = calculateAiCostCents($imageModel, $usage['prompt_tokens'] ?? 0,
+        $usage['completion_tokens'] ?? 0, true);
+
+    return [
+        'success'    => true,
+        'image_url'  => $fileName,
+        'cost_cents' => $kostnad,
+        'cost_text'  => aiImageCostLabel($kostnad),
+    ];
 }
 
 } // end function_exists guard

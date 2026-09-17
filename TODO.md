@@ -1,6 +1,45 @@
 # Stimma - Utvecklingsuppgifter
 
 ## Pågående
+- [x] Bättre AI-bilder (2026-09-17, beställt av Thomas) — byggt, testat skarpt, committat och pushat
+  - [x] Diagnos: prompten bad inte om något konkret motiv, stilanvisningen förbjöd ansiktsdrag
+        ("no detailed facial features" → kusliga ansiktslösa personer), allt genererades kvadratiskt
+        (1024x1024) trots att omslaget visas som banner (110 px i kort, 340 px på kurssidan), och
+        kvaliteten var låst till 'medium'
+  - [x] include/ai_image_helper.php är nu navet: aiImageStyles(), aiImageStyleDirective($stil),
+        aiImageBuildPrompt($typ,...), aiImageSizeFor(), aiImageQualityFor(), WebP-stöd, kostnadsfunktioner.
+        Prompten byggs på ETT ställe i stället för fyra
+  - [x] Prompten ber om en konkret vardagsscen i svensk offentlig miljö, vänliga ansiktsdrag och
+        crop-säker komposition. Negativlistan utökad (ikonbubblor, hänglås)
+  - [x] Kursomslag: 1536x1024 + quality 'high'. Lektionsbild: 1024x1024 + 'medium' (visas i smal spalt)
+  - [x] WebP direkt från API:t (output_format webp, compression 82) — 2,8 MB PNG → 212 kB WebP.
+        Ingen GD/Imagick behövdes i containern, vilket var det jag först trodde
+  - [x] Bildstil per kurs (courses.image_style, migration 048): Varm illustration / Fotografiskt /
+        Lugnt grafiskt. Ärvs av lektionsbilderna och av bakgrundsjobbet
+  - [x] Timeout 120 → 240 s i alla tre bildvägarna. Mätt: bred bild i hög kvalitet tar ~110 s, alltså
+        precis under den gamla gränsen. Nginx släpper igenom 300 s
+  - [x] Kostnaden räknas på FAKTISKA bildtokens (migration 048: ai_pricing.image_token_per_1m_cents,
+        priser från OpenAI 2026-09-17). Loggades tidigare som fast 8 cent oavsett storlek och kvalitet —
+        verkligt pris för en bred bild i hög kvalitet är 17 cent. Kvoten drar fortfarande 10 000 tokens/bild
+  - [x] Kostnad visas i gränssnittet före generering (uppskattning per storlek/kvalitet) och faktiskt
+        belopp i kvittensen efteråt. Belopp i US-cent — ingen påhittad växelkurs
+  - [x] Bakgrundsjobbet: gamla DALL-E-måttet 1792x1024 föll tyst tillbaka till kvadratiskt; använder nu
+        aiImageSizeFor() och samma promptbyggare som knapparna i admin
+  - [x] Skarpt test mot testkurs 143: 110 s, 212 kB WebP 1536x1024, image_style sparad,
+        ai_usage_log: 280 input + 5488 bildtokens, cost_cents 17
+  - [x] Testkurs 143 och dess bildfil borttagna (explicit id). Övriga kurser orörda
+  - [x] Visuell kontroll: stilväljaren visar tre stilar med hjälptext, vald stil sparas, kostnad och
+        tidsåtgång står i hjälptexten. Kostnadstext även i lektionsvyerna (3,2 US-cent). Inga JS-fel
+  - [x] Tillägg 2026-09-17 efter Thomas fråga (lektionen frågade ingenting):
+        * Fältet "Vad ska bilden visa?" vid BÅDA knapparna (kurs, lektion) och i AI-skapa-lektion.
+          Texten läggs först i prompten som "The image must show: …", max 300 tecken, sparas inte
+        * Lektionsvyerna visar vilken stil kursen har ("Bilden skapas i kursens stil: Fotografiskt").
+          I lektionsredigeraren uppdateras texten när man byter kurs i väljaren
+        * Verifierat skarpt: lektionsbild med önskemål, 45 s, 79 kB WebP, 5 cent, stilen ärvdes (foto)
+        * Kostnadsuppskattningen justerad efter mätning: 1024x1024 medium är 1756 tokens, inte 1056
+  - [x] Testdata borttagen (kurs 144, lektion 1437, bildfilen). Inga riktiga kurser rörda
+  - [x] Committat och pushat 2026-09-17 i en commit. public/admin/courses.php (SCORM-import avstängd
+        2026-09-04) lämnades utanför som tidigare — separat, äldre ändring
 - [x] Ogiltigförklaring av PUB-avtal (2026-09-16, beställt av Thomas) — byggt, verifierat, committat och pushat
   - [x] migrations/047_pub_agreement_invalidation.sql — invalidated_at, invalidated_by, invalidated_by_email,
         invalidation_comment på pub_agreement_artifacts + index (applicerad)

@@ -234,6 +234,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Hämta valda taggar
             $selectedTags = $_POST['tags'] ?? [];
 
+            // Bildstilen styr hur AI-bilderna ser ut och ärvs av lektionsbilderna.
+            // Okända värden faller tillbaka på standardstilen i aiImageStyleKey().
+            require_once __DIR__ . '/../../include/ai_image_helper.php';
+            $imageStyleVal = aiImageStyleKey($_POST['image_style'] ?? '');
+
             if (isset($_GET['id'])) {
                 // Uppdatera befintlig kurs
                 execute("UPDATE " . DB_DATABASE . ".courses SET
@@ -253,10 +258,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         sequential_status = ?,
                         enrollment_type = ?,
                         image_url = ?,
+                        image_style = ?,
                         is_global = ?,
                         updated_at = NOW()
                         WHERE id = ?",
-                        [$title, $description, $completionContent, $status, $deadline, $startDate, $sequentialMode, $sequentialIntervalDays, $sequentialReminderDelayDays, $seqNewLessonSubject, $seqNewLessonBody, $seqReminderSubject, $seqReminderBody, $sequentialStatus, $enrollmentType, $imageUrl, $isGlobal, $_GET['id']]);
+                        [$title, $description, $completionContent, $status, $deadline, $startDate, $sequentialMode, $sequentialIntervalDays, $sequentialReminderDelayDays, $seqNewLessonSubject, $seqNewLessonBody, $seqReminderSubject, $seqReminderBody, $sequentialStatus, $enrollmentType, $imageUrl, $imageStyleVal, $isGlobal, $_GET['id']]);
 
                 // Diplom-kriterier + retry-flagga
                 execute("UPDATE " . DB_DATABASE . ".courses SET allow_quiz_retry = ? WHERE id = ?",
@@ -335,9 +341,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // original_organization_domain sätts permanent till skaparens org
                 // och får aldrig skrivas över senare.
                 execute("INSERT INTO " . DB_DATABASE . ".courses
-                        (title, description, completion_content, status, deadline, start_date, sequential_mode, sequential_interval_days, sequential_reminder_delay_days, seq_new_lesson_subject, seq_new_lesson_body, seq_reminder_subject, seq_reminder_body, sequential_status, enrollment_type, sort_order, image_url, is_global, author_id, organization_domain, original_organization_domain, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
-                        [$title, $description, $completionContent, $status, $deadline, $startDate, $sequentialMode, $sequentialIntervalDays, $sequentialReminderDelayDays, $seqNewLessonSubject, $seqNewLessonBody, $seqReminderSubject, $seqReminderBody, $sequentialStatus, $enrollmentType, $maxOrder + 1, $imageUrl, $isGlobal, $authorId, $organizationDomain, $organizationDomain]);
+                        (title, description, completion_content, status, deadline, start_date, sequential_mode, sequential_interval_days, sequential_reminder_delay_days, seq_new_lesson_subject, seq_new_lesson_body, seq_reminder_subject, seq_reminder_body, sequential_status, enrollment_type, sort_order, image_url, image_style, is_global, author_id, organization_domain, original_organization_domain, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                        [$title, $description, $completionContent, $status, $deadline, $startDate, $sequentialMode, $sequentialIntervalDays, $sequentialReminderDelayDays, $seqNewLessonSubject, $seqNewLessonBody, $seqReminderSubject, $seqReminderBody, $sequentialStatus, $enrollmentType, $maxOrder + 1, $imageUrl, $imageStyleVal, $isGlobal, $authorId, $organizationDomain, $organizationDomain]);
 
                 // Hämta det nya kurs-ID:t
                 $newCourseId = getDb()->lastInsertId();
@@ -686,9 +692,41 @@ require_once 'include/header.php';
                                     </button>
                                     <?php endif; ?>
                                 </div>
+                                <?php
+                                require_once __DIR__ . '/../../include/ai_image_helper.php';
+                                require_once __DIR__ . '/../../include/ai_quota.php';
+                                $bildStilar = aiImageStyles();
+                                $valdBildStil = aiImageStyleKey($course['image_style'] ?? '');
+                                $bildModell = getModelForFeature('image', 'gpt-image-1-mini');
+                                $bildKostnad = aiImageCostLabel(
+                                    aiImageEstimatedCostCents($bildModell, aiImageSizeFor('kurs'), aiImageQualityFor('kurs'))
+                                );
+                                ?>
+                                <div class="mt-2">
+                                    <label for="image_style" class="form-label small mb-1">Bildstil för AI-bilder</label>
+                                    <select class="form-select form-select-sm" id="image_style" name="image_style">
+                                        <?php foreach ($bildStilar as $nyckel => $stil): ?>
+                                        <option value="<?= htmlspecialchars($nyckel) ?>"<?= $nyckel === $valdBildStil ? ' selected' : '' ?>>
+                                            <?= htmlspecialchars($stil['namn']) ?> — <?= htmlspecialchars($stil['hjalp']) ?>
+                                        </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <div class="form-text small">
+                                        Stilen används för kursens omslag och för lektionsbilderna.
+                                        <?php if ($bildKostnad): ?>
+                                        En kursbild kostar ungefär <strong><?= htmlspecialchars($bildKostnad) ?></strong> och tar ungefär två minuter.
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                                <div class="mt-2">
+                                    <label for="image_wish" class="form-label small mb-1">Vad ska bilden visa? <span class="text-muted fw-normal">(valfritt)</span></label>
+                                    <input type="text" class="form-control form-control-sm" id="image_wish" maxlength="300"
+                                           placeholder="T.ex. en handläggare som möter en besökare i en receptionsdisk">
+                                    <div class="form-text small">Lämnar du fältet tomt utgår bilden från kursens titel och beskrivning. Texten sparas inte.</div>
+                                </div>
                                 <div id="ai-image-status" class="mt-1 small" style="display: none;">
                                     <span class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">…</span></span>
-                                    <span class="ms-1 text-muted">Genererar AI-bild (~60 s)...</span>
+                                    <span class="ms-1 text-muted">Genererar AI-bild (~2 min)...</span>
                                 </div>
                             </div>
 
@@ -1830,6 +1868,8 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('course_id', courseId);
             formData.append('course_title', courseTitle);
             formData.append('course_description', courseDescription);
+            formData.append('image_style', document.getElementById('image_style')?.value || 'illustration');
+            formData.append('image_wish', document.getElementById('image_wish')?.value.trim() || '');
             formData.append('csrf_token', csrfToken);
 
             fetch('ajax/generate_course_image.php', {
@@ -1862,7 +1902,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     imagePath.textContent = 'Sökväg: ' + data.image_url;
                     imageContainer.style.display = 'block';
 
-                    alert('Bild genererad!');
+                    alert('Bild genererad!' + (data.cost_text ? '\n\nKostnad: ' + data.cost_text : ''));
                 } else {
                     alert('Fel: ' + (data.message || 'Kunde inte generera bild.'));
                 }

@@ -740,15 +740,23 @@ Skriv ett komplett, informativt och engagerande lektionsinnehåll i HTML.";
         $targetAudience = $job['target_audience'] ?? '';
         $courseName = $job['course_name'];
 
+        require_once __DIR__ . '/../../include/ai_image_helper.php';
+
         // Generate course cover image
         updateJobStatus($jobId, 'processing', 82, 'Genererar kursbild...');
         // Kursens ton och färgtema är hintar om motivet; stilanvisningen läggs
         // sist så att den avgör bildspråket och inte konkurrerar med dem.
-        $courseImagePrompt = "Cover illustration for a course called '{$courseName}'. Subject mood: {$tone}. " .
-            "Let {$colorTheme} inform the accent colour. " .
-            (!empty($targetAudience) ? "Intended for: {$targetAudience}. " : "") .
-            aiImageStyleDirective();
-        $courseImage = generateAIImageWithPrompt($courseImagePrompt, '1792x1024', $jobContext);
+        // Prompten byggs av aiImageBuildPrompt() så att bakgrundsjobbet och
+        // knapparna i admin ger samma bildspråk. Ton, färgtema och målgrupp
+        // läggs till som sammanhang — de beskriver kursen, inte stilen.
+        $kursStilRad = queryOne("SELECT image_style FROM " . DB_DATABASE . ".courses WHERE id = ?", [$courseId]);
+        $kursStil = $kursStilRad['image_style'] ?? 'illustration';
+        $kursSammanhang = trim(($job['course_description'] ?? '')
+            . ($tone ? " Tone: {$tone}." : '')
+            . ($colorTheme ? " Accent colour: {$colorTheme}." : '')
+            . (!empty($targetAudience) ? " Intended for: {$targetAudience}." : ''));
+        $courseImagePrompt = aiImageBuildPrompt('kurs', $courseName, $kursSammanhang, $kursStil);
+        $courseImage = generateAIImageWithPrompt($courseImagePrompt, aiImageSizeFor('kurs'), $jobContext);
         if ($courseImage) {
             execute(
                 "UPDATE " . DB_DATABASE . ".courses SET image_url = ? WHERE id = ?",
@@ -769,10 +777,8 @@ Skriv ett komplett, informativt och engagerande lektionsinnehåll i HTML.";
             updateJobStatus($jobId, 'processing', round($progressPercent),
                 "Genererar bild för lektion " . ($lIndex + 1) . " av {$lessonTotal}...");
 
-            $lessonImagePrompt = "Illustration for a lesson called '{$lessonRow['title']}', part of a course about '{$courseName}'. " .
-                "Subject mood: {$tone}. Let {$colorTheme} inform the accent colour. " .
-                aiImageStyleDirective();
-            $lessonImage = generateAIImageWithPrompt($lessonImagePrompt, '1024x1024', $jobContext);
+            $lessonImagePrompt = aiImageBuildPrompt('lektion', $lessonRow['title'], $courseName, $kursStil);
+            $lessonImage = generateAIImageWithPrompt($lessonImagePrompt, aiImageSizeFor('lektion'), $jobContext);
             if ($lessonImage) {
                 execute(
                     "UPDATE " . DB_DATABASE . ".lessons SET image_url = ? WHERE id = ?",
@@ -1050,14 +1056,18 @@ function generateAIImageWithPrompt($prompt, $size = '1024x1024', array $context 
     $context['feature'] = $context['feature'] ?? 'image';
     $context['is_image'] = true;
 
-    // Validate size
-    $validSizes = ['1024x1024', '1792x1024', '1024x1792'];
-    if (!in_array($size, $validSizes)) {
-        $size = '1024x1024';
+    // Storlekarna kommer från aiImageSizeFor(). De gamla DALL-E-måtten
+    // (1792x1024) gäller inte gpt-image-modellerna, och en storlek som inte
+    // känns igen föll tidigare tyst tillbaka till kvadratiskt — vilket gjorde
+    // att kursomslaget från bakgrundsjobbet blev beskuret i bannern.
+    $validSizes = ['1024x1024', '1536x1024', '1024x1536', '1792x1024', '1024x1792'];
+    if (!in_array($size, $validSizes, true)) {
+        $size = '1536x1024';
     }
 
     $imageModel = getModelForFeature('image', 'gpt-image-1-mini');
-    $data = aiImageBuildPayload($imageModel, $prompt, $size);
+    $quality = $size === '1024x1024' ? 'medium' : 'high';
+    $data = aiImageBuildPayload($imageModel, $prompt, $size, $quality);
 
     echo "  - Generating image ({$imageModel}, {$size}): " . substr($prompt, 0, 80) . "...\n";
 
@@ -1069,7 +1079,7 @@ function generateAIImageWithPrompt($prompt, $size = '1024x1024', array $context 
         'Content-Type: application/json',
         'Authorization: Bearer ' . $apiKey
     ]);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 120);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 240);
 
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -1097,11 +1107,12 @@ function generateAIImageWithPrompt($prompt, $size = '1024x1024', array $context 
         if (!is_dir($uploadDir)) {
             mkdir($uploadDir, 0755, true);
         }
-        $fileName = 'ai_' . uniqid() . '.png';
+        $fileName = 'ai_' . uniqid() . '.' . aiImageFileExtension($imageModel);
         $filePath = $uploadDir . $fileName;
         if (file_put_contents($filePath, $imageContent)) {
             echo "  - Image saved: {$fileName}\n";
-            logAiUsage($context, [], $imageModel ?? 'gpt-image-1-mini', 'ok');
+            logAiUsage($context, aiImageUsageFromResponse(is_array($result) ? $result : []),
+                $imageModel ?? 'gpt-image-1-mini', 'ok');
             return $fileName;
         }
         echo "  - Failed to save image to: {$filePath}\n";

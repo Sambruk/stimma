@@ -405,8 +405,30 @@ $parentCandidates = query(
                         <input class="form-check-input" type="checkbox" name="generate_image" id="aiGenerateImage" value="1">
                         <label class="form-check-label" for="aiGenerateImage">
                             Generera även AI-bild till lektionen
-                            <span class="text-muted small">(kan ta extra ~30 s, drar mot AI-kvoten)</span>
+                            <?php
+                            require_once __DIR__ . '/../../include/ai_image_helper.php';
+                            require_once __DIR__ . '/../../include/ai_quota.php';
+                            $bildKostnadText = aiImageCostLabel(aiImageEstimatedCostCents(
+                                getModelForFeature('image', 'gpt-image-1-mini'),
+                                aiImageSizeFor('lektion'), aiImageQualityFor('lektion')
+                            ));
+                            ?>
+                            <span class="text-muted small">(tar ungefär en minut extra, kostar ca
+                                <?= htmlspecialchars($bildKostnadText ?: 'okänt belopp') ?> och drar mot AI-kvoten)</span>
                         </label>
+                        <?php
+                        $stilLista = aiImageStyles();
+                        $kursBildStil = $stilLista[aiImageStyleKey($course['image_style'] ?? '')]['namn'] ?? '';
+                        ?>
+                        <div class="mt-2" id="aiImageWishWrapper">
+                            <label for="aiImageWish" class="form-label small mb-1">Vad ska bilden visa? <span class="text-muted fw-normal">(valfritt)</span></label>
+                            <input type="text" class="form-control form-control-sm" id="aiImageWish" name="image_wish" maxlength="300"
+                                   placeholder="T.ex. en lärare som hjälper en elev vid en dator">
+                            <div class="form-text small">
+                                Tomt fält betyder att bilden utgår från lektionens titel.
+                                <?php if ($kursBildStil): ?>Bilden skapas i kursens stil: <strong><?= htmlspecialchars($kursBildStil) ?></strong>.<?php endif; ?>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="form-check mt-2">

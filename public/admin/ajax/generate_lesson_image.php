@@ -46,6 +46,9 @@ if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
 $lessonId = (int)($_POST['lesson_id'] ?? 0);
 $lessonTitle = trim($_POST['lesson_title'] ?? '');
 $courseName = trim($_POST['course_name'] ?? '');
+// Valfri beskrivning av vad bilden ska visa. Lagras inte — den används bara
+// vid den här genereringen.
+$imageWish = trim($_POST['image_wish'] ?? '');
 
 if ($lessonId <= 0) {
     echo json_encode(['success' => false, 'message' => 'Ogiltigt lektions-ID.']);
@@ -78,7 +81,7 @@ $lessonCourseId = $lessonRow ? (int)$lessonRow['course_id'] : null;
 
 // Generera AI-bild via centraliserad helper (kvotkontroll + loggning ingår)
 require_once '../../include/ai_lesson_helper.php';
-$result = aiGenerateLessonImage($lessonTitle, $courseName, $lessonCourseId);
+$result = aiGenerateLessonImage($lessonTitle, $courseName, $lessonCourseId, null, $imageWish);
 
 if ($result['success']) {
     // Uppdatera lektionen med bilden
@@ -90,7 +93,9 @@ if ($result['success']) {
     echo json_encode([
         'success' => true,
         'message' => 'Bild genererad!',
-        'image_url' => $result['image_url']
+        'image_url' => $result['image_url'],
+        'cost_cents' => $result['cost_cents'] ?? null,
+        'cost_text' => $result['cost_text'] ?? ''
     ]);
 } else {
     echo json_encode(['success' => false, 'message' => $result['error']]);
