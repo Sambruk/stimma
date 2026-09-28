@@ -177,10 +177,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $video_url = null;
     $video_type = null;
 
-    if ($video_type_input === 'local' && !empty($video_filename)) {
+    // Vilken video som sparas avgörs av vad som är ifyllt, inte av vilken flik
+    // som råkar vara vald. video_type sätts bara när man klickar på en flik, och
+    // YouTube-fliken är förvald utan att sätta den: en inklistrad länk sparades
+    // inte, och ett klick på fel flik kastade den andra videon (en uppladdad fil
+    // raderades från disken). Fliken avgör bara när både länk och fil finns.
+    // Att ta bort görs uttryckligen: "Ta bort video" tömmer filnamnet, och en
+    // YouTube-länk tas bort genom att tömma fältet.
+    $video_url_input = trim($video_url_input);
+    $hasLocal = $video_filename !== '';
+    $hasYoutube = $video_url_input !== '';
+
+    if ($hasLocal && ($video_type_input === 'local' || !$hasYoutube)) {
         $video_url = basename($video_filename); // Prevent path traversal
         $video_type = 'local';
-    } elseif ($video_type_input === 'youtube' && !empty($video_url_input)) {
+    } elseif ($hasYoutube) {
         $video_url = $video_url_input;
         $video_type = 'youtube';
     }

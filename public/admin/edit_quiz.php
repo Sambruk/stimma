@@ -116,15 +116,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
  */
 function buildQuizDataFromPost($type, $post) {
     switch ($type) {
-        case 'single_choice': {
-            $answers = array_values(array_filter(array_map('trim', $post['answers'] ?? []), fn($v) => $v !== ''));
-            $correct = max(0, min(count($answers) - 1, (int)($post['correct'] ?? 0)));
-            return ['answers' => $answers, 'correct' => $correct];
-        }
+        case 'single_choice':
         case 'multiple_choice': {
-            $answers = array_values(array_filter(array_map('trim', $post['answers'] ?? []), fn($v) => $v !== ''));
-            $correct = array_values(array_unique(array_map('intval', $post['correct_multi'] ?? [])));
-            sort($correct);
+            // Tomma alternativ tas bort. Rätt svar anges som radindex, så
+            // indexen måste följa med när raderna flyttar upp — annars pekar
+            // "rätt" på fel alternativ efter en tom rad.
+            $answers = [];
+            $newIndex = [];
+            foreach (array_values($post['answers'] ?? []) as $i => $a) {
+                $a = trim($a);
+                if ($a === '') continue;
+                $newIndex[$i] = count($answers);
+                $answers[] = $a;
+            }
+            if ($type === 'single_choice') {
+                $correct = $newIndex[(int)($post['correct'] ?? 0)] ?? 0;
+            } else {
+                $correct = [];
+                foreach ((array)($post['correct_multi'] ?? []) as $c) {
+                    if (isset($newIndex[(int)$c])) $correct[] = $newIndex[(int)$c];
+                }
+                $correct = array_values(array_unique($correct));
+                sort($correct);
+            }
             return ['answers' => $answers, 'correct' => $correct];
         }
         case 'true_false':
@@ -389,6 +403,14 @@ require_once 'include/header.php';
             var quizForm = typeSel.closest('form');
             if (quizForm) quizForm.addEventListener('submit', function() {
                 var current = typeSel.value;
+                // Rätt svar skickas som radindex. Efter borttagna rader stämmer
+                // de ursprungliga värdena inte längre — sätt dem efter ordningen.
+                document.querySelectorAll('.choice-rows').forEach(function(list) {
+                    list.querySelectorAll('.choice-row').forEach(function(row, i) {
+                        var ctrl = row.querySelector('input[type="radio"], input[type="checkbox"]');
+                        if (ctrl) ctrl.value = i;
+                    });
+                });
                 document.querySelectorAll('.type-specific').forEach(function(el) {
                     if (el.dataset.type !== current) {
                         el.querySelectorAll('input, select, textarea').forEach(function(f) { f.disabled = true; });
@@ -678,7 +700,7 @@ function renderChoiceFields($data, $multiple) {
     ob_start();
     ?>
     <label class="form-label">Svarsalternativ</label>
-    <div id="choice-rows">
+    <div class="choice-rows">
         <?php foreach ($answers as $i => $a): ?>
         <div class="input-group mb-2 choice-row">
             <?php if ($multiple): ?>
@@ -698,7 +720,8 @@ function renderChoiceFields($data, $multiple) {
         btn.dataset.bound = '1';
         btn.addEventListener('click', function() {
             var multi = btn.dataset.multi === '1';
-            var container = document.getElementById('choice-rows');
+            // Enkelval och flerval ritas båda på sidan; ta listan i knappens egen sektion
+            var container = btn.closest('.type-specific').querySelector('.choice-rows');
             var n = container.querySelectorAll('.choice-row').length;
             var div = document.createElement('div');
             div.className = 'input-group mb-2 choice-row';

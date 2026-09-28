@@ -1,6 +1,22 @@
 # Stimma - Utvecklingsuppgifter
 
 ## Pågående
+- [x] Buggar i lektionsredigeraren (2026-09-28, rapporterat av Patrik Hellstrand, IT-strateg) — rättat, verifierat, pushat
+  - [x] YouTube-länken sparas inte om man inte klickat igenom flikarna före Spara
+        Orsak: video_type sätts bara vid klick på en flik; YouTube-fliken är förvald utan att sätta den.
+        Omvänt fall värre: klick på fel flik + Spara kastade den andra videon — en UPPLADDAD fil raderades.
+        Fix (edit_lesson.php): servern avgör på vad som är ifyllt; fliken avgör bara när både länk och fil finns
+  - [x] "Lägg till svarsalternativ" på Flerval lägger alternativen under Enkelval
+        Orsak: renderChoiceFields() ritas för båda typerna → två id="choice-rows"; getElementById tog enkelvals.
+        Fix: klass + knappens egen sektion. Följdbugg rättad samtidigt: rätt-svar är radindex och räknades
+        inte om efter borttagen rad eller tomt alternativ → fel alternativ kunde markeras rätt. Nu numreras
+        raderna om vid sparande och servern flyttar indexen med när tomma alternativ tas bort
+  - [x] Verifierat i webbläsare mot inaktiv testkurs 150 / lektion 1465: länk utan flikklick sparas; klick på
+        uppladdningsfliken behåller länken; lokal video + klick på YouTube behåller video OCH fil; tömt länkfält
+        tar bort; flerval 4 klick → 5 rader i flerval, 1 i enkelval; flerval A,B,C,D,tom med B+D rätt och A
+        borttagen → [B,C,D] rätt [0,2]; enkelval X,tom,Z rätt → [X,Z] rätt 1. Inga JS-fel.
+        Testdata borttagen (explicita id:n + testvideofilen)
+  - [x] Committat och pushat 2026-09-28. courses.php och .gitignore lämnades utanför
 - [x] Logga per domän (2026-09-28, beställt av Thomas) — byggt, verifierat, committat och pushat
   - [x] migrations/049: domain_settings.logo_url + logo_alt
   - [x] functions.php: resolveDomainLogo() (domän → överordnad domän → organisation) + storeLogoUpload()
