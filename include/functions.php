@@ -300,8 +300,9 @@ function setCourseSharedDomains($courseId, array $domains) {
  * Hämta organisationsikonen som ska visas i top-nav för en användare.
  *
  * Regler:
- * - Vanlig användare (access_mode='domain'): ikonen för organisationen som
- *   användarens e-postdomän tillhör.
+ * - Vanlig användare (access_mode='domain'): domänens egen logga om en sådan
+ *   finns, annars ikonen för organisationen som e-postdomänen tillhör
+ *   (se resolveDomainLogo()).
  * - Publik deltagare (access_mode='public_only'): ikonen för den
  *   organisation som publicerat den (första) kurs hen är registrerad på.
  * - Ingen match: null.
@@ -316,8 +317,6 @@ function getHeaderOrganizationIcon($userId) {
         [(int)$userId]
     );
     if (!$user) return null;
-
-    $org = null;
 
     if (($user['access_mode'] ?? 'domain') === 'public_only') {
         // Slå upp första publika kurs hen har access till → organization_id
@@ -335,15 +334,116 @@ function getHeaderOrganizationIcon($userId) {
         return null;
     }
 
-    // Domain-användare: hitta via organization_domains
+    // Domain-användare: domänens egen logga går före organisationens
     $domain = getUserDomain($user['email']);
-    if ($domain !== '') {
-        $org = getOrganizationByDomain($domain);
+    if ($domain === '') return null;
+    $logo = resolveDomainLogo($domain);
+    return $logo ? ['url' => $logo['url'], 'name' => $logo['name']] : null;
+}
+
+/**
+ * Bestäm vilken logga som gäller för en domän.
+ *
+ * Uppslagsordning:
+ *   1. domänens egen logga (domain_settings.logo_url)
+ *   2. närmaste överordnade domäns logga — utb.vimmerby.se ärver vimmerby.se
+ *   3. logga för organisationen som domänen är grupperad i
+ *
+ * @param string $domain
+ * @return array{url:string,name:string,source:string,from:string}|null
+ *   source är 'domain', 'parent' eller 'organization'; from är domänen eller
+ *   organisationsnamnet som loggan kommer från.
+ */
+function resolveDomainLogo($domain) {
+    $domain = strtolower(trim($domain));
+    if ($domain === '') return null;
+
+    // Kandidater: domänen själv och dess överordnade domäner med minst två led
+    $candidates = [$domain];
+    $labels = explode('.', $domain);
+    while (count($labels) > 2) {
+        array_shift($labels);
+        $candidates[] = implode('.', $labels);
     }
+
+    $placeholders = implode(',', array_fill(0, count($candidates), '?'));
+    $rows = query(
+        "SELECT domain, logo_url, logo_alt FROM " . DB_DATABASE . ".domain_settings
+         WHERE domain IN ($placeholders) AND logo_url IS NOT NULL AND logo_url <> ''",
+        $candidates
+    ) ?: [];
+    $byDomain = [];
+    foreach ($rows as $row) {
+        $byDomain[$row['domain']] = $row;
+    }
+    foreach ($candidates as $candidate) {
+        if (isset($byDomain[$candidate])) {
+            $row = $byDomain[$candidate];
+            return [
+                'url' => $row['logo_url'],
+                'name' => $row['logo_alt'] !== null && $row['logo_alt'] !== '' ? $row['logo_alt'] : $candidate,
+                'source' => $candidate === $domain ? 'domain' : 'parent',
+                'from' => $candidate,
+            ];
+        }
+    }
+
+    $org = getOrganizationByDomain($domain);
     if ($org && !empty($org['icon_url'])) {
-        return ['url' => $org['icon_url'], 'name' => $org['name'] ?? ''];
+        return [
+            'url' => $org['icon_url'],
+            'name' => $org['name'] ?? '',
+            'source' => 'organization',
+            'from' => $org['name'] ?? '',
+        ];
     }
     return null;
+}
+
+/**
+ * Validera och spara en uppladdad logga i upload/org_icons/.
+ *
+ * Samma format och gräns som organisationsikonen: PNG, JPG, SVG, WebP, max 2 MB.
+ * SVG avvisas om den kan köra skript. Filen serveras från samma origin som
+ * Stimma, så ett skript i en SVG som öppnas direkt körs med användarens session.
+ *
+ * @param array $file Ett element ur $_FILES
+ * @return array{filename:?string,error:?string}
+ */
+function storeLogoUpload(array $file) {
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        return ['filename' => null, 'error' => 'Ingen fil vald eller uppladdningsfel.'];
+    }
+    $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if (!in_array($extension, ['png', 'jpg', 'jpeg', 'svg', 'webp'], true)) {
+        return ['filename' => null, 'error' => 'Ogiltigt format. Tillåtna: PNG, JPG, SVG, WebP.'];
+    }
+    if ($file['size'] > 2 * 1024 * 1024) {
+        return ['filename' => null, 'error' => 'Filen är för stor. Max 2 MB.'];
+    }
+
+    $mimeType = (new finfo(FILEINFO_MIME_TYPE))->file($file['tmp_name']);
+    $allowedMime = $extension === 'svg'
+        ? ['image/svg+xml', 'text/plain', 'text/xml', 'application/xml']
+        : ['image/png', 'image/jpeg', 'image/webp'];
+    if (!in_array($mimeType, $allowedMime, true)) {
+        return ['filename' => null, 'error' => 'Filens innehåll stämmer inte med formatet (' . $mimeType . ').'];
+    }
+
+    if ($extension === 'svg') {
+        $svg = file_get_contents($file['tmp_name']);
+        if (preg_match('/<script|<foreignObject|javascript:|\son[a-z]+\s*=|<!ENTITY/i', $svg)) {
+            return ['filename' => null, 'error' => 'SVG-filen innehåller skript eller händelseattribut och kan inte användas.'];
+        }
+    }
+
+    $filename = bin2hex(random_bytes(16)) . '.' . ($extension === 'jpeg' ? 'jpg' : $extension);
+    $targetPath = __DIR__ . '/../public/upload/org_icons/' . $filename;
+    if (!move_uploaded_file($file['tmp_name'], $targetPath)) {
+        return ['filename' => null, 'error' => 'Kunde inte spara filen.'];
+    }
+    chmod($targetPath, 0644);
+    return ['filename' => $filename, 'error' => null];
 }
 
 /**

@@ -1,6 +1,19 @@
 # Stimma - Utvecklingsuppgifter
 
 ## Pågående
+- [x] Logga per domän (2026-09-28, beställt av Thomas) — byggt, verifierat, committat och pushat
+  - [x] migrations/049: domain_settings.logo_url + logo_alt
+  - [x] functions.php: resolveDomainLogo() (domän → överordnad domän → organisation) + storeLogoUpload()
+  - [x] getHeaderOrganizationIcon() använder domänloggan först för domänanvändare
+  - [x] domains.php: kolumn "Logga" + gemensam modal (ladda upp, alt-text, ta bort) — bara superadmin
+  - [x] Verifiera: uppladdning, arv till underdomän, fallback till org, borttagning, visuellt
+        Testat mot logotest.example + utb.logotest.example (tillfälligt i allowed_domains.txt, återställd och
+        cmp-verifierad): skadlig SVG (onerror) avvisas, okänd domän avvisas, fel CSRF avvisas, uppladdning sparar
+        fil + namn, namnbyte utan fil behåller filen, filbyte raderar gamla filen, borttagning raderar filen.
+        Underdomänen ärver, vimmerby.se/edu.sater.se/gmail.com faller tillbaka till org som förut.
+        Skärmbilder: kolumnen (egen logga full, ärvd blekt + "ärvd"), modalen i båda lägena, inga JS-fel.
+        Testdata borttagen (bara logotest-raderna och deras fil). Ingen riktig domän har fått logga
+  - [x] Committa och pusha 2026-09-28 (PAT:en fungerar igen — 200, push-behörighet). courses.php och .gitignore lämnades utanför
 - [x] Bättre AI-bilder (2026-09-17, beställt av Thomas) — byggt, testat skarpt, committat och pushat
   - [x] Diagnos: prompten bad inte om något konkret motiv, stilanvisningen förbjöd ansiktsdrag
         ("no detailed facial features" → kusliga ansiktslösa personer), allt genererades kvadratiskt

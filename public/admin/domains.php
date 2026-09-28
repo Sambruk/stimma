@@ -105,6 +105,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['message_type'] = 'danger';
             }
         }
+    } elseif ($action === 'save_logo' || $action === 'remove_logo') {
+        // Logga per domän — går före organisationens logga (se resolveDomainLogo())
+        $logoDomain = strtolower(trim($_POST['domain'] ?? ''));
+        $existing = $logoDomain !== '' ? queryOne(
+            "SELECT id, logo_url, logo_alt FROM " . DB_DATABASE . ".domain_settings WHERE domain = ?",
+            [$logoDomain]
+        ) : null;
+        $oldFile = $existing['logo_url'] ?? null;
+
+        if (!in_array($logoDomain, getDomainsList($domainsFile), true)) {
+            $_SESSION['message'] = 'Domänen finns inte i listan.';
+            $_SESSION['message_type'] = 'danger';
+        } elseif ($action === 'remove_logo') {
+            if ($oldFile) {
+                execute(
+                    "UPDATE " . DB_DATABASE . ".domain_settings SET logo_url = NULL, logo_alt = NULL WHERE domain = ?",
+                    [$logoDomain]
+                );
+                $oldPath = __DIR__ . '/../upload/org_icons/' . basename($oldFile);
+                if (is_file($oldPath)) @unlink($oldPath);
+                logActivity($_SESSION['user_email'], "Tog bort logga för domän: {$logoDomain}", [
+                    'action' => 'domain_logo_remove',
+                    'domain' => $logoDomain
+                ]);
+            }
+            $_SESSION['message'] = "Loggan för {$logoDomain} är borttagen. Domänen visar nu organisationens logga, om den har en.";
+            $_SESSION['message_type'] = 'success';
+        } else {
+            $logoAlt = trim($_POST['logo_alt'] ?? '');
+            $hasFile = isset($_FILES['logo']) && ($_FILES['logo']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+
+            if (mb_strlen($logoAlt) > 255) {
+                $_SESSION['message'] = 'Loggans namn är för långt (max 255 tecken).';
+                $_SESSION['message_type'] = 'danger';
+            } elseif (!$hasFile && !$oldFile) {
+                $_SESSION['message'] = 'Välj en bildfil att ladda upp.';
+                $_SESSION['message_type'] = 'danger';
+            } else {
+                $newFile = $oldFile;
+                $error = null;
+                if ($hasFile) {
+                    $result = storeLogoUpload($_FILES['logo']);
+                    $error = $result['error'];
+                    $newFile = $result['filename'];
+                }
+
+                if ($error) {
+                    $_SESSION['message'] = $error;
+                    $_SESSION['message_type'] = 'danger';
+                } else {
+                    $altValue = $logoAlt !== '' ? $logoAlt : null;
+                    if ($existing) {
+                        execute(
+                            "UPDATE " . DB_DATABASE . ".domain_settings SET logo_url = ?, logo_alt = ? WHERE domain = ?",
+                            [$newFile, $altValue, $logoDomain]
+                        );
+                    } else {
+                        execute(
+                            "INSERT INTO " . DB_DATABASE . ".domain_settings (domain, logo_url, logo_alt) VALUES (?, ?, ?)",
+                            [$logoDomain, $newFile, $altValue]
+                        );
+                    }
+                    if ($hasFile && $oldFile && $oldFile !== $newFile) {
+                        $oldPath = __DIR__ . '/../upload/org_icons/' . basename($oldFile);
+                        if (is_file($oldPath)) @unlink($oldPath);
+                    }
+                    logActivity($_SESSION['user_email'], "Uppdaterade logga för domän: {$logoDomain}", [
+                        'action' => 'domain_logo_update',
+                        'domain' => $logoDomain,
+                        'filename' => $newFile
+                    ]);
+                    $_SESSION['message'] = "Loggan för {$logoDomain} är sparad.";
+                    $_SESSION['message_type'] = 'success';
+                }
+            }
+        }
     } elseif ($action === 'delete') {
         // Ta bort domän
         $domainToDelete = trim($_POST['domain'] ?? '');
@@ -355,6 +431,7 @@ require_once 'include/header.php';
                                         <tr>
                                             <th>Domän</th>
                                             <th style="width: 200px;">Organisation</th>
+                                            <th class="text-center" style="width: 130px;">Logga</th>
                                             <th class="text-center" style="width: 100px;" title="PUB-avtal tecknat">
                                                 <i class="bi bi-file-earmark-check text-success"></i> PUB
                                             </th>
@@ -393,6 +470,38 @@ require_once 'include/header.php';
                                                     <?php else: ?>
                                                         <span class="text-muted">—</span>
                                                     <?php endif; ?>
+                                                </td>
+                                                <td class="text-center">
+                                                    <?php
+                                                    $effectiveLogo = resolveDomainLogo($domain);
+                                                    $ownLogo = $pubSettings[$domain]['logo_url'] ?? null;
+                                                    if (!$effectiveLogo) {
+                                                        $logoSourceText = 'Ingen logga. Stimmas logga visas.';
+                                                    } elseif ($effectiveLogo['source'] === 'domain') {
+                                                        $logoSourceText = 'Domänens egen logga.';
+                                                    } elseif ($effectiveLogo['source'] === 'parent') {
+                                                        $logoSourceText = 'Ärvs från ' . $effectiveLogo['from'] . '.';
+                                                    } else {
+                                                        $logoSourceText = 'Ärvs från organisationen ' . $effectiveLogo['from'] . '.';
+                                                    }
+                                                    ?>
+                                                    <button type="button" class="btn btn-link p-0 domain-logo-btn text-decoration-none"
+                                                            data-bs-toggle="modal" data-bs-target="#domainLogoModal"
+                                                            data-domain="<?= htmlspecialchars($domain) ?>"
+                                                            data-own="<?= $ownLogo ? '1' : '0' ?>"
+                                                            data-alt="<?= htmlspecialchars($pubSettings[$domain]['logo_alt'] ?? '') ?>"
+                                                            data-url="<?= $effectiveLogo ? '../upload/org_icons/' . htmlspecialchars($effectiveLogo['url']) : '' ?>"
+                                                            data-source="<?= htmlspecialchars($logoSourceText) ?>"
+                                                            title="<?= htmlspecialchars($logoSourceText) ?> Klicka för att ändra."
+                                                            aria-label="Logga för <?= htmlspecialchars($domain) ?>: <?= htmlspecialchars($logoSourceText) ?> Ändra">
+                                                        <?php if ($effectiveLogo): ?>
+                                                            <img src="../upload/org_icons/<?= htmlspecialchars($effectiveLogo['url']) ?>" alt=""
+                                                                 style="max-height: 28px; max-width: 90px; object-fit: contain;<?= $ownLogo ? '' : ' opacity: .45;' ?>">
+                                                            <?php if (!$ownLogo): ?><small class="d-block text-muted">ärvd</small><?php endif; ?>
+                                                        <?php else: ?>
+                                                            <span class="btn btn-outline-secondary btn-sm"><i class="bi bi-image"></i> Lägg till</span>
+                                                        <?php endif; ?>
+                                                    </button>
                                                 </td>
                                                 <td class="text-center">
                                                     <?php
@@ -504,6 +613,7 @@ require_once 'include/header.php';
                                         <tr class="fw-bold">
                                             <td>Summa (<?= count($filteredDomains) ?> domäner)</td>
                                             <td></td>
+                                            <td></td>
                                             <td class="text-center"><?= $totalPub ?></td>
                                             <td class="text-center"><?= $totalAdmins ?></td>
                                             <td class="text-center"><?= $totalEditors ?></td>
@@ -549,6 +659,96 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             info.classList.add('d-none');
         }
+    });
+});
+</script>
+
+<!-- Gemensam modal för domänens logga. Fylls från knappens data-attribut. -->
+<div class="modal fade" id="domainLogoModal" tabindex="-1" aria-labelledby="domainLogoModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="domainLogoModalLabel">
+                    <i class="bi bi-image me-2"></i>Logga för <span data-logo-field="domain"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Stäng"></button>
+            </div>
+            <form method="POST" action="domains.php<?= $showOnlyWithUsers ? '?filter=with_users' : '' ?>" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                    <input type="hidden" name="action" value="save_logo">
+                    <input type="hidden" name="domain" value="">
+
+                    <p class="mb-1"><strong>Visas idag:</strong></p>
+                    <div class="border rounded p-3 mb-2 text-center bg-light" data-logo-field="preview-wrap">
+                        <img src="" alt="" data-logo-field="preview" style="max-height: 80px; max-width: 100%; object-fit: contain;">
+                    </div>
+                    <p class="small text-muted mb-3" data-logo-field="source"></p>
+
+                    <div class="mb-3">
+                        <label for="domainLogoFile" class="form-label" data-logo-field="file-label">Ladda upp egen logga</label>
+                        <input type="file" class="form-control" id="domainLogoFile" name="logo"
+                               accept=".png,.jpg,.jpeg,.svg,.webp,image/png,image/jpeg,image/svg+xml,image/webp"
+                               aria-describedby="domainLogoFileHelp">
+                        <div id="domainLogoFileHelp" class="form-text">
+                            PNG, JPG, SVG eller WebP, max 2 MB. Visas som högst 48 px hög i sidhuvudet
+                            och på utbildningsbevisen. Liggande format med genomskinlig bakgrund blir bäst.
+                        </div>
+                    </div>
+                    <div class="mb-1">
+                        <label for="domainLogoAlt" class="form-label">Loggans namn</label>
+                        <input type="text" class="form-control" id="domainLogoAlt" name="logo_alt" maxlength="255"
+                               placeholder="t.ex. Vimmerby kommun" aria-describedby="domainLogoAltHelp">
+                        <div id="domainLogoAltHelp" class="form-text">
+                            Läses upp av skärmläsare. Lämnas det tomt används domännamnet.
+                        </div>
+                    </div>
+                    <p class="small text-muted mt-3 mb-0">
+                        Domänens logga går före organisationens. Underdomäner utan egen logga ärver den
+                        (utb.vimmerby.se får vimmerby.se:s logga).
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" form="domainLogoRemoveForm" class="btn btn-outline-danger btn-sm me-auto" data-logo-field="remove">
+                        <i class="bi bi-trash me-1"></i>Ta bort domänens logga
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Spara</button>
+                </div>
+            </form>
+            <form method="POST" action="domains.php<?= $showOnlyWithUsers ? '?filter=with_users' : '' ?>" id="domainLogoRemoveForm"
+                  onsubmit="return confirm('Ta bort domänens egen logga? Domänen visar då organisationens logga, om den har en.');">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                <input type="hidden" name="action" value="remove_logo">
+                <input type="hidden" name="domain" value="">
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var modal = document.getElementById('domainLogoModal');
+    if (!modal) return;
+    var field = function(name) { return modal.querySelector('[data-logo-field="' + name + '"]'); };
+
+    modal.addEventListener('show.bs.modal', function(event) {
+        var btn = event.relatedTarget;
+        if (!btn) return;
+        var domain = btn.dataset.domain;
+        var hasOwn = btn.dataset.own === '1';
+
+        modal.querySelectorAll('input[name="domain"]').forEach(function(input) { input.value = domain; });
+        field('domain').textContent = domain;
+        field('source').textContent = btn.dataset.source;
+        field('preview-wrap').hidden = !btn.dataset.url;
+        field('preview').src = btn.dataset.url || '';
+        field('preview').alt = btn.dataset.url ? 'Nuvarande logga för ' + domain : '';
+        field('remove').hidden = !hasOwn;
+        field('file-label').textContent = hasOwn ? 'Byt logga (lämna tomt för att bara ändra namnet)' : 'Ladda upp egen logga';
+        document.getElementById('domainLogoFile').value = '';
+        document.getElementById('domainLogoFile').required = !hasOwn;
+        document.getElementById('domainLogoAlt').value = btn.dataset.alt || '';
     });
 });
 </script>
