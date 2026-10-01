@@ -105,16 +105,18 @@
       });
       it.addEventListener('dragend', function() { it.style.opacity = ''; dragEl = null; updateCatValue(container); });
     });
-    var pool = container.querySelector('.categorize-pool');
-    var zones = container.querySelectorAll('.cat-bucket-items, .categorize-pool');
+    // Hela kategorirutan är släppzon. Tidigare var det bara det inre
+    // .cat-bucket-items, som är 0 px högt när det är tomt — ett släpp mitt på
+    // den synliga rutan registrerades aldrig.
+    var zones = container.querySelectorAll('.cat-bucket, .categorize-pool');
     zones.forEach(function(zone) {
       zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('bg-warning-subtle'); });
-      zone.addEventListener('dragleave', function() { zone.classList.remove('bg-warning-subtle'); });
+      zone.addEventListener('dragleave', function(e) { if (!zone.contains(e.relatedTarget)) zone.classList.remove('bg-warning-subtle'); });
       zone.addEventListener('drop', function(e) {
         e.preventDefault();
         zone.classList.remove('bg-warning-subtle');
         if (!dragEl) return;
-        zone.appendChild(dragEl);
+        (zone.querySelector('.cat-bucket-items') || zone).appendChild(dragEl);
         updateCatValue(container);
       });
     });
@@ -136,6 +138,155 @@
     });
     input.value = JSON.stringify(mapping);
   }
+
+  // ============ KLICKA FÖR ATT PLACERA (alternativ till att dra) ============
+  // HTML5-dra-och-släpp fungerar inte på pekskärm och inte med tangentbord.
+  // Därför kan man också klicka (eller trycka Enter/mellanslag) på ett objekt
+  // och sedan på platsen det ska till. Samma dolda fält uppdateras som vid drag.
+  (function injectStyle() {
+    if (document.getElementById('quizPickStyle')) return;
+    var st = document.createElement('style');
+    st.id = 'quizPickStyle';
+    st.textContent =
+      '.quiz-pickable{cursor:pointer}' +
+      '.quiz-picked{outline:3px solid #0F3B5F;outline-offset:2px;box-shadow:0 0 0 6px rgba(15,59,95,.12)}' +
+      '.quiz-pick-active .quiz-target{outline:2px dashed #0F3B5F;outline-offset:2px;cursor:pointer}' +
+      '.order-move{min-width:44px;min-height:44px;border:1px solid #c9c6bd;border-radius:10px;background:#fff;color:#1a1a19;' +
+      'display:inline-flex;align-items:center;justify-content:center;font-size:18px;line-height:1;margin-left:4px;cursor:pointer}' +
+      '.order-move:disabled{opacity:.35;cursor:default}' +
+      '.order-list li{gap:4px}.order-list li>span{flex:1 1 auto}';
+    document.head.appendChild(st);
+  })();
+
+  function isLocked(widget) {
+    var q = widget.closest('.quiz-question') || widget.parentNode;
+    var hidden = q && q.querySelector('input[type="hidden"][name]');
+    return !!(hidden && hidden.disabled);
+  }
+
+  function makeButtonLike(el, label) {
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('role', 'button');
+    if (label) el.setAttribute('aria-label', label);
+    el.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }
+    });
+  }
+
+  function setupPickAndPlace(widget, itemSel, targetSel, place, update) {
+    var picked = null;
+    function clear() {
+      if (picked) { picked.classList.remove('quiz-picked'); picked.setAttribute('aria-pressed', 'false'); }
+      picked = null;
+      widget.classList.remove('quiz-pick-active');
+    }
+    widget.querySelectorAll(itemSel).forEach(function(it) {
+      it.classList.add('quiz-pickable');
+      makeButtonLike(it);
+      it.setAttribute('aria-pressed', 'false');
+      it.addEventListener('click', function(e) {
+        if (isLocked(widget)) return;
+        e.stopPropagation();
+        if (picked === it) { clear(); return; }
+        // Ett annat objekt är valt och man klickar på ett objekt som redan ligger
+        // i en kategori/ett par: menat är "lägg det valda här", inte "byt val".
+        var hem = it.closest(targetSel);
+        if (picked && hem && !hem.classList.contains('categorize-pool') && !hem.classList.contains('match-pool')) {
+          var valt = picked;
+          clear();
+          place(hem, valt);
+          update(widget);
+          valt.focus();
+          return;
+        }
+        clear();
+        picked = it;
+        it.classList.add('quiz-picked');
+        it.setAttribute('aria-pressed', 'true');
+        widget.classList.add('quiz-pick-active');
+      });
+    });
+    widget.querySelectorAll(targetSel).forEach(function(t) {
+      t.classList.add('quiz-target');
+      t.addEventListener('click', function(e) {
+        if (!picked || isLocked(widget)) return;
+        if (e.target.closest(itemSel) && e.target.closest(itemSel) !== picked) return;
+        var it = picked;
+        clear();
+        place(t, it);
+        update(widget);
+        it.focus();
+      });
+      t.addEventListener('keydown', function(e) {
+        if ((e.key === 'Enter' || e.key === ' ') && picked && e.target === t) { e.preventDefault(); t.click(); }
+      });
+    });
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') clear(); });
+  }
+
+  document.querySelectorAll('.categorize-widget').forEach(function(widget) {
+    widget.querySelectorAll('.cat-bucket').forEach(function(b) {
+      var namn = (b.querySelector('.fw-semibold') || b).textContent.trim();
+      makeButtonLike(b, 'Lägg det valda objektet i kategorin ' + namn);
+    });
+    var pool = widget.querySelector('.categorize-pool');
+    if (pool) makeButtonLike(pool, 'Lägg tillbaka det valda objektet bland de osorterade');
+    setupPickAndPlace(widget, '.cat-item', '.cat-bucket, .categorize-pool', function(target, it) {
+      (target.querySelector('.cat-bucket-items') || target).appendChild(it);
+    }, updateCatValue);
+  });
+
+  document.querySelectorAll('.match-pairs').forEach(function(widget) {
+    widget.querySelectorAll('.match-row').forEach(function(row) {
+      var dz = row.querySelector('.match-dropzone');
+      var left = row.querySelector('.bg-light');
+      if (dz) makeButtonLike(dz, 'Para ihop det valda med ' + (left ? left.textContent.trim() : 'raden'));
+    });
+    var pool = widget.querySelector('.match-pool');
+    if (pool) makeButtonLike(pool, 'Lägg tillbaka det valda bland alternativen');
+    setupPickAndPlace(widget, '.match-draggable', '.match-dropzone, .match-pool', function(target, it) {
+      if (target.classList.contains('match-dropzone')) {
+        var existing = target.querySelector('.match-draggable');
+        var pool = widget.querySelector('.match-pool');
+        if (existing && existing !== it && pool) pool.appendChild(existing);
+      }
+      target.appendChild(it);
+    }, updateMatchValue);
+  });
+
+  // Ordna: knappar för att flytta upp/ner på varje rad
+  document.querySelectorAll('.order-list').forEach(function(list) {
+    function refresh() {
+      var items = list.querySelectorAll('li');
+      items.forEach(function(li, i) {
+        var up = li.querySelector('.order-move-up'), down = li.querySelector('.order-move-down');
+        var locked = isLocked(list);
+        if (up) up.disabled = locked || i === 0;
+        if (down) down.disabled = locked || i === items.length - 1;
+      });
+    }
+    list.querySelectorAll('li').forEach(function(li) {
+      var text = (li.querySelector('span') || li).textContent.trim();
+      [['up', '↑', 'Flytta upp: '], ['down', '↓', 'Flytta ner: ']].forEach(function(d) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'order-move order-move-' + d[0];
+        b.textContent = d[1];
+        b.setAttribute('aria-label', d[2] + text);
+        b.addEventListener('click', function() {
+          if (isLocked(list)) return;
+          if (d[0] === 'up' && li.previousElementSibling) list.insertBefore(li, li.previousElementSibling);
+          if (d[0] === 'down' && li.nextElementSibling) list.insertBefore(li.nextElementSibling, li);
+          updateOrderValue(list);
+          refresh();
+          b.disabled ? li.querySelector('.order-move:not(:disabled)').focus() : b.focus();
+        });
+        li.appendChild(b);
+      });
+    });
+    list.addEventListener('dragend', refresh);
+    refresh();
+  });
 
   // ============ HOTSPOT (click on image) ============
   document.querySelectorAll('.hotspot-widget').forEach(function(container) {

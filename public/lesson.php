@@ -671,6 +671,14 @@ $user = queryOne("SELECT is_admin FROM " . DB_DATABASE . ".users WHERE id = ?", 
 // Set page title with course name
 $page_title = $systemName . ' - ' . sanitize($lesson['course_title']) . ' - ' . sanitize($lesson['title']);
 
+// Lektionsvy: klassisk (nedan) eller C2/kortformatet (include/lesson_c2.php).
+// All logik ovanför är gemensam — vyerna skiljer sig bara i presentationen.
+require_once 'include/lesson_view.php';
+if (lessonViewFor((int)$lesson['course_id']) === 'c2') {
+    require 'include/lesson_c2.php';
+    exit;
+}
+
 // Include header template
 include 'include/header.php';
 
@@ -1249,7 +1257,7 @@ function convertYoutubeUrl($url) {
                 <?php endif; ?>
 
                 <!-- Interaktions-JS för drag-drop, hotspot etc -->
-                <script src="include/js/quiz-client.js" defer></script>
+                <script src="include/js/quiz-client.js?v=20261001c" defer></script>
                 
                 <!-- Progress bar for course completion -->
                 <?php

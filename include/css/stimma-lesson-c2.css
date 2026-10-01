@@ -1,0 +1,401 @@
+/*
+ * Stimma — lektionsvyn C2 (kortformat). Underlag: docs/stimma-c2.zip.
+ * Allt ligger under .stimma-lesson (sätts på <body> i include/lesson_c2.php),
+ * så admin och övriga sidor påverkas inte. Inga globala överskrivningar av Bootstrap.
+ */
+
+/* ---------- Tokens (från stimma-lesson-tokens.css) ---------- */
+.stimma-lesson {
+  --sl-bg:            #F7F6F2;
+  --sl-surface:       #FFFFFF;
+  --sl-surface-muted: #F1EFE8;
+  --sl-surface-soft:  #F4F3EF;
+  --sl-ink:           #1A1A19;
+  --sl-text:          #4A4A46;
+  --sl-muted:         #6B6B66;
+  --sl-line:          #E6E4DD;
+  --sl-border:        #D9D6CD;
+  --sl-primary:       #0F3B5F;
+  --sl-primary-hover: #0A2A44;
+  --sl-on-primary:    #FFFFFF;
+  --sl-success:       #2E7D32;
+  --sl-success-ink:   #1E5E22;
+  --sl-success-soft:  #EEF3EC;
+  --sl-error:         #B3261E;
+  --sl-error-soft:    #FBEDEC;
+  --sl-font-display:  'Fraunces', Georgia, serif;
+  --sl-font-body:     'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --sl-h1:            clamp(28px, 2.2vw + 12px, 40px);
+  --sl-h1-weight:     500;
+  --sl-body:          16px;
+  --sl-body-lg:       17px;
+  --sl-meta:          13px;
+  --sl-line-height:   1.55;
+  --sl-radius-card:   24px;
+  --sl-radius-ctrl:   14px;
+  --sl-radius-pill:   999px;
+  --sl-shadow-card:   0 1px 2px rgba(26,26,25,.05), 0 12px 32px rgba(26,26,25,.07);
+  --sl-card-max:      1100px;
+  --sl-card-narrow:   760px;
+  --sl-card-tiny:     640px;
+  --sl-gap:           24px;
+  --sl-touch:         52px;
+
+  background: var(--sl-bg);
+  color: var(--sl-ink);
+  font-family: var(--sl-font-body);
+  font-size: var(--sl-body);
+  line-height: var(--sl-line-height);
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+}
+.stimma-lesson *, .stimma-lesson *::before, .stimma-lesson *::after { box-sizing: border-box; }
+.stimma-lesson a { color: var(--sl-primary); }
+.stimma-lesson a:hover { color: var(--sl-primary-hover); }
+.stimma-lesson :focus-visible { outline: 2px solid var(--sl-primary); outline-offset: 2px; }
+.stimma-lesson svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.stimma-lesson .sl-visually-hidden {
+  position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+.stimma-lesson [hidden] { display: none !important; }
+
+/* ---------- Notiser ovanför toppraden ---------- */
+.stimma-lesson .sl-notice {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 14px;
+  padding: 8px 48px 8px 16px; position: relative;
+  background: #FFF6DB; color: #3D3300; font-size: 14px; text-align: center;
+}
+.stimma-lesson .sl-notice a { color: #3D3300; font-weight: 600; }
+.stimma-lesson .sl-notice--danger { background: var(--sl-error-soft); color: #5C120E; }
+.stimma-lesson .sl-notice--danger a, .stimma-lesson .sl-notice--danger .sl-notice-btn { color: #5C120E; }
+.stimma-lesson .sl-notice form { margin: 0; }
+.stimma-lesson .sl-notice-btn {
+  min-height: 32px; padding: 2px 12px; border-radius: 8px; border: 1px solid currentColor;
+  background: transparent; font: inherit; font-weight: 600; cursor: pointer;
+}
+.stimma-lesson .sl-notice-close {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 44px; height: 44px; border: 0; background: transparent; color: inherit; font-size: 22px; line-height: 1; cursor: pointer; border-radius: 10px;
+}
+
+/* ---------- Topprad ---------- */
+.stimma-lesson .sl-topbar {
+  height: 72px; padding: 0 32px; display: flex; align-items: center; gap: 16px; flex-shrink: 0;
+}
+.stimma-lesson .sl-logo { display: flex; align-items: center; flex-shrink: 0; min-height: 44px; }
+.stimma-lesson .sl-logo img { height: 40px; width: auto; max-width: 180px; object-fit: contain; display: block; }
+.stimma-lesson .sl-where {
+  flex: 1 1 auto; min-width: 0; margin: 0; text-align: center; font-size: 15px; color: var(--sl-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.stimma-lesson .sl-course { color: var(--sl-ink); font-weight: 600; }
+.stimma-lesson .sl-sep { margin: 0 4px; }
+.stimma-lesson .sl-narrow { display: none; }
+.stimma-lesson .sl-topbar-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.stimma-lesson .sl-topbtn {
+  height: 44px; min-width: 44px; padding: 0 14px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border-radius: 10px; border: 0; background: transparent; font: inherit; font-size: 15px; font-weight: 500;
+  color: var(--sl-text); text-decoration: none; cursor: pointer;
+}
+.stimma-lesson .sl-topbtn:hover { background: var(--sl-surface-muted); color: var(--sl-ink); }
+
+/* ---------- Ytan och korten ---------- */
+.stimma-lesson .sl-main {
+  flex: 1 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 16px 32px 40px; gap: 18px;
+}
+.stimma-lesson .sl-flash {
+  width: 100%; max-width: var(--sl-card-max); padding: 12px 16px; border-radius: var(--sl-radius-ctrl);
+  background: var(--sl-surface-soft); color: var(--sl-ink);
+}
+.stimma-lesson .sl-flash--danger { background: var(--sl-error-soft); color: #5C120E; }
+.stimma-lesson .sl-flash--success { background: var(--sl-success-soft); color: var(--sl-success-ink); }
+
+.stimma-lesson .sl-card {
+  width: 100%; max-width: var(--sl-card-max); background: var(--sl-surface); border-radius: var(--sl-radius-card);
+  box-shadow: var(--sl-shadow-card); overflow: hidden;
+}
+.stimma-lesson .sl-card--narrow, .stimma-lesson .sl-card--quiz { max-width: var(--sl-card-narrow); }
+/* En lektion behåller samma kortbredd på alla sidor (sätts i lesson_c2.php) */
+.stimma-lesson .sl-lesson--wide .sl-page { max-width: var(--sl-card-max); }
+.stimma-lesson .sl-lesson--narrow .sl-page { max-width: var(--sl-card-narrow); }
+/* Smala sidtyper i en bred lektion: innehållet hålls i läsbredd, centrerat i kortet */
+.stimma-lesson .sl-lesson--wide .sl-card--narrow .sl-body,
+.stimma-lesson .sl-lesson--wide .sl-card--quiz .sl-body { width: 100%; max-width: var(--sl-card-narrow); margin: 0 auto; padding: 32px 48px 36px; }
+.stimma-lesson .sl-lesson--wide .sl-ai-side { padding-bottom: 36px; }
+/* Kortet växer på höjden till lektionens högsta sida (lesson-c2.js) — navigeringen
+   ligger då kvar på samma ställe när man bläddrar */
+.stimma-lesson .sl-page { display: flex; flex-direction: column; }
+.stimma-lesson .sl-page > .sl-body { flex: 1 1 auto; }
+.stimma-lesson .sl-card--image, .stimma-lesson .sl-card--ai { display: grid; }
+.stimma-lesson .sl-card--done { max-width: var(--sl-card-tiny); }
+.stimma-lesson .sl-card--image { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); min-height: 600px; }
+.stimma-lesson .sl-media { min-height: 100%; background: var(--sl-surface-muted); }
+.stimma-lesson .sl-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.stimma-lesson .sl-body { padding: 32px 48px 36px; display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.stimma-lesson .sl-card--narrow .sl-body, .stimma-lesson .sl-card--quiz .sl-body { padding: 28px 40px 32px; }
+
+/* Progress-segment */
+.stimma-lesson .sl-segments { list-style: none; margin: 0; padding: 0; display: flex; gap: 4px; }
+.stimma-lesson .sl-segments li { flex: 1 1 0; height: 4px; border-radius: 2px; background: var(--sl-line); }
+.stimma-lesson .sl-segments li.is-done { background: var(--sl-success); }
+
+.stimma-lesson .sl-meta { margin: 0 0 -14px; font-size: var(--sl-meta); font-weight: 500; color: var(--sl-muted); }
+.stimma-lesson .sl-title {
+  margin: 0; font-family: var(--sl-font-display); font-size: var(--sl-h1); line-height: 1.12;
+  font-weight: var(--sl-h1-weight); color: var(--sl-ink); font-variation-settings: 'opsz' 72;
+}
+.stimma-lesson .sl-title:focus { outline: none; }
+.stimma-lesson .sl-title:focus-visible { outline: 2px solid var(--sl-primary); outline-offset: 4px; }
+
+/* ---------- Innehåll ---------- */
+.stimma-lesson .sl-content { color: var(--sl-text); font-size: var(--sl-body-lg); line-height: 1.6; flex-grow: 1; }
+.stimma-lesson .sl-card--narrow .sl-content { max-width: 70ch; }
+.stimma-lesson .sl-content > :first-child { margin-top: 0; }
+.stimma-lesson .sl-content > :last-child { margin-bottom: 0; }
+.stimma-lesson .sl-content p { margin: 0 0 14px; }
+.stimma-lesson .sl-content h2, .stimma-lesson .sl-content h3, .stimma-lesson .sl-content h4, .stimma-lesson .sl-content h5,
+.stimma-lesson .sl-content .sl-subhead {
+  font-family: var(--sl-font-body); font-size: 18px; font-weight: 600; line-height: 1.35; color: var(--sl-ink); margin: 22px 0 8px;
+}
+.stimma-lesson .sl-content ul, .stimma-lesson .sl-content ol { margin: 0 0 16px; padding-left: 1.3em; }
+.stimma-lesson .sl-content li { margin-bottom: 8px; }
+.stimma-lesson .sl-content strong { color: var(--sl-ink); font-weight: 600; }
+.stimma-lesson .sl-content table { width: 100%; border-collapse: collapse; margin: 0 0 16px; font-size: 15px; display: block; overflow-x: auto; }
+.stimma-lesson .sl-content th, .stimma-lesson .sl-content td { border-bottom: 1px solid var(--sl-line); padding: 8px 10px; text-align: left; vertical-align: top; }
+.stimma-lesson .sl-content blockquote { margin: 0 0 16px; padding: 4px 0 4px 16px; border-left: 3px solid var(--sl-border); color: var(--sl-text); }
+.stimma-lesson .sl-content img { max-width: 100%; height: auto; border-radius: 12px; }
+
+/* Begreppslista: numrerade brickor */
+.stimma-lesson .sl-terms { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 18px; counter-reset: sl-term; }
+.stimma-lesson .sl-terms > li { counter-increment: sl-term; position: relative; padding-left: 50px; margin: 0; min-height: 34px; }
+.stimma-lesson .sl-terms > li::before {
+  content: counter(sl-term); position: absolute; left: 0; top: -2px; width: 34px; height: 34px; border-radius: 50%;
+  background: var(--sl-success-soft); color: var(--sl-success-ink); font-weight: 600; font-size: 15px;
+  display: flex; align-items: center; justify-content: center;
+}
+.stimma-lesson .sl-term { display: block; color: var(--sl-ink); font-weight: 600; font-size: 16px; }
+.stimma-lesson .sl-term-text { display: block; color: var(--sl-text); font-size: 15px; }
+
+/* Lektionsblocken från redigeraren (lesson-intro, -tip …) i C2:s färger */
+.stimma-lesson .lesson-intro { font-size: 18px; color: var(--sl-ink); margin: 0 0 18px; }
+.stimma-lesson .lesson-tip, .stimma-lesson .lesson-info, .stimma-lesson .lesson-example,
+.stimma-lesson .lesson-warning, .stimma-lesson .lesson-summary {
+  border-radius: var(--sl-radius-ctrl); padding: 14px 18px; margin: 0 0 16px; background: var(--sl-surface-soft); color: var(--sl-text);
+}
+.stimma-lesson .lesson-tip { background: var(--sl-success-soft); }
+.stimma-lesson .lesson-warning { background: var(--sl-error-soft); color: #5C120E; }
+.stimma-lesson .lesson-warning strong { color: #5C120E; }
+.stimma-lesson .lesson-summary h4 { margin-top: 0; }
+.stimma-lesson .lesson-summary ul:last-child, .stimma-lesson .lesson-tip :last-child,
+.stimma-lesson .lesson-info :last-child, .stimma-lesson .lesson-example :last-child { margin-bottom: 0; }
+
+/* Video och ljud */
+.stimma-lesson .sl-video {
+  position: relative; width: 100%; aspect-ratio: 16 / 9; max-height: 520px; border-radius: 16px; overflow: hidden; background: #000; margin: 0 0 16px;
+}
+.stimma-lesson .sl-video iframe, .stimma-lesson .sl-video video { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.stimma-lesson .sl-card--video .sl-video { margin: 0 auto; max-width: calc(520px * 16 / 9); }
+.stimma-lesson .sl-audio { margin-top: 18px; padding: 14px 16px; border-radius: var(--sl-radius-ctrl); background: var(--sl-surface-soft); }
+.stimma-lesson .sl-audio-label { margin: 0 0 8px; font-size: 14px; font-weight: 600; color: var(--sl-ink); }
+.stimma-lesson .sl-audio audio { width: 100%; }
+
+/* ---------- Navigering i kortets fot ---------- */
+.stimma-lesson .sl-nav { margin-top: auto; display: flex; gap: 12px; align-items: center; }
+.stimma-lesson .sl-btn-back {
+  width: var(--sl-touch); height: var(--sl-touch); flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--sl-border); border-radius: var(--sl-radius-ctrl); background: var(--sl-surface); color: var(--sl-ink); cursor: pointer;
+}
+.stimma-lesson .sl-btn-back:hover { background: var(--sl-surface-soft); }
+.stimma-lesson .sl-btn-primary, .stimma-lesson .sl-btn-secondary {
+  flex: 1 1 auto; min-height: var(--sl-touch); padding: 0 20px; display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  border-radius: var(--sl-radius-ctrl); font: inherit; font-size: 16px; font-weight: 600; text-decoration: none; cursor: pointer;
+}
+.stimma-lesson .sl-btn-primary { border: 0; background: var(--sl-primary); color: var(--sl-on-primary); }
+.stimma-lesson .sl-btn-primary:hover { background: var(--sl-primary-hover); color: var(--sl-on-primary); }
+.stimma-lesson .sl-btn-primary:disabled { opacity: .55; cursor: not-allowed; }
+.stimma-lesson .sl-btn-secondary { border: 1px solid var(--sl-border); background: var(--sl-surface); color: var(--sl-ink); }
+.stimma-lesson .sl-btn-secondary:hover { background: var(--sl-surface-soft); color: var(--sl-ink); }
+.stimma-lesson .sl-keyhint { margin: 0; font-size: var(--sl-meta); color: var(--sl-muted); }
+.stimma-lesson .sl-card--done:not([hidden]) ~ .sl-keyhint { display: none; }
+.stimma-lesson .sl-skip { margin: auto 0 -16px; text-align: center; } /* ovanför knapparna så att de står still */
+.stimma-lesson .sl-skip + .sl-nav { margin-top: 0; }
+.stimma-lesson .sl-linkbtn {
+  min-height: 44px; padding: 0 8px; border: 0; background: none; font: inherit; font-size: 14px; color: var(--sl-muted);
+  text-decoration: underline; cursor: pointer;
+}
+
+/* ---------- AI-läraren ---------- */
+.stimma-lesson .sl-card--ai { display: grid; grid-template-columns: 380px minmax(0, 1fr); min-height: 600px; }
+.stimma-lesson .sl-ai-side { background: var(--sl-surface-muted); padding: 32px 32px 32px; display: flex; flex-direction: column; gap: 20px; }
+.stimma-lesson .sl-ai-intro { color: var(--sl-text); font-size: 16px; }
+.stimma-lesson .sl-ai-intro p:last-child { margin-bottom: 0; }
+.stimma-lesson .sl-ai-suggest-label { margin: 0 0 -10px; font-size: var(--sl-meta); font-weight: 600; color: var(--sl-text); }
+.stimma-lesson .sl-ai-suggestions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.stimma-lesson .sl-suggestion {
+  width: 100%; min-height: 44px; padding: 10px 14px; text-align: left; border: 1px solid var(--sl-border); border-radius: 12px;
+  background: var(--sl-surface); color: var(--sl-ink); font: inherit; font-size: 14px; line-height: 1.4; cursor: pointer;
+}
+.stimma-lesson .sl-suggestion:hover { border-color: var(--sl-primary); }
+.stimma-lesson .sl-ai-chat { display: flex; flex-direction: column; padding: 24px; gap: 16px; min-height: 420px; }
+.stimma-lesson .sl-chat-log { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: flex-end; gap: 12px; overflow-y: auto; max-height: 60vh; }
+.stimma-lesson .sl-msg { max-width: 82%; padding: 12px 16px; border-radius: 16px; font-size: 15px; line-height: 1.55; }
+.stimma-lesson .sl-msg--user { align-self: flex-end; background: var(--sl-primary); color: var(--sl-on-primary); border-bottom-right-radius: 6px; white-space: pre-wrap; }
+.stimma-lesson .sl-msg--ai { align-self: flex-start; background: var(--sl-surface-soft); color: var(--sl-ink); border-bottom-left-radius: 6px; }
+.stimma-lesson .sl-msg--ai p { margin: 0 0 8px; }
+.stimma-lesson .sl-msg--ai :last-child { margin-bottom: 0; }
+.stimma-lesson .sl-msg--ai ul, .stimma-lesson .sl-msg--ai ol { margin: 0 0 8px; padding-left: 1.2em; }
+.stimma-lesson .sl-msg--wait { color: var(--sl-muted); font-style: italic; }
+.stimma-lesson .sl-chat-form { display: flex; align-items: flex-end; gap: 8px; border: 1px solid var(--sl-border); border-radius: 14px; padding: 6px 6px 6px 14px; background: var(--sl-surface); }
+.stimma-lesson .sl-chat-form:focus-within { border-color: var(--sl-primary); }
+.stimma-lesson .sl-chat-form textarea {
+  flex: 1 1 auto; border: 0; resize: none; font: inherit; font-size: 15px; line-height: 1.45; padding: 10px 0; max-height: 160px; background: transparent; color: var(--sl-ink);
+}
+.stimma-lesson .sl-chat-form textarea:focus { outline: none; }
+.stimma-lesson .sl-chat-send {
+  width: 44px; height: 44px; flex-shrink: 0; border: 0; border-radius: 10px; background: var(--sl-primary); color: var(--sl-on-primary);
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.stimma-lesson .sl-chat-send:disabled { opacity: .55; }
+
+/* ---------- Quiz ---------- */
+.stimma-lesson .sl-question { display: flex; flex-direction: column; gap: 18px; }
+.stimma-lesson .sl-question-text { color: var(--sl-text); }
+.stimma-lesson .sl-question-img { max-width: 100%; max-height: 320px; border-radius: 12px; align-self: flex-start; }
+.stimma-lesson .sl-choices { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.stimma-lesson .sl-hint { margin: 0 0 2px; font-size: 14px; color: var(--sl-muted); }
+.stimma-lesson .sl-choice {
+  display: flex; align-items: center; gap: 14px; min-height: 56px; padding: 12px 16px;
+  border: 1px solid var(--sl-border); border-radius: var(--sl-radius-ctrl); background: var(--sl-surface);
+  color: var(--sl-text); font-size: 16px; cursor: pointer;
+}
+.stimma-lesson .sl-choice:hover { border-color: var(--sl-muted); }
+.stimma-lesson .sl-choice input { width: 18px; height: 18px; margin: 0; flex-shrink: 0; accent-color: var(--sl-primary); cursor: pointer; }
+.stimma-lesson .sl-choice:has(input:checked) { border-color: var(--sl-primary); color: var(--sl-ink); font-weight: 600; }
+.stimma-lesson .sl-choice:has(input:focus-visible) { outline: 2px solid var(--sl-primary); outline-offset: 2px; }
+.stimma-lesson .sl-choice-text { flex: 1 1 auto; }
+.stimma-lesson .sl-choice-status { font-size: 14px; font-weight: 600; white-space: nowrap; }
+.stimma-lesson .sl-choice.is-right, .stimma-lesson .sl-choice.is-right:has(input:checked) { border: 2px solid var(--sl-success); background: var(--sl-success-soft); color: var(--sl-ink); padding: 11px 15px; }
+.stimma-lesson .sl-choice.is-right .sl-choice-status { color: var(--sl-success-ink); }
+.stimma-lesson .sl-choice.is-wrong, .stimma-lesson .sl-choice.is-wrong:has(input:checked) { border: 2px solid var(--sl-error); background: var(--sl-error-soft); color: var(--sl-ink); padding: 11px 15px; }
+.stimma-lesson .sl-choice.is-wrong .sl-choice-status { color: var(--sl-error); }
+.stimma-lesson .sl-choices.is-locked .sl-choice { cursor: default; }
+.stimma-lesson .sl-feedback:empty { display: none; }
+.stimma-lesson .sl-feedback { padding: 12px 16px; border-radius: var(--sl-radius-ctrl); background: var(--sl-surface-soft); color: var(--sl-ink); font-size: 15px; }
+.stimma-lesson .sl-feedback.is-right { background: var(--sl-success-soft); color: var(--sl-success-ink); }
+.stimma-lesson .sl-feedback.is-wrong { background: var(--sl-error-soft); color: #5C120E; }
+.stimma-lesson .sl-explanation { padding: 12px 16px; border-radius: var(--sl-radius-ctrl); background: var(--sl-surface-soft); color: var(--sl-text); font-size: 15px; }
+
+/* Övriga frågetyper (befintliga verktyg från quiz.php) i C2:s färger */
+.stimma-lesson .sl-quiz-widget .quiz-question { border: 0 !important; padding: 0 !important; margin: 0 !important; }
+.stimma-lesson .sl-quiz-widget .form-control { min-height: 44px; border-color: var(--sl-border); border-radius: 10px; }
+.stimma-lesson .sl-quiz-widget .form-control:focus { border-color: var(--sl-primary); box-shadow: 0 0 0 3px rgba(15, 59, 95, .15); }
+.stimma-lesson .sl-quiz-widget .list-group-item,
+.stimma-lesson .sl-quiz-widget .match-draggable,
+.stimma-lesson .sl-quiz-widget .cat-item,
+.stimma-lesson .sl-quiz-widget .match-dropzone,
+.stimma-lesson .sl-quiz-widget .cat-bucket,
+.stimma-lesson .sl-quiz-widget .match-pool,
+.stimma-lesson .sl-quiz-widget .categorize-pool { border-color: var(--sl-border) !important; border-radius: 10px !important; color: var(--sl-ink); }
+.stimma-lesson .sl-quiz-widget .list-group-item { min-height: 48px; margin-bottom: 6px; border-width: 1px; cursor: grab; }
+.stimma-lesson .sl-quiz-widget .bg-light { background: var(--sl-surface-soft) !important; }
+.stimma-lesson .sl-quiz-widget .text-muted { color: var(--sl-muted) !important; }
+.stimma-lesson .sl-quiz-widget .image-choice-option { border-color: var(--sl-border) !important; border-radius: 12px !important; }
+.stimma-lesson .sl-quiz-widget .image-choice-option.border-primary { border-color: var(--sl-primary) !important; border-width: 2px !important; background: var(--sl-surface-soft) !important; }
+.stimma-lesson .sl-quiz-widget .form-check-input { accent-color: var(--sl-primary); }
+.stimma-lesson .sl-quiz-widget .form-check-input:checked { background-color: var(--sl-primary); border-color: var(--sl-primary); }
+.stimma-lesson .sl-quiz-widget .hotspot-marker { background: rgba(15, 59, 95, .75) !important; }
+
+/* ---------- Lektion klar ---------- */
+.stimma-lesson .sl-card--done { padding: 32px 32px 28px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.stimma-lesson .sl-done-icon { width: 52px; height: 52px; border-radius: 50%; background: var(--sl-success-soft); color: var(--sl-success); display: flex; align-items: center; justify-content: center; }
+.stimma-lesson .sl-done-icon svg { width: 26px; height: 26px; stroke-width: 2.4; }
+.stimma-lesson .sl-card--done .sl-meta { margin: 0; }
+.stimma-lesson .sl-card--done .sl-title { font-size: clamp(26px, 1.6vw + 12px, 32px); }
+.stimma-lesson .sl-done-lead { margin: 0; color: var(--sl-text); }
+.stimma-lesson .sl-course-progress { width: 100%; margin-top: 8px; text-align: left; }
+.stimma-lesson .sl-course-progress-head { display: flex; justify-content: space-between; font-size: 14px; color: var(--sl-text); margin-bottom: 6px; }
+.stimma-lesson .sl-course-progress-head span:last-child { font-weight: 600; color: var(--sl-ink); }
+.stimma-lesson .sl-bar { height: 8px; border-radius: var(--sl-radius-pill); background: var(--sl-line); overflow: hidden; }
+.stimma-lesson .sl-bar span { display: block; height: 100%; width: 0; background: var(--sl-success); border-radius: inherit; }
+.stimma-lesson .sl-next { width: 100%; text-align: left; border: 1px solid var(--sl-line); border-radius: var(--sl-radius-ctrl); padding: 12px 14px; }
+.stimma-lesson .sl-next-label { margin: 0; font-size: var(--sl-meta); color: var(--sl-muted); }
+.stimma-lesson .sl-next-title { margin: 2px 0 0; font-weight: 600; color: var(--sl-ink); }
+.stimma-lesson .sl-done-note { margin: 0; font-size: 14px; color: var(--sl-text); }
+.stimma-lesson .sl-done-actions { width: 100%; display: flex; gap: 12px; margin-top: 4px; }
+
+/* ---------- Innehållsförteckning ---------- */
+.stimma-lesson .sl-toc {
+  border: 0; padding: 0; width: min(440px, 100vw); max-width: 100vw; height: 100vh; max-height: 100vh; margin: 0 0 0 auto;
+  background: var(--sl-surface); color: var(--sl-ink); box-shadow: -12px 0 32px rgba(26, 26, 25, .12);
+}
+.stimma-lesson .sl-toc::backdrop { background: rgba(26, 26, 25, .35); }
+.stimma-lesson .sl-toc-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 8px 24px; }
+.stimma-lesson .sl-toc-head h2 { margin: 0; font-family: var(--sl-font-display); font-weight: 500; font-size: 24px; }
+.stimma-lesson .sl-toc-list { list-style: none; margin: 0; padding: 4px 12px 24px; }
+.stimma-lesson .sl-toc-list a, .stimma-lesson .sl-toc-list li > span {
+  display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 12px; border-radius: 12px; color: var(--sl-ink); text-decoration: none;
+}
+.stimma-lesson .sl-toc-list a:hover { background: var(--sl-surface-soft); }
+.stimma-lesson .sl-toc-list .is-current > span { background: var(--sl-surface-muted); font-weight: 600; }
+.stimma-lesson .sl-toc-list .is-locked > span { color: var(--sl-muted); }
+.stimma-lesson .sl-toc-nr {
+  width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; background: var(--sl-surface-soft); color: var(--sl-text);
+  font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center;
+}
+.stimma-lesson .sl-toc-list .is-done .sl-toc-nr { background: var(--sl-success-soft); color: var(--sl-success-ink); }
+.stimma-lesson .sl-toc-title { flex: 1 1 auto; font-size: 15px; }
+.stimma-lesson .sl-toc-status { font-size: 12px; color: var(--sl-muted); }
+
+/* ---------- Mellanbredd ---------- */
+@media (max-width: 1100px) {
+  .stimma-lesson .sl-card--ai { grid-template-columns: 320px minmax(0, 1fr); }
+  .stimma-lesson .sl-body,
+  .stimma-lesson .sl-lesson--wide .sl-card--narrow .sl-body,
+  .stimma-lesson .sl-lesson--wide .sl-card--quiz .sl-body { padding: 28px 36px 32px; }
+  .stimma-lesson .sl-lesson--wide .sl-ai-side { padding-bottom: 32px; }
+}
+
+/* ---------- Mobil (< 768px) ---------- */
+@media (max-width: 767.98px) {
+  .stimma-lesson .sl-topbar { height: 56px; padding: 0 8px 0 12px; gap: 8px; }
+  .stimma-lesson .sl-logo img { height: 30px; max-width: 96px; }
+  .stimma-lesson .sl-where { text-align: left; font-size: 14px; line-height: 1.25; white-space: normal; }
+  .stimma-lesson .sl-where .sl-course { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stimma-lesson .sl-sep, .stimma-lesson .sl-wide { display: none; }
+  .stimma-lesson .sl-narrow { display: block; font-size: 13px; }
+  .stimma-lesson .sl-topbtn { padding: 0 10px; }
+  .stimma-lesson .sl-topbtn span { display: none; }
+  .stimma-lesson .sl-notice { padding-right: 48px; font-size: 13px; }
+
+  .stimma-lesson .sl-main { padding: 0; gap: 0; justify-content: flex-start; }
+  .stimma-lesson .sl-card { max-width: none; border-radius: 0; box-shadow: none; min-height: calc(100vh - 56px); }
+  .stimma-lesson .sl-card--image, .stimma-lesson .sl-card--ai { display: flex; flex-direction: column; min-height: calc(100vh - 56px); }
+  .stimma-lesson .sl-media { height: 40vh; min-height: 0; flex-shrink: 0; }
+  .stimma-lesson .sl-card--image .sl-body { position: relative; }
+  .stimma-lesson .sl-card--image .sl-segments { position: absolute; left: 20px; right: 20px; top: calc(-40vh + 16px); }
+  .stimma-lesson .sl-card--image .sl-segments li { background: rgba(255, 255, 255, .6); }
+  .stimma-lesson .sl-card--image .sl-segments li.is-done { background: var(--sl-success); }
+  .stimma-lesson .sl-body, .stimma-lesson .sl-card--narrow .sl-body, .stimma-lesson .sl-card--quiz .sl-body { padding: 20px 20px 0; gap: 20px; flex: 1 0 auto; }
+  .stimma-lesson .sl-ai-side { padding: 20px; }
+  .stimma-lesson .sl-ai-chat { padding: 16px 20px 20px; min-height: 360px; }
+  .stimma-lesson .sl-nav {
+    position: sticky; bottom: 0; margin: auto -20px 0; padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: var(--sl-surface); border-top: 1px solid var(--sl-line); z-index: 5;
+  }
+  .stimma-lesson .sl-ai-side .sl-nav { margin: 8px -20px -20px; background: var(--sl-surface-muted); }
+  .stimma-lesson .sl-skip { margin: auto 0 -12px; }
+  .stimma-lesson .sl-keyhint { display: none; }
+  .stimma-lesson .sl-card--done { min-height: 0; padding: 32px 20px; }
+  .stimma-lesson .sl-done-actions { flex-direction: column-reverse; }
+  .stimma-lesson .sl-msg { max-width: 92%; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .stimma-lesson .sl-page:not([hidden]), .stimma-lesson .sl-card--done:not([hidden]) { animation: sl-fade .18s ease-out; }
+  @keyframes sl-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+}

@@ -282,6 +282,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a href="lesson_view.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'lesson_view.php' ? 'active' : '' ?>">
+                        <i class="bi bi-layout-text-window me-2"></i> Lektionsvy
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a href="announcements.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'announcements.php' ? 'active' : '' ?>">
                         <i class="bi bi-megaphone me-2"></i> Informationsmeddelanden
                     </a>

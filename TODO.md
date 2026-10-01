@@ -1,6 +1,57 @@
 # Stimma - Utvecklingsuppgifter
 
 ## Pågående
+- [ ] Ny lektionsvy C2 (kortformat) bakom en växel — underlag docs/stimma-c2.zip (SPEC.md, tokens, 5 mockuper) (2026-10-01)
+  - [x] Steg 1 (spec): kodbasen utforskad och sammanfattad för Thomas
+        lesson.php 1 883 rader: PHP-logik/POST-handlers (rad 1–674) → header.php (sidomeny, Google Fonts) →
+        egen <style> → rendering (sidomeny "Innehåll", innehållskort med bild col-md-4 + pagebreak-sidor, video-
+        kort, ljud, AI-chatt, infosida-avslut, quizformulär med en fråga per sida, paginator "Sida X av Y") →
+        inline JS (AI-chatt, paginator med låsning per quizfråga, piltangenter). Quiz besvaras per fråga via AJAX
+        (answer_question_id) i quiz-client.js. Progress registreras i POST-handlerna, inte i vyn.
+  - [x] Bugg "två stycken på samma rad" (kurs 35 m.fl., lektion 228): INNEHÅLLET — "<em>…Act.</em>Förslag: …"
+        ligger utanför <p>. Inte renderingen.
+  - [x] Bugg "Quiz (2) men 1 fråga": admin/lessons.php räknar nya frågor + 1 om legacy-fältet quiz_question finns.
+        742 lektioner har legacy-dubblett av samma fråga. ALLVARLIGARE: 210 lektioner har BARA legacy-fråga och
+        visas utan quiz för deltagare (13 lektioner i 3 aktiva kurser: 122, 123, 142)
+  - [x] Steg 2: plan godkänd 2026-10-01. Växel: global standard + utvalda kurser (ai_settings, ingen schemaändring)
+        + ?ui=c2/?ui=klassisk. C2 alltid ljust. Självhostade typsnitt i HELA Stimma. Legacy-frågorna: låt bli (notera)
+  - [x] Typsnitt: Fraunces + Inter woff2 (latin, latin-ext) i public/fonts/, header.php byter från Google Fonts. Även certificate.php (Playfair Display +
+        Open Sans). Variabla filer: Inter 400–700, Fraunces opsz 9–144 vikt 400–600
+  - [x] Växeln: include/lesson_view.php (lessonViewFor, ai_settings-nycklar lesson_view_default/_c2_courses,
+        ?ui= minns i session) + admin/lesson_view.php (superadmin, sökbar kurslista, Prova-länkar) + menypost
+  - [x] lesson.php: förgrening efter datalogiken → include/lesson_c2.php (eget dokument, ingen sidomeny; banners för
+        "Visa som" och PUB tas med som smala rader). header.php behövde ingen flagga
+  - [x] C2-mall include/lesson_c2.php: topprad (logga, kurs · lektion, Innehåll-dialog, Stäng), kort med progress-
+        segment, navigering, sidtyper text+bild / text / video / AI-läraren / quiz / Lektion klar, förhandsgranskningsrad
+  - [x] C2-CSS public/include/css/stimma-lesson-c2.css (tokens + stilar under .stimma-lesson), mobil < 768px
+  - [x] C2-JS public/include/js/lesson-c2.js: bläddring, piltangenter, quiz via befintlig AJAX (answer_question_id),
+        infosida (mark_info_page_complete), AI-chatt (ai_chat.php) med förslagsknappar, Lektion klar, preview
+  - [x] Innehållstolkning include/lesson_c2_content.php: lösa textstumpar i <p> + tappad styckebrytning ("Act.Förslag")
+        → rättar bugg 1 i C2; ensam fetstil → underrubrik; "Begrepp:"-listor (strong/em) → numrerade brickor;
+        AI-förslag ur "Förslag: Frågor…" flyttas till AI-kortet (bara när AI-läraren finns)
+  - [x] Verifierat 2026-10-01:
+        * Lektion 228 (text, video, AI, quiz) och 1506 (bild, 6 textsidor, flerval/kategorisera/sant-falskt) + infosida
+          1505 i 1440/1024/390: inga JS-fel, ingen #0D6EFD, Lektion klar visas
+        * SKARPT (ej preview) på kurs 161 med eget konto: infosida → klar + vidare; 3 rätt → lektion klar; samma rader
+          i progress/quiz_answers/course_enrollments som klassiska vyn; gamification orörd. Testraderna borttagna
+        * Pixeljämförelse före/efter (översikt, kurs, dashboard, lärvägar, klassisk lektion, admin, adminkurser, diplom):
+          0 px skillnad — efter att typsnittsvikterna begränsats till Googles tidigare (Inter 400–600, Fraunces 400–500)
+        * Växeln: standard/kurslista/?ui=/?ui=auto, felaktig CSRF ändrar inget. ÅTERSTÄLLD till klassisk, inga kurser
+  - [x] Brett test: alla 288 lektioner i aktiva kurser renderas i C2 utan PHP-fel (287 med text, 260 quiz, 212 AI,
+        52 video). OBS vid test: /var/log/apache2/*.log i containern är länkar till stdout/stderr — läs dem inte med wc/grep
+  - [x] Dra-och-släpp-frågor fungerade inte (rapport Thomas 2026-10-01). Orsak i delade quiz-client.js (även klassisk vy):
+        kategorisera hade släppzonen på det inre .cat-bucket-items som är 0 px högt när tomt → släpp mitt på kategorin
+        registrerades aldrig. Rättat: hela .cat-bucket är släppzon. NYTT: klicka-för-att-placera (mus, finger, Enter/
+        mellanslag) för kategorisera + para ihop, pilknappar ↑↓ för ordna. Instruktionstexterna i quiz.php uppdaterade.
+        Testat: båda vyerna, alla tre typerna → "Rätt"; drag mitt på kategorin; mobil med tryck (hasTouch) → "Rätt"
+  - [x] Logga: den påhittade trädloggan (från mockupen) ersatt med organisationens riktiga logga via
+        getHeaderOrganizationIcon() (Sambruk för sambruk.se), annars Stimmas riktiga logga
+  - [x] Fast kortstorlek inom en lektion: bredd per lektion (sl-lesson--wide/narrow), lika höjd via equalize() (mäts på plats, tak 900 px), "Hoppa över frågan" ovanför knapparna, enhetlig bottenpadding — en kortstorlek och en knapposition per lektion på 1440 och 1024 (mobil: klistrad knapprad, höjden följer innehållet)
+  - [ ] Committa och pusha (inväntar Thomas)
+  - Kvar/kända begränsningar: Lektion utan quiz kan inte bli klar (som förut) → C2 visar "Tillbaka till kursen".
+    background_color per lektion används inte i C2
+- [ ] (Låt bli tills vidare, beslut 2026-10-01) 210 lektioner med BARA legacy-quizfråga visas utan quiz (13 i aktiva
+      kurser 122, 123, 142). admin/lessons.php räknar legacy-dubbletter → "Quiz (2)"
 - [x] Importera kurs i admin ska förstå kurspaket (2026-10-01, beställt av Thomas) — byggt, testat, pushat 2026-10-01
       Bakgrund: kurs 153 ("Förebygg insiderhot") lästes in via admins GAMLA import → inga frågor, ingen infosida,
       inga bilder, alla sort_order=0 → admin visade lektionerna alfabetiskt (sort_order, title) och den ordningen

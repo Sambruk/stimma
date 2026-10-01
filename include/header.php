@@ -48,11 +48,10 @@
 
     <!-- Preconnect to CDN domains for better performance -->
     <link rel="preconnect" href="https://cdnjs.cloudflare.com">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
-    <!-- Typsnitt: Inter (sans) + Fraunces (serif) — redesign v3 -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fraunces:opsz,wght@9..144,400;9..144,500&display=swap" rel="stylesheet">
+    <!-- Typsnitt: Inter (sans) + Fraunces (serif) — självhostade sedan 2026-10-01
+         (fonts/fonts.css), inga anrop till Google Fonts -->
+    <link href="fonts/fonts.css" rel="stylesheet">
 
     <!-- External CSS dependencies -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">

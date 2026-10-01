@@ -174,7 +174,7 @@ function renderQuizQuestion(array $q, $idx = 1) {
             $shuffled = [];
             foreach ($items as $i => $it) $shuffled[] = ['idx' => $i, 'text' => $it];
             shuffle($shuffled);
-            echo '<p class="small text-muted mb-2">Dra raderna till rätt ordning (den översta ska vara först).</p>';
+            echo '<p class="small text-muted mb-2">Dra raderna till rätt ordning, eller använd pilknapparna. Den översta ska vara först.</p>';
             echo '<ul class="list-group order-list" data-name="' . $pre . 'order">';
             foreach ($shuffled as $item) {
                 echo '<li class="list-group-item d-flex align-items-center" draggable="true" data-idx="' . (int)$item['idx'] . '">';
@@ -195,7 +195,7 @@ function renderQuizQuestion(array $q, $idx = 1) {
                 $rights[] = ['idx' => $i, 'text' => $p['right'] ?? ''];
             }
             shuffle($rights);
-            echo '<p class="small text-muted mb-2">Dra varje ruta från höger till rätt plats bredvid motsvarande ruta till vänster.</p>';
+            echo '<p class="small text-muted mb-2">Dra varje ruta till rätt plats, eller klicka på en ruta och sedan på platsen den ska till.</p>';
             echo '<div class="match-pairs" data-name="' . $pre . 'match">';
             echo '<div class="row g-2">';
             foreach ($lefts as $l) {
@@ -222,7 +222,7 @@ function renderQuizQuestion(array $q, $idx = 1) {
             $pool = [];
             foreach ($items as $i => $it) $pool[] = ['idx' => $i, 'text' => $it['text'] ?? ''];
             shuffle($pool);
-            echo '<p class="small text-muted mb-2">Dra varje objekt till rätt kategori.</p>';
+            echo '<p class="small text-muted mb-2">Dra varje objekt till rätt kategori, eller klicka på ett objekt och sedan på kategorin.</p>';
             echo '<div class="categorize-widget" data-name="' . $pre . 'categorize">';
             echo '<div class="categorize-pool d-flex flex-wrap gap-2 p-2 border rounded mb-3" style="min-height: 50px;">';
             foreach ($pool as $it) {
