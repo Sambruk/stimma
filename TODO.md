@@ -1,6 +1,23 @@
 # Stimma - Utvecklingsuppgifter
 
 ## Pågående
+- [x] docs/KURSFORMAT.md — beskrivning av kursformatet för att Claude självständigt ska kunna skapa kurser (2026-10-01, beställt av Thomas)
+  - [x] Kartlagt: courses/lessons/quiz_questions, 11 frågetyper (include/quiz.php), cleanHtml-regler, pagebreak/[video],
+        AI-generatorns konventioner (ai_lesson_helper.php), bildstilar/storlekar
+  - [x] Fynd: admin/import.php + export.php är LEGACY (bara gamla enkelfrågan, ingen quiz_questions/infosidor) — oanvändbara här.
+        importCourse() i cron/process_ai_jobs.php stöder questions[] men ligger i ett cron-skript. delete_module.php = död kod (tabell finns ej)
+  - [x] Verifierat skarpt: kurs + lektion + infosida + frågor via aiLessonInsert() från CLI renderas rätt (testkurs 151 borttagen)
+  - [x] tools/las_in_kurspaket.php — läser in ett kurspaket (JSON, format stimma-kurspaket-1) som INAKTIV kurs.
+        Validerar allt (fält, HTML mot cleanHtml-reglerna, alla 9 frågetypers quiz_data), --provkor, --bilder.
+        Testat skarpt 2026-10-01: felpaket → 12 fel, inget skrivet; testpaket (kurs 152) → 4 lektioner/infosidor,
+        9 frågor; Stimmas gradeQuizQuestion() rättar alla 9 typer rätt och underkänner fel svar; webbläsare: kurssida,
+        inline-video, AI-chatt, infosidor OK, inga JS-fel. Testkurs 152 borttagen. --bilder EJ testat skarpt (kostar)
+  - [x] Committat och pushat 2026-10-01. courses.php och .gitignore lämnades utanför
+  - [x] docs/KURSFORMAT.md skriven: arbetsflöde, struktur, alla fält, HTML-regler, block, sidbrytning, video, AI-chatt,
+        9 frågetyper med quiz_data och regler, bilder (stil, motiv, kostnad), pedagogiska riktmärken, verktyget,
+        fullständigt exempel (provkört OK), rapport, kontrollista, källbilaga
+  - [x] YouTube-oEmbed-kontrollen verifierad (200 finns / 400 finns inte) — men 200 garanterar inte uppspelning,
+        texten säger det och videor ska listas i rapporten
 - [x] Buggar i lektionsredigeraren (2026-09-28, rapporterat av Patrik Hellstrand, IT-strateg) — rättat, verifierat, pushat
   - [x] YouTube-länken sparas inte om man inte klickat igenom flikarna före Spara
         Orsak: video_type sätts bara vid klick på en flik; YouTube-fliken är förvald utan att sätta den.
@@ -17,6 +34,7 @@
         borttagen → [B,C,D] rätt [0,2]; enkelval X,tom,Z rätt → [X,Z] rätt 1. Inga JS-fel.
         Testdata borttagen (explicita id:n + testvideofilen)
   - [x] Committat och pushat 2026-09-28. courses.php och .gitignore lämnades utanför
+  - [x] Återkoppling till Patrik skriven: exports/aterkoppling_patrik_hellstrand_2026-09-28.txt (gitignorerad) — ska in i supportsystemet
 - [x] Logga per domän (2026-09-28, beställt av Thomas) — byggt, verifierat, committat och pushat
   - [x] migrations/049: domain_settings.logo_url + logo_alt
   - [x] functions.php: resolveDomainLogo() (domän → överordnad domän → organisation) + storeLogoUpload()
