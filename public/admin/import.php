@@ -13,6 +13,7 @@ require_once '../include/config.php';
 require_once '../include/database.php';
 require_once '../include/functions.php';
 require_once '../include/auth.php';
+require_once '../include/kurspaket.php';
 
 // Include centralized authentication and authorization check
 require_once 'include/auth_check.php';
@@ -210,6 +211,53 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'
             echo json_encode(['success' => false, 'message' => 'Endast JSON- och ZIP-filer är tillåtna.']);
             exit;
         }
+
+        // Formuläret skickade alltid med en token, men den kontrollerades aldrig.
+        if (!validateCsrfToken($_POST['csrf_token'] ?? '')) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'Ogiltig säkerhetstoken. Ladda om sidan och försök igen.']);
+            exit;
+        }
+
+        // Kurspaket (stimma-kurspaket-1, docs/KURSFORMAT.md) går en egen väg.
+        // Den gamla importen nedan förstår bara exportformatet från "Exportera
+        // kurs" och tappade tyst frågor, infosidor och bilder ur ett kurspaket.
+        $kp = kurspaketLasFil($file['tmp_name'], $file['name']);
+        if (!$kp['fel'] && kurspaketAr($kp['paket'])) {
+            header('Content-Type: application/json');
+            try {
+                $v = kurspaketValidera($kp['paket'], $isZip ? $kp['bilder'] : null);
+                // Inget exit här inne: exit hoppar över finally, och då blir den
+                // uppackade ZIP-filen liggande kvar i /tmp.
+                if ($v['fel']) {
+                    echo json_encode(['success' => false, 'kurspaket' => true,
+                        'message' => count($v['fel']) . ' fel i kurspaketet — ingenting har importerats.',
+                        'fel' => $v['fel'], 'varningar' => $v['varningar']], JSON_UNESCAPED_UNICODE);
+                } else {
+                $res = kurspaketLasIn($kp['paket'], ['id' => (int)$_SESSION['user_id'], 'email' => $_SESSION['user_email']], $kp['bilder']);
+                $lektioner = array_values(array_filter($kp['paket']['lessons'], fn($l) => ($l['lesson_type'] ?? 'lesson') === 'lesson'));
+                echo json_encode(['success' => true, 'kurspaket' => true,
+                    'kurs_id' => $res['kurs_id'],
+                    'titel' => $kp['paket']['course']['title'],
+                    'lektioner' => count($lektioner),
+                    'infosidor' => count($kp['paket']['lessons']) - count($lektioner),
+                    'fragor' => array_sum(array_map(fn($l) => count($l['questions'] ?? []), $lektioner)),
+                    'bilder' => $res['bilder'],
+                    'kursbild_onskemal' => $res['kursbild_onskemal'],
+                    'saknar_bild' => array_map(fn($k, $o) => [
+                        'titel' => current(array_filter($kp['paket']['lessons'], fn($l) => $l['key'] === $k))['title'],
+                        'onskemal' => $o], array_keys($res['saknar_bild']), $res['saknar_bild']),
+                    'varningar' => $v['varningar'],
+                ], JSON_UNESCAPED_UNICODE);
+                }
+            } catch (Throwable $e) {
+                echo json_encode(['success' => false, 'kurspaket' => true, 'message' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+            } finally {
+                kurspaketStada($kp['tempdir']);
+            }
+            exit;
+        }
+        kurspaketStada($kp['tempdir']);
 
         try {
             $data = null;
@@ -452,11 +500,23 @@ require_once 'include/header.php';
             <div class="mb-3">
                 <label for="course_file" class="form-label">Välj kursfil (ZIP eller JSON)</label>
                 <input type="file" class="form-control" id="course_file" name="course_file" accept=".json,.zip" required>
-                <div class="form-text">Välj en ZIP- eller JSON-fil som innehåller kursdata som exporterats från en annan Stimma-installation. ZIP-filer inkluderar bilder.</div>
+                <div class="form-text">
+                    Två sorters filer går att importera:
+                    <ul class="mb-0 mt-1">
+                        <li><strong>Kurspaket</strong> (<code>stimma-kurspaket-1</code>) — en JSON-fil, eller en ZIP-fil med
+                            <code>course.json</code> och färdiga bilder i mappen <code>images/</code>. Formatet beskrivs i
+                            <code>docs/KURSFORMAT.md</code>. Allt kontrolleras innan något sparas.</li>
+                        <li><strong>Export från Stimma</strong> — en fil från "Exportera kurs" i denna eller en annan Stimma-installation.</li>
+                    </ul>
+                    Importerade kurser blir alltid inaktiva tills du aktiverar dem.
+                </div>
             </div>
             <button type="submit" class="btn btn-primary">Importera kurs</button>
             <a href="courses.php" class="btn btn-secondary">Avbryt</a>
         </form>
+
+        <!-- Resultat och fel för kurspaket -->
+        <div id="importResult" class="mt-4" role="status" aria-live="polite" hidden></div>
 
         <!-- Progress indicator -->
         <div id="importProgress" class="mt-4" style="display: none;">
@@ -479,6 +539,42 @@ require_once 'include/header.php';
 </div>
 
 <script>
+function escHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Kurspaket: visa vad som kom in — eller ALLA fel på en gång, så att paketet kan
+// rättas i ett svep i stället för ett fel i taget.
+const antal = (n, en, flera) => `${n} ${n === 1 ? en : flera}`;
+
+function visaKurspaketResultat(d) {
+    const ruta = document.getElementById('importResult');
+    const lista = (rubrik, poster, klass) => poster && poster.length
+        ? `<p class="mb-1 mt-3"><strong>${rubrik}</strong></p><ul class="${klass} mb-0">${poster.map(p => `<li>${escHtml(p)}</li>`).join('')}</ul>`
+        : '';
+    if (!d.success) {
+        ruta.innerHTML = `<div class="alert alert-danger">
+            <h2 class="h6 mb-1"><i class="bi bi-x-circle me-1"></i>${escHtml(d.message)}</h2>
+            ${lista('Rätta följande i paketet och importera igen:', d.fel, 'small')}
+            ${lista('Varningar:', d.varningar, 'small')}
+        </div>`;
+    } else {
+        const saknas = (d.saknar_bild || []).map(b => `${b.titel} — ”${b.onskemal}”`);
+        if (d.kursbild_onskemal) saknas.unshift(`Kursomslag — ”${d.kursbild_onskemal}”`);
+        ruta.innerHTML = `<div class="alert alert-success">
+            <h2 class="h6 mb-2"><i class="bi bi-check-circle me-1"></i>Kursen ”${escHtml(d.titel)}” är importerad som inaktiv</h2>
+            <p class="mb-0">${antal(d.lektioner, 'lektion', 'lektioner')}, ${antal(d.infosidor, 'infosida', 'infosidor')},
+               ${antal(d.fragor, 'quizfråga', 'quizfrågor')} och ${antal(d.bilder, 'bild', 'bilder')}.</p>
+            ${lista('Bilder som saknas. Paketet beskrev vad bilderna ska visa men innehöll inga bildfiler. Skapa dem i redigeraren: skriv önskemålet nedan i fältet ”Vad ska bilden visa?” och klicka på ”Generera AI-bild” (lektion) eller ”AI” (kursomslag).', saknas, 'small')}
+            ${lista('Varningar:', d.varningar, 'small')}
+            <a class="btn btn-primary mt-3" href="edit_course.php?id=${encodeURIComponent(d.kurs_id)}">Granska kursen</a>
+            <a class="btn btn-light mt-3 ms-2" href="courses.php">Till kurslistan</a>
+        </div>`;
+    }
+    ruta.hidden = false;
+    ruta.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 document.getElementById('importForm').addEventListener('submit', function(e) {
     e.preventDefault();
 
@@ -488,6 +584,7 @@ document.getElementById('importForm').addEventListener('submit', function(e) {
     const currentItem = document.getElementById('currentItem');
 
     // Visa progress-indikatorn
+    document.getElementById('importResult').hidden = true;
     importProgress.style.display = 'block';
 
     // Skicka formuläret med fetch
@@ -500,6 +597,11 @@ document.getElementById('importForm').addEventListener('submit', function(e) {
     })
     .then(response => response.json())
     .then(data => {
+        if (data.kurspaket) {
+            importProgress.style.display = 'none';
+            visaKurspaketResultat(data);
+            return;
+        }
         if (data.success) {
             let currentStep = 0;
 

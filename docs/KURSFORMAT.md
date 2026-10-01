@@ -4,8 +4,8 @@ Det här dokumentet beskriver hur en kurs i Stimma är uppbyggd och hur en ny ku
 systemet. Det är skrivet för att Claude ska kunna skapa kompletta kurser **på egen hand** utifrån en
 kort beskrivning, och själv besluta om struktur, innehåll, bilder och quiz.
 
-Allt här är kontrollerat mot koden och databasen 2026-10-01. Verktyget i avsnitt 9 är testat skarpt,
-och alla frågetyper i avsnitt 6 rättas korrekt av Stimmas egen rättningsfunktion.
+Allt här är kontrollerat mot koden och databasen 2026-10-01. Båda inläsningsvägarna i avsnitt 9 är
+testade skarpt, och alla frågetyper i avsnitt 6 rättas korrekt av Stimmas egen rättningsfunktion.
 
 ---
 
@@ -15,13 +15,15 @@ För varje kursbeskrivning:
 
 1. **Planera kursen:** målgrupp, lärandemål, antal lektioner och vad varje lektion ska lära ut
    (avsnitt 8).
-2. **Skriv ett kurspaket:** en JSON-fil i formatet `stimma-kurspaket-1` (avsnitt 3–7, fullständigt
+2. **Skriv ett kurspaket:** `course.json` i formatet `stimma-kurspaket-1` (avsnitt 3–7, fullständigt
    exempel i avsnitt 10).
-3. **Provkör:** kör verktyget med `--provkor` och rätta tills det inte finns några fel (avsnitt 9).
-4. **Läs in:** kör verktyget skarpt med `--bilder`. Kursen skapas **alltid som inaktiv** och syns
-   inte för deltagare.
-5. **Rapportera:** ange kurs-id, länk till redigering, antal lektioner och frågor, bildkostnad och
-   allt du är osäker på (avsnitt 11).
+3. **Skapa bilderna:** gör det med det bildverktyg du har tillgång till, och lägg dem i mappen
+   `images/` (avsnitt 7). Packa sedan `course.json` och `images/` i en ZIP-fil.
+4. **Läs in:** via **Admin → Importera kurs** (avsnitt 9A), eller med kommandoradsverktyget om du
+   arbetar på servern (avsnitt 9B). Allt kontrolleras först. Vid fel sparas ingenting, och du får
+   alla fel i en lista. Rätta och försök igen. Kursen skapas **alltid som inaktiv**.
+5. **Rapportera:** ange kurs-id, antal lektioner och frågor, vilka bilder som saknas och allt du är
+   osäker på (avsnitt 11).
 
 Aktivera aldrig kursen själv. En människa granskar och aktiverar.
 
@@ -56,6 +58,19 @@ finns i databasen. Använd infosidor som mellanrubriker om kursen behöver delas
 
 ## 3. Kurspaketet — översikt
 
+Ett kurspaket är en **ZIP-fil**:
+
+```
+min-kurs.zip
+├── course.json        ← kursen, se nedan
+└── images/            ← färdiga bilder som course.json pekar ut med image_file
+    ├── omslag.webp
+    ├── lektion-1.webp
+    └── …
+```
+
+`course.json` har formen:
+
 ```json
 {
   "format": "stimma-kurspaket-1",
@@ -64,7 +79,15 @@ finns i databasen. Använd infosidor som mellanrubriker om kursen behöver delas
 }
 ```
 
-`format` måste vara exakt `"stimma-kurspaket-1"`. All text är UTF-8 och skrivs på svenska.
+- **`format`** måste vara exakt `"stimma-kurspaket-1"`. Det är så importen känner igen ett
+  kurspaket.
+- **Text:** all text är UTF-8 och skrivs på svenska.
+- **Utan bilder:** ett paket utan färdiga bilder kan också vara en ensam JSON-fil, men då kan
+  `image_file` inte användas.
+- **Undermapp:** allt får också ligga i **en enda** undermapp, t.ex. `min-kurs/course.json` och
+  `min-kurs/images/`. Så blir det när man högerklickar på kursmappen och väljer "Komprimera".
+  Skräpfiler från macOS och Windows (`__MACOSX/`, `.DS_Store`, `Thumbs.db`) ignoreras. Två kursmappar
+  i samma ZIP-fil går inte, utan det blir en ZIP-fil per kurs.
 
 ---
 
@@ -78,7 +101,8 @@ finns i databasen. Använd infosidor som mellanrubriker om kursen behöver delas
 | `duration_minutes` | Heltal | Beräknas automatiskt som summan av lektionernas tid om fältet utelämnas. Utelämna det. |
 | `prerequisites` | Text | Förkunskaper. Utelämna om inga behövs. |
 | `image_style` | `illustration` \| `foto` \| `abstrakt` | Bildstil för omslaget **och alla lektionsbilder**. Se avsnitt 7. Standard är `illustration`. |
-| `image_wish` | Högst 300 tecken | Vad omslagsbilden ska föreställa. Se avsnitt 7. |
+| `image_file` | Filnamn i `images/` | Färdig omslagsbild, se avsnitt 7. Går före `image_wish`. |
+| `image_wish` | Högst 300 tecken | Vad omslagsbilden föreställer. Används för att skapa bilden i Stimma när `image_file` saknas, se avsnitt 7. |
 | `completion_content` | HTML enligt avsnitt 5 | Texten på avslutssidan när kursen är klar. Utelämnas den visas en standardtext. |
 | `allow_quiz_retry` | `true` \| `false` | Om deltagaren får göra om ett underkänt quiz. Standard är `true`. Ändra inte. |
 
@@ -97,7 +121,8 @@ andra organisationer, publik registrering, stegvis utskick, deadline och kursint
 | `estimated_duration` | Heltal 1–120 (minuter) | Realistisk tid inklusive quiz. Standard är 5. |
 | `content` | **Krävs**, HTML enligt nedan | Lektionens innehåll. |
 | `belongs_to` | `key` för en **tidigare** lektion | Bara för `info_page`: kopplar infosidan till den lektionen. |
-| `image_wish` | Högst 300 tecken | Motiv för lektionsbilden. Utelämna fältet för att inte få någon bild. |
+| `image_file` | Filnamn i `images/` | Färdig lektionsbild, se avsnitt 7. Går före `image_wish`. |
+| `image_wish` | Högst 300 tecken | Motiv för lektionsbilden, om den ska skapas i Stimma. Utelämna både `image_file` och `image_wish` för att inte få någon bild. |
 | `video_url` | YouTube-länk | `https://www.youtube.com/watch?v=…` eller `https://youtu.be/…`. Se avsnitt 5.4. |
 | `video_position` | `top` \| `bottom` | Var videon visas om innehållet saknar `[video]`-markör. Standard är `bottom`. |
 | `ai_chat` | `{ "instruction": "…", "prompt": "…" }` | Slår på AI-chatten för lektionen. Se avsnitt 5.5. |
@@ -118,7 +143,7 @@ att det deltagaren ser blir exakt det du skrev.
 - **Länkar:** bara fullständiga `https://`-adresser. De öppnas automatiskt i ny flik. Länka bara
   till sidor du vet finns (myndigheter, lagtext på riksdagen.se och liknande). Hitta aldrig på
   adresser.
-- **Bilder i löptexten stöds inte** i kurspaket. Använd `image_wish` för lektionsbilden.
+- **Bilder i löptexten stöds inte** i kurspaket. Använd lektionsbilden (`image_file`).
 
 ### 5.2 Innehållsblock
 
@@ -227,35 +252,102 @@ kurspaket.
 
 ## 7. Bilder
 
-Claude bestämmer bildstil och motiv. Bilderna skapas av verktyget med `--bilder` (OpenAI
-gpt-image), med samma prompt som knapparna i admin.
+Claude bestämmer bildstil och motiv för kursomslaget och varje lektion. Bilderna kan komma in på två
+sätt. Det första är att föredra.
+
+### 7A. Färdiga bilder i paketet (`image_file`)
+
+Skapa bilderna med det bildverktyg du har, lägg dem i `images/` och peka ut dem:
+
+```json
+"course":  { …, "image_file": "omslag.webp" },
+"lessons": [ { "key": "phishing", …, "image_file": "phishing.webp" } ]
+```
+
+| Bild | Format | Visas |
+|---|---|---|
+| **Kursomslag** | **Liggande 3:2, helst 1536 × 1024** | Banner på kurssidan och kort i katalogen. Kanterna kan beskäras, så håll motivet i mitten. |
+| **Lektionsbild** | **Kvadratisk, helst 1024 × 1024** | I en smal spalt till vänster om lektionstexten, ungefär en tredjedel av bredden. |
+
+- **Filformat:** JPG, PNG eller WebP (WebP ger minst filer). Högst **5 MB per bild** och 50 MB för hela
+  ZIP-filen.
+- **Filnamn:** bara själva namnet i `image_file`, t.ex. `"phishing.webp"`, inte `"images/phishing.webp"`.
+  Små bokstäver, siffror och bindestreck. Stimma byter namn vid inläsningen.
+- **Samma bild** får användas av flera lektioner.
+- **Kontroll vid import:** att bilden finns, är en riktig bild och inte är för stor. Bilder i
+  `images/` som inget pekar på ger en varning.
+
+**Så blir bilderna bra.** Samma regler gäller som när Stimma skapar bilderna själv:
+- **Motiv:** en konkret vardagsscen i svensk offentlig miljö, med vänliga ansiktsdrag.
+- **Ingen text** i bilden, inga logotyper och inga varumärken.
+- **Sammanhållen stil:** samma stil i hela kursen, och den ska motsvara `image_style`.
+- **Inga verkliga, igenkännbara personer.**
+
+#### Skapa bilderna med fal.ai
+
+Skapa alla bilder med fal.ai och lägg dem i kurspaketet. Använd inte `image_wish` som ersättning
+för en bild.
+
+- **Modell:** `fal-ai/flux/schnell`. Använd `fal-ai/flux/dev` om bilderna behöver högre kvalitet.
+- **Kursomslag:** `"image_size": {"width": 1536, "height": 1024}`.
+- **Lektionsbild:** `"image_size": "square_hd"` (1024 × 1024). Infosidor får ingen bild.
+- **Prompten** skrivs på engelska och beskriver en konkret vardagsscen i svensk offentlig miljö, med
+  vänliga ansiktsdrag. Använd samma stilbeskrivning i alla bilder i kursen, så att den motsvarar
+  `image_style`. Avsluta alltid prompten med: `no text, no letters, no logos`.
+- **Ladda ner** varje bild direkt från URL:en i svaret, eftersom länken är tillfällig. Spara den i
+  `images/` med ett kort filnamn, till exempel `omslag.jpg` och `lektion-1.jpg`.
+- **Titta på varje bild.** Om den innehåller text, förvrängda händer eller fel motiv skapar du en ny.
+- **Ange filnamnet** i `image_file` på kursen och på varje lektion. Behåll motivbeskrivningen på
+  svenska i `image_wish`.
+- **Packa** varje kurs som en ZIP-fil med `course.json` i roten och bilderna i `images/`, enligt
+  avsnitt 3.
+
+**Om inget fal-verktyg finns:** anropa fal.ai:s API direkt.
+- **Adress:** `https://fal.run/fal-ai/flux/schnell` med POST.
+- **Rubrik:** `Authorization: Key <FAL_KEY>`.
+- **Kropp:** JSON-kroppen `{"prompt": …, "image_size": …}`.
+- **Svar:** bild-URL:en finns i `images[0].url`.
+
+Går anropen via Sambruks MCP-gateway i stället för direkt till fal.ai anges omslagets storlek som
+`"extra": {"image_size": {"width": 1536, "height": 1024}}`, eftersom gatewayens verktyg bara tar de
+fasta formaten i `image_size`.
+
+### 7B. Bilder som Stimma skapar (`image_wish`)
+
+Saknas `image_file` men finns `image_wish` kan Stimma skapa bilden med sin egen bildtjänst (OpenAI
+gpt-image), med samma prompt som knapparna i admin:
+
+- **Med kommandoradsverktyget och `--bilder`** skapas bilderna direkt vid inläsningen (avsnitt 9B).
+- **Med webbimporten** skapas inga bilder vid importen. Resultatet listar i stället varje bild som
+  saknas tillsammans med önskemålet. En admin skapar dem sedan i redigeraren: önskemålet skrivs i
+  fältet "Vad ska bilden visa?", och sedan klickar man på "Generera AI-bild" i lektionsredigeraren
+  eller "AI" vid kursbilden i kursredigeraren.
 
 | Bild | Format | Ungefärlig kostnad |
 |---|---|---|
 | Kursomslag | 1536 × 1024, hög kvalitet, WebP | ~17 US-cent |
 | Lektionsbild | 1024 × 1024, medelkvalitet, WebP | ~3–5 US-cent |
 
-En kurs med 8 lektionsbilder kostar alltså ungefär 0,50 USD. Bilderna drar också från
-organisationens AI-kvot.
+**`image_wish`** beskriver bara **motivet**, högst 300 tecken. Stimma lägger själv till stil, format
+och krav som att bilden inte ska innehålla text:
+
+- Bra: *"En socialsekreterare som låser sin datorskärm innan hen går till ett möte"*
+- Bra: *"Två kollegor vid ett fikabord som tittar på ett misstänkt sms i en mobiltelefon"*
+- Dåligt: *"Säkerhet"*, *"En bild om lektion 3"*, eller ett motiv som innehåller text eller logotyper.
+
+Ange gärna `image_wish` även när du har `image_file`. Då går bilden att skapa om i Stimma senare.
+
+### För båda vägarna
 
 **`image_style`** gäller hela kursen:
 - `illustration`: varm, handritad stil i varma färger. Passar de flesta kurser.
 - `foto`: fotografisk stil. Passar kurser om konkreta miljöer och yrken.
 - `abstrakt`: lugn, grafisk stil. Passar abstrakta ämnen som regelverk och strategi.
 
-**`image_wish`** är det viktigaste för en bra bild. Stimma lägger själv till stil, format och
-negativa krav som ingen text i bilden. Beskriv bara **motivet** som en konkret vardagsscen i svensk
-offentlig miljö, högst 300 tecken:
+Stilen styr Stimmas bilder, och den som redigerar kursen i efterhand ser den. Gör därför egna bilder
+i samma stil.
 
-- Bra: *"En socialsekreterare som låser sin datorskärm innan hen går till ett möte"*
-- Bra: *"Två kollegor vid ett fikabord som tittar på ett misstänkt sms i en mobiltelefon"*
-- Dåligt: *"Säkerhet"*, *"En bild om lektion 3"*, eller ett motiv som innehåller text eller logotyper.
-
-Infosidor behöver sällan bild. Utelämna `image_wish` där.
-
-Om en bild misslyckas (kvot, nätverk eller tidsgräns) finns kursen kvar utan just den bilden. Det
-syns i verktygets resultat. Rapportera vilka bilder som saknas. En admin kan skapa dem med knappen
-"Generera bild" i redigeraren.
+Infosidor behöver sällan bild.
 
 ---
 
@@ -299,49 +391,68 @@ används och tilltala läsaren med "du".
 
 ---
 
-## 9. Läsa in kursen — `tools/las_in_kurspaket.php`
+## 9. Läsa in kursen
 
-Verktyget körs i webbcontainern från kommandoraden. `tools/` ligger utanför webbroten och kan inte
-nås från webben.
+Två vägar, med exakt samma regler. Båda bygger på `include/kurspaket.php`.
+
+### 9A. Admin → Importera kurs (utan serveråtkomst)
+
+1. Logga in på https://stimma.sambruk.se som admin eller redaktör. Gå till **Admin → Kurser →
+   Importera kurs**.
+2. Välj ZIP-filen, eller JSON-filen om paketet saknar bilder, och klicka på **Importera kurs**.
+3. **Om något är fel** visas en röd ruta med alla fel. Ingenting har sparats. Rätta paketet och
+   importera igen.
+4. **När importen lyckas** visas en grön ruta med:
+   - antal lektioner, infosidor, quizfrågor och bilder,
+   - **bilder som saknas**, tillsammans med sina önskemål,
+   - eventuella varningar,
+   - en knapp till kursen.
+
+Kursen hamnar i den inloggades organisation, och den inloggade blir författare och redaktör.
+
+Importen känner igen ett kurspaket på `"format": "stimma-kurspaket-1"`. En fil utan det fältet
+behandlas som en gammal export från "Exportera kurs". Den vägen tappar quizfrågor, infosidor och
+bilder. **Kontrollera därför fältet `format` om kursen kommer in utan frågor.**
+
+### 9B. Kommandoradsverktyget (på servern)
+
+Verktyget körs i webbcontainern. `tools/` ligger utanför webbroten och kan inte nås från webben.
 
 ```bash
-# 1. Kopiera in paketet
-docker cp kurs.json stimma-web-1:/tmp/kurs.json
+docker cp kurs.zip stimma-web-1:/tmp/kurs.zip
 
-# 2. Provkör — validerar allt, skriver ingenting
+# Provkör — validerar allt, skriver ingenting
 docker exec -u www-data stimma-web-1 php /var/www/html/tools/las_in_kurspaket.php \
-    /tmp/kurs.json --forfattare=thomas.wennersten@sambruk.se --provkor
+    /tmp/kurs.zip --forfattare=thomas.wennersten@sambruk.se --provkor
 
-# 3. Läs in på riktigt, med bilder
+# Läs in. --bilder skapar de bilder som bara har image_wish (kostar, se avsnitt 7B)
 docker exec -u www-data stimma-web-1 php /var/www/html/tools/las_in_kurspaket.php \
-    /tmp/kurs.json --forfattare=thomas.wennersten@sambruk.se --bilder
+    /tmp/kurs.zip --forfattare=thomas.wennersten@sambruk.se --bilder
 
-# 4. Städa
-docker exec stimma-web-1 rm /tmp/kurs.json
+docker exec stimma-web-1 rm /tmp/kurs.zip
 ```
 
-- **`--forfattare`** måste vara e-postadressen till en befintlig användare. Hen blir författare och
-  redaktör för kursen, och kursen hamnar i hens organisation (e-postdomänen). Använd den adress som
-  uppdraget anger, eller `thomas.wennersten@sambruk.se` om ingen anges.
-- **Provkörningen** listar alla fel på en gång (`FEL: …`) och avslutas med kod 1. Rätta paketet och
-  provkör igen tills den går igenom. Varningar (`VARNING: …`) stoppar inte inläsningen, men läs dem.
-- **Den skarpa inläsningen** sker i en transaktion: antingen kommer hela kursen in, eller ingenting.
-  Bilderna skapas efteråt, och en bild som misslyckas påverkar inte resten.
-- **Den sista utskriften är en JSON-rad**, till exempel:
-  ```json
-  {"ok":true,"meddelande":"Kursen är inläst som INAKTIV: …","kurs_id":153,
-   "lektioner":{"valkommen":1472,"phishing":1473},
-   "redigera":"https://stimma.sambruk.se/admin/edit_course.php?id=153","bilder":{…},"varningar":[]}
-  ```
-- **Kör aldrig samma paket två gånger.** Det skapar en kopia av kursen. Om något blev fel efter
-  inläsningen: rapportera det och låt en admin ta bort kursen, i stället för att läsa in igen.
+- **`--forfattare`** måste vara e-postadressen till en befintlig användare. Kursen hamnar i hens
+  organisation. Använd den adress som uppdraget anger, eller `thomas.wennersten@sambruk.se`.
+- **Fel och varningar:** provkörningen listar alla fel (`FEL: …`) och avslutas med kod 1. Varningar
+  (`VARNING: …`) stoppar inte inläsningen.
+- **Resultatet:** den sista utskriften är en JSON-rad med `kurs_id`, lektionernas id:n, en länk till
+  redigeringen, antal bilder och eventuella bilder som saknas.
 
-**Använd inte** admins import ("Importera kurs", `admin/import.php`). Den bygger på ett äldre format
-och tappar quizfrågor av alla moderna typer, infosidor, video och AI-chatt.
+### För båda vägarna
+
+- **Inläsningen sker i en transaktion:** antingen kommer hela kursen in, eller ingenting, och inga
+  bilder blir kvar.
+- **Läs aldrig in samma paket två gånger.** Det skapar en kopia av kursen. Om något blev fel efter
+  inläsningen: rapportera det och låt en admin ta bort kursen.
 
 ---
 
 ## 10. Fullständigt exempel
+
+Exemplet nedan är `course.json` utan färdiga bilder, med bara `image_wish`. Med färdiga bilder lägger
+du till `"image_file": "…"` på kursen och på varje lektion, och packar filen i en ZIP-fil tillsammans
+med `images/` (avsnitt 3 och 7A).
 
 ```json
 {
@@ -402,9 +513,10 @@ och tappar quizfrågor av alla moderna typer, infosidor, video och AI-chatt.
 
 Avsluta varje kurs med en kort rapport till uppdragsgivaren:
 
-- **Resultat:** kurs-id, titel och länken från verktygets resultat (`redigera`).
+- **Resultat:** kurs-id och titel, från importens gröna ruta eller verktygets JSON-rad.
 - **Omfång:** antal lektioner och infosidor, antal frågor och vilka typer.
-- **Bilder:** vilka som skapades och vilka som misslyckades, och bildkostnaden.
+- **Bilder:** vilka som följde med i paketet, och vilka som saknas tillsammans med önskemålet, så att
+  en admin kan skapa dem.
 - **Videor:** varje länk, så att granskaren kan provspela den.
 - **Antaganden:** de val du gjorde som beskrivningen inte styrde, t.ex. målgrupp, nivå och avgränsningar.
 - **Osäkerheter:** påståenden och källor som en ämnesexpert bör granska. Lista dem konkret.
@@ -420,8 +532,10 @@ Avsluta varje kurs med en kort rapport till uppdragsgivaren:
 - [ ] Varje lektion har 4–7 sidor och 80–180 ord per sida.
 - [ ] Varje lektion har 2–4 frågor som går att besvara med lektionens innehåll, med varierade typer och spridda rätta svar.
 - [ ] Inga påhittade länkar, videor, siffror eller paragrafer.
-- [ ] Kursen och varje lektion har ett `image_wish` som beskriver en konkret scen, utan text i bilden.
-- [ ] Provkörningen går igenom utan fel.
+- [ ] Kursen och varje lektion har en bild i `images/` (`image_file`) i rätt format: omslaget liggande 3:2, lektionsbilderna kvadratiska. Ingen text i bilderna.
+- [ ] Varje `image_file` är ett filnamn utan sökväg, och filen finns i `images/` i ZIP-filen.
+- [ ] `course.json` ligger i ZIP-filens rot eller i en enda undermapp tillsammans med `images/`. Det är en kurs per ZIP-fil.
+- [ ] Inläsningen går igenom utan fel. Annars rättar du och försöker igen.
 
 ---
 
@@ -438,8 +552,8 @@ behöver inte läsa det här.
 | Sidbrytning, video och AI-chatt | `public/lesson.php`, cirka rad 876–1150 |
 | Innehållsblock och pedagogiska riktmärken | `aiLessonGenerateContent()` i `include/ai_lesson_helper.php` och `getCourseGenerationPrompt()` i `public/admin/cron/process_ai_jobs.php` |
 | Bildprompter, storlekar och stilar | `include/ai_image_helper.php` |
-| Inläsning | `tools/las_in_kurspaket.php` |
+| Validering och inläsning | `include/kurspaket.php`, som både `public/admin/import.php` och `tools/las_in_kurspaket.php` använder |
 
 Om Stimma får en ny frågetyp, nya innehållsblock eller nya lektionsfält måste både det här
-dokumentet och valideringen i `tools/las_in_kurspaket.php` uppdateras. Annars stoppar verktyget
+dokumentet och valideringen i `include/kurspaket.php` uppdateras. Annars stoppar verktyget
 giltigt innehåll, eller släpper igenom sådant som inte visas.

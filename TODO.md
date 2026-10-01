@@ -1,6 +1,26 @@
 # Stimma - Utvecklingsuppgifter
 
 ## Pågående
+- [x] Importera kurs i admin ska förstå kurspaket (2026-10-01, beställt av Thomas) — byggt, testat, pushat 2026-10-01
+      Bakgrund: kurs 153 ("Förebygg insiderhot") lästes in via admins GAMLA import → inga frågor, ingen infosida,
+      inga bilder, alla sort_order=0 → admin visade lektionerna alfabetiskt (sort_order, title) och den ordningen
+      sparades 10:01. Claude på Thomas dator har ingen serveråtkomst, så webbimporten är enda vägen.
+  - [x] include/kurspaket.php: delad validering + inläsning (flyttad ur tools/las_in_kurspaket.php)
+  - [x] Formatet: image_file (färdig bild i ZIP:ens images/) för kurs och lektion, går före image_wish
+  - [x] admin/import.php: kurspaket (JSON eller ZIP) → kärnan; gamla exportfiler som förut. Fellista i UI. CSRF-kontroll
+        (AJAX-vägen saknade den). Uppladdade bilder städas bort om valideringen fallerar
+  - [x] tools/las_in_kurspaket.php: använder kärnan, tar även ZIP (440 → 175 rader)
+  - [x] docs/KURSFORMAT.md: avsnitt "Skapa bilderna med fal.ai" i 7A (modell, storlekar, prompt, nedladdning, direkt-API, gateway-skillnaden). Verifierat via gatewayen 2026-10-01: 1536×1024 och 1024×1024
+  - [x] docs/KURSFORMAT.md: webbimport som huvudväg (9A), CLI (9B), image_file + bildspecifikationer (7A), image_wish (7B)
+  - [x] Testat 2026-10-01: CLI felpaket (JSON med image_file, ZIP med saknade bilder) stoppas; ZIP skarpt → omslag +
+        lektionsbild + infosida + frågor + rätt ordning; webb: utan CSRF-token nekas, felpaket → fellista, JSON-paket OK,
+        gammal export (export.php) → gammal väg OK; webbläsare: röd/grön ruta, inga JS-fel. Läcka hittad och rättad:
+        exit inuti try hoppade över finally → uppackad ZIP blev kvar i /tmp vid valideringsfel. Testkurser 154–158 och
+        deras bildfiler borttagna. Exemplet i dokumentet provkört OK
+  - [x] ZIP med allt i EN undermapp godtas (kpZipRot: Windows/macOS "Komprimera"), skräpfiler ignoreras; två
+        kursmappar eller lösa filer utanför mappen avvisas. Testat 5 varianter + skarp webbimport (kurs 162, borttagen)
+  - [x] Insiderhot-kursen återimporterad av Thomas: kurs 161 komplett (omslag + 5 lektionsbilder, infosida, 15 frågor, rätt ordning)
+  - [ ] Ta bort de äldre försöken 153 (gammal import), 159 och 160 (utan bilder) — väntar på Thomas OK
 - [x] docs/KURSFORMAT.md — beskrivning av kursformatet för att Claude självständigt ska kunna skapa kurser (2026-10-01, beställt av Thomas)
   - [x] Kartlagt: courses/lessons/quiz_questions, 11 frågetyper (include/quiz.php), cleanHtml-regler, pagebreak/[video],
         AI-generatorns konventioner (ai_lesson_helper.php), bildstilar/storlekar
