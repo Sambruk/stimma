@@ -140,15 +140,14 @@ if (!$isPreviewMode) {
     }
 
     // Kurser med quiz görs i ordning: en lektion öppnas när alla tidigare
-    // lektioner är klara. Gäller även direktlänkar. Se lessonOrderBlocker().
-    if (!$isAdminOrEditor) {
-        $ordningsSparr = lessonOrderBlocker($userId, $lessonId, $lesson['course_id']);
-        if ($ordningsSparr) {
-            $_SESSION['flash_message'] = 'Kursen görs i ordning. Gör klart "' . $ordningsSparr['title'] . '" först.';
-            $_SESSION['flash_type'] = 'warning';
-            redirect('lesson.php?id=' . getSequentialEntryPageForLesson($lesson['course_id'], $ordningsSparr['id']));
-            exit;
-        }
+    // lektioner är klara. Gäller även direktlänkar och även admins/redaktörer —
+    // bara förhandsgranskningen (?preview=1) undantas. Se lessonOrderBlocker().
+    $ordningsSparr = lessonOrderBlocker($userId, $lessonId, $lesson['course_id']);
+    if ($ordningsSparr) {
+        $_SESSION['flash_message'] = 'Kursen görs i ordning. Gör klart "' . $ordningsSparr['title'] . '" först.';
+        $_SESSION['flash_type'] = 'warning';
+        redirect('lesson.php?id=' . getSequentialEntryPageForLesson($lesson['course_id'], $ordningsSparr['id']));
+        exit;
     }
 }
 
@@ -247,7 +246,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_info_page_comple
     $nextPage = findNextPageInCourse($lesson['course_id'], $lesson['sort_order']);
     echo json_encode([
         'success' => true,
-        'nextPageUrl' => $nextPage ? ('lesson.php?id=' . (int)$nextPage['id']) : ('course.php?id=' . (int)$lesson['course_id']),
+        'nextPageUrl' => $nextPage ? ('lesson.php?id=' . (int)$nextPage['id'] . ($isPreviewMode ? '&preview=1' : '')) : ('course.php?id=' . (int)$lesson['course_id']),
         'nextPageTitle' => $nextPage ? $nextPage['title'] : null,
     ]);
     exit;
@@ -856,13 +855,13 @@ function convertYoutubeUrl($url) {
                         // (isLessonAvailableForUser hanterar infosidor via rekursion).
                         // Nuvarande sida är självklart inte klickbar.
                         $isAvailable = isLessonAvailableForUser($userId, (int)$nl['id'], $lesson['course_id'])
-                            && ($isPreviewMode || userBypassesLessonOrder($userId) || !lessonOrderBlocker($userId, (int)$nl['id'], $lesson['course_id']));
+                            && ($isPreviewMode || !lessonOrderBlocker($userId, (int)$nl['id'], $lesson['course_id']));
                         $isClickable = !$isCurrent && $isAvailable;
                         $numLabel = $isInfo ? '' : ($lessonNumberByIdx[$idx] . '. ');
                     ?>
                     <li class="list-group-item py-2 px-2 small <?= $isCurrent ? 'bg-primary bg-opacity-10 border-start border-primary border-3' : ($isInfo ? 'bg-info bg-opacity-10' : '') ?>">
                         <?php if ($isClickable): ?>
-                            <a href="lesson.php?id=<?= (int)$nl['id'] ?>" class="text-decoration-none d-flex align-items-start gap-1 text-dark">
+                            <a href="lesson.php?id=<?= (int)$nl['id'] ?><?= $isPreviewMode ? '&amp;preview=1' : '' ?>" class="text-decoration-none d-flex align-items-start gap-1 text-dark">
                                 <?php if ($isDone): ?>
                                     <i class="bi bi-check-circle-fill text-success flex-shrink-0" style="line-height: 1.3;"></i>
                                 <?php elseif ($isInfo): ?>
@@ -1495,7 +1494,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             if (data.nextLesson.available) {
                                 nextLessonHtml = `
                                     <div class="d-grid">
-                                        <a href="lesson.php?id=${parseInt(data.nextLesson.id)}" class="btn btn-success btn-lg">
+                                        <a href="lesson.php?id=${parseInt(data.nextLesson.id)}<?= $isPreviewMode ? '&amp;preview=1' : '' ?>" class="btn btn-success btn-lg">
                                             <i class="bi bi-arrow-right-circle-fill me-2"></i> Fortsätt till nästa lektion: <strong>${escapeHtml(data.nextLesson.title)}</strong>
                                         </a>
                                     </div>`;
@@ -1599,7 +1598,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var fd = new FormData();
             fd.append('mark_info_page_complete', '1');
             fd.append('csrf_token', '<?= generateCsrfToken() ?>');
-            fetch('lesson.php?id=<?= (int)$lessonId ?>', { method: 'POST', body: fd })
+            fetch('lesson.php?id=<?= (int)$lessonId ?><?= $isPreviewMode ? '&preview=1' : '' ?>', { method: 'POST', body: fd })
                 .then(function(r){ return r.json(); })
                 .then(function(data){
                     if (data && data.success) {

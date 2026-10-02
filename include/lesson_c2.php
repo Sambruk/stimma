@@ -283,7 +283,7 @@ $c2Nav = function (int $i) use ($c2Knapptext, $c2KursUrl, $h): string {
             $aktuell = (int)$l['id'] === $lessonId;
             $klar = isset($c2Klara[(int)$l['id']]);
             $tillg = $aktuell || (isLessonAvailableForUser((int)$userId, (int)$l['id'], $courseId)
-                && ($isPreviewMode || userBypassesLessonOrder($userId) || !lessonOrderBlocker($userId, (int)$l['id'], $courseId)));
+                && ($isPreviewMode || !lessonOrderBlocker($userId, (int)$l['id'], $courseId)));
             $status = $aktuell ? 'Pågår' : ($klar ? 'Klar' : ($tillg ? '' : 'Låst'));
         ?>
         <li class="<?= $aktuell ? 'is-current' : '' ?><?= $klar ? ' is-done' : '' ?><?= !$tillg ? ' is-locked' : '' ?>">

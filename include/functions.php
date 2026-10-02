@@ -2898,8 +2898,8 @@ function isLessonAvailableForUser($userId, $lessonId, $courseId) {
  * är klara. Infosidor räknas inte som krav — deras klarmarkering är inte
  * pålitlig i äldre data — men de låses bakom lektionerna före dem.
  * Det man redan har gjort klart går alltid att öppna igen.
- * Admins, redaktörer och förhandsgranskning undantas av anroparen
- * (userBypassesLessonOrder).
+ * Bara förhandsgranskningen (?preview=1) undantas, av anroparen. Admins och
+ * redaktörer låses som alla andra när de går kursen (beslut 2026-10-02).
  *
  * Returnerar den första ej klara lektionen före $lessonId (id, title) — den
  * som måste göras först — eller null om lektionen är öppen.
@@ -2947,17 +2947,6 @@ function lessonOrderBlocker($userId, $lessonId, $courseId) {
         }
     }
     return null; // lektionen finns inte bland de aktiva — andra kontroller får avgöra
-}
-
-/** Admins och redaktörer får öppna lektioner i valfri ordning (för att testa och granska). */
-function userBypassesLessonOrder($userId) {
-    static $svar = [];
-    $userId = (int)$userId;
-    if (!isset($svar[$userId])) {
-        $u = queryOne("SELECT is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE id = ?", [$userId]);
-        $svar[$userId] = $u && (!empty($u['is_admin']) || !empty($u['is_editor']));
-    }
-    return $svar[$userId];
 }
 
 /**

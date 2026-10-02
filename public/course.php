@@ -321,7 +321,7 @@ if ($loggedIn) {
                     <div class="flex-grow-1">
                         <?php
                         // Kurser med quiz görs i ordning — se lessonOrderBlocker()
-                        $ordningsLast = $loggedIn && $canAccess && !$isDone && !userBypassesLessonOrder($userId)
+                        $ordningsLast = $loggedIn && $canAccess && !$isDone
                             && lessonOrderBlocker($userId, (int)$l['id'], (int)$courseId);
                         ?>
                         <?php if ($loggedIn && $canAccess && !$ordningsLast): ?>

@@ -23,6 +23,17 @@
 - [ ] Känd kant: i stegvisa kurser kan omdirigeringen landa på en lektion som väntar på schemat → startsidan
 - [x] Committad och pushad 2026-10-02
 
+### Lektionsordningen gäller även admin och redaktör (2026-10-02)
+- [x] Beslut av Thomas: bara förhandsgranskningen (?preview=1) undantas från ordningsspärren. Admins och
+      redaktörer låses som alla andra när de går kursen. Orsak: Thomas testade med sitt admin-konto, kunde hoppa
+      fritt i kurs 171 och trodde att spärren inte fungerade.
+- [x] userBypassesLessonOrder() borttagen; spärren i lesson.php, klassiska sidomenyn, C2-panelen och course.php
+- [x] Förhandsgranskningen tappade preview=1 på tre ställen (klassiska sidomenyn, quizets "Fortsätt till nästa
+      lektion", infosidans "Fortsätt" + nästa-URL) — märktes inte förut tack vare roll-undantaget, nu rättat
+- [x] Testat med tillfälliga sessioner (raderade): admin vanlig vy 1580 → 302 till 1577; admin preview 1580 → 200,
+      7 menylänkar med preview=1; admin på 1577 → 6 "Låst" i C2-panelen, inga klickbara länkar framåt; kurssidan
+      6 låsmarkeringar; deltagare med ?preview=1 → skickas till vanlig vy (preview kräver admin/redaktör)
+
 ### Nedladdningsbar instruktion "Skapa kurser med AI" (2026-10-02)
 - [x] public/admin/kursinstruktion.php — .md-nedladdning för admin och redaktör (läsbehörig får 403, testat).
       Del A: vägledning för redaktören (uppdragstext till Claude, import, granskning, bilder, aktivering).
