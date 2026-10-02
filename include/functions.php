@@ -2891,6 +2891,76 @@ function isLessonAvailableForUser($userId, $lessonId, $courseId) {
 }
 
 /**
+ * Lektionsordning i kurser med quiz (2026-10-02).
+ *
+ * I en kurs där någon aktiv lektion har quiz (quiz_questions eller den gamla
+ * quiz_question-kolumnen) öppnas en lektion först när alla TIDIGARE lektioner
+ * är klara. Infosidor räknas inte som krav — deras klarmarkering är inte
+ * pålitlig i äldre data — men de låses bakom lektionerna före dem.
+ * Det man redan har gjort klart går alltid att öppna igen.
+ * Admins, redaktörer och förhandsgranskning undantas av anroparen
+ * (userBypassesLessonOrder).
+ *
+ * Returnerar den första ej klara lektionen före $lessonId (id, title) — den
+ * som måste göras först — eller null om lektionen är öppen.
+ */
+function lessonOrderBlocker($userId, $lessonId, $courseId) {
+    static $kurser = [], $klara = [];
+    $courseId = (int)$courseId; $userId = (int)$userId; $lessonId = (int)$lessonId;
+
+    if (!isset($kurser[$courseId])) {
+        $lektioner = query(
+            "SELECT id, title, lesson_type FROM " . DB_DATABASE . ".lessons
+             WHERE course_id = ? AND status = 'active' ORDER BY sort_order ASC, id ASC",
+            [$courseId]
+        );
+        $harQuiz = (bool)queryOne(
+            "SELECT 1 AS j FROM " . DB_DATABASE . ".lessons l
+             WHERE l.course_id = ? AND l.status = 'active'
+               AND ((l.quiz_question IS NOT NULL AND l.quiz_question <> '')
+                    OR EXISTS (SELECT 1 FROM " . DB_DATABASE . ".quiz_questions q WHERE q.lesson_id = l.id))
+             LIMIT 1",
+            [$courseId]
+        );
+        $kurser[$courseId] = ['lektioner' => $lektioner, 'quiz' => $harQuiz];
+    }
+    if (!$kurser[$courseId]['quiz']) return null;
+
+    $nyckel = $userId . ':' . $courseId;
+    if (!isset($klara[$nyckel])) {
+        $klara[$nyckel] = [];
+        foreach (query(
+            "SELECT p.lesson_id FROM " . DB_DATABASE . ".progress p
+             JOIN " . DB_DATABASE . ".lessons l ON l.id = p.lesson_id
+             WHERE p.user_id = ? AND l.course_id = ? AND p.status = 'completed'",
+            [$userId, $courseId]
+        ) as $r) {
+            $klara[$nyckel][(int)$r['lesson_id']] = true;
+        }
+    }
+    if (isset($klara[$nyckel][$lessonId])) return null;
+
+    foreach ($kurser[$courseId]['lektioner'] as $l) {
+        if ((int)$l['id'] === $lessonId) return null;
+        if (($l['lesson_type'] ?? 'lesson') === 'lesson' && !isset($klara[$nyckel][(int)$l['id']])) {
+            return ['id' => (int)$l['id'], 'title' => $l['title']];
+        }
+    }
+    return null; // lektionen finns inte bland de aktiva — andra kontroller får avgöra
+}
+
+/** Admins och redaktörer får öppna lektioner i valfri ordning (för att testa och granska). */
+function userBypassesLessonOrder($userId) {
+    static $svar = [];
+    $userId = (int)$userId;
+    if (!isset($svar[$userId])) {
+        $u = queryOne("SELECT is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE id = ?", [$userId]);
+        $svar[$userId] = $u && (!empty($u['is_admin']) || !empty($u['is_editor']));
+    }
+    return $svar[$userId];
+}
+
+/**
  * Returnerar ID:t för den "ingång" (sida) som hör till en given lektion — dvs
  * den första infosidan som tillhör lektionen och ligger före den i sort_order,
  * eller själva lektionens ID om inga sådana infosidor finns. Används för att

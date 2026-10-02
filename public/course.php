@@ -319,8 +319,15 @@ if ($loggedIn) {
                         <?php endif; ?>
                     </div>
                     <div class="flex-grow-1">
-                        <?php if ($loggedIn && $canAccess): ?>
+                        <?php
+                        // Kurser med quiz görs i ordning — se lessonOrderBlocker()
+                        $ordningsLast = $loggedIn && $canAccess && !$isDone && !userBypassesLessonOrder($userId)
+                            && lessonOrderBlocker($userId, (int)$l['id'], (int)$courseId);
+                        ?>
+                        <?php if ($loggedIn && $canAccess && !$ordningsLast): ?>
                             <a href="lesson.php?id=<?= (int)$l['id'] ?>" class="text-decoration-none text-dark"><?= htmlspecialchars($l['title']) ?></a>
+                        <?php elseif ($ordningsLast): ?>
+                            <span class="text-muted" title="Låst — öppnas när lektionerna före är klara"><i class="bi bi-lock-fill me-1" aria-hidden="true"></i><span class="visually-hidden">Låst: </span><?= htmlspecialchars($l['title']) ?></span>
                         <?php else: ?>
                             <span class="text-dark"><?= htmlspecialchars($l['title']) ?></span>
                         <?php endif; ?>

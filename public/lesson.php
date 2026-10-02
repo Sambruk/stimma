@@ -138,6 +138,18 @@ if (!$isPreviewMode) {
         redirect('index.php');
         exit;
     }
+
+    // Kurser med quiz görs i ordning: en lektion öppnas när alla tidigare
+    // lektioner är klara. Gäller även direktlänkar. Se lessonOrderBlocker().
+    if (!$isAdminOrEditor) {
+        $ordningsSparr = lessonOrderBlocker($userId, $lessonId, $lesson['course_id']);
+        if ($ordningsSparr) {
+            $_SESSION['flash_message'] = 'Kursen görs i ordning. Gör klart "' . $ordningsSparr['title'] . '" först.';
+            $_SESSION['flash_type'] = 'warning';
+            redirect('lesson.php?id=' . getSequentialEntryPageForLesson($lesson['course_id'], $ordningsSparr['id']));
+            exit;
+        }
+    }
 }
 
 // Auto-enroll när användaren öppnar en lektion (skip in preview mode).
@@ -843,7 +855,8 @@ function convertYoutubeUrl($url) {
                         // Regel: klickbar om den är tillgänglig via schedule-regler
                         // (isLessonAvailableForUser hanterar infosidor via rekursion).
                         // Nuvarande sida är självklart inte klickbar.
-                        $isAvailable = isLessonAvailableForUser($userId, (int)$nl['id'], $lesson['course_id']);
+                        $isAvailable = isLessonAvailableForUser($userId, (int)$nl['id'], $lesson['course_id'])
+                            && ($isPreviewMode || userBypassesLessonOrder($userId) || !lessonOrderBlocker($userId, (int)$nl['id'], $lesson['course_id']));
                         $isClickable = !$isCurrent && $isAvailable;
                         $numLabel = $isInfo ? '' : ($lessonNumberByIdx[$idx] . '. ');
                     ?>
