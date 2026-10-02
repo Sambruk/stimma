@@ -32,6 +32,7 @@
     current = idx;
     if (counter) counter.textContent = (idx + 1) + '/' + pages.length;
     refreshPrimary();
+    alignSide();
     window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
     if (focus !== false) {
       var h = pages[idx].querySelector('.sl-title');
@@ -44,6 +45,7 @@
     pages.forEach(function (p) { p.hidden = true; });
     fillDone();
     doneCard.hidden = false;
+    alignSide();
     if (counter) counter.textContent = 'klar';
     window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
     var h = doneCard.querySelector('.sl-title');
@@ -104,7 +106,7 @@
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     var t = e.target;
-    if (t && (t.closest('input, textarea, select, [contenteditable="true"], dialog[open]'))) return;
+    if (t && (t.closest('input, textarea, select, [contenteditable="true"], dialog[open], .sl-side'))) return;
     if (doneCard && !doneCard.hidden) return;
     if (e.key === 'ArrowLeft') { if (current > 0) { e.preventDefault(); show(current - 1); } return; }
     var btn = primary();
@@ -322,12 +324,84 @@
 
   // ------------------------------------------------------------- innehåll
 
-  var toc = document.getElementById('slToc');
+  // Sidopanel till vänster om kortet. Kortet behåller alltid sin storlek:
+  //   is-docked  — det finns plats bredvid kortet; panelen står i flödet och
+  //                valet (öppen/stängd) sparas mellan lektionerna
+  //   is-overlay — för smalt; panelen glider in över innehållet och stängs
+  //                med Esc, klick utanför eller ett val i listan
+  var stage = document.getElementById('slStage');
+  var side = document.getElementById('slSide');
   var tocBtn = document.querySelector('[data-sl-toc]');
-  if (toc && tocBtn && typeof toc.showModal === 'function') {
-    tocBtn.addEventListener('click', function () { toc.showModal(); });
-    toc.querySelector('[data-sl-toc-close]').addEventListener('click', function () { toc.close(); tocBtn.focus(); });
-    toc.addEventListener('click', function (e) { if (e.target === toc) toc.close(); });
+  var backdrop = document.querySelector('[data-sl-backdrop]');
+  var SIDE_KEY = 'stimma-c2-innehall';
+  var docked = null;
+
+  function sparat() {
+    try { return localStorage.getItem(SIDE_KEY); } catch (e) { return null; }
+  }
+  function spara(v) {
+    try { localStorage.setItem(SIDE_KEY, v ? 'oppen' : 'stangd'); } catch (e) { /* privat läge */ }
+  }
+  // Panelens bredd anpassas efter platsen bredvid kortet (220–300 px). Får den
+  // inte plats med minst 220 px läggs den över innehållet i stället.
+  var SIDE_MIN = 220, SIDE_MAX = 300;
+  function fitsBeside() {
+    if (window.matchMedia('(max-width: 767.98px)').matches) return false;
+    var cs = getComputedStyle(stage);
+    var cardW = parseFloat(getComputedStyle(main).flexBasis) || 1100;
+    // 2 × 16 px: scenens sidomarginal i läget is-docked (se CSS)
+    var room = document.documentElement.clientWidth - cardW - parseFloat(cs.getPropertyValue('--sl-side-gap')) - 32;
+    if (room < SIDE_MIN) return false;
+    stage.style.setProperty('--sl-side-w', Math.min(room, SIDE_MAX) + 'px');
+    return true;
+  }
+  function setSide(open, opts) {
+    opts = opts || {};
+    side.hidden = !open;
+    tocBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    backdrop.hidden = !(open && !docked);
+    if (docked && opts.save) spara(open);
+    if (open && !docked) {
+      var cur = side.querySelector('.is-current > span, a');
+      var closeBtn = side.querySelector('[data-sl-toc-close]');
+      (closeBtn || cur).focus();
+    }
+    if (!open && opts.returnFocus) tocBtn.focus();
+    alignSide();
+  }
+  // Panelen linjerar med kortet: samma överkant (kortet centreras lodrätt på
+  // höga skärmar, och meddelanden kan ligga ovanför det) och högst kortets höjd.
+  function alignSide() {
+    var panel = side && side.querySelector('.sl-side-panel');
+    if (!panel) return;
+    panel.style.marginTop = ''; panel.style.maxHeight = '';
+    if (!docked || side.hidden) return;
+    var card = pages.filter(function (p) { return !p.hidden; })[0] || (doneCard && !doneCard.hidden ? doneCard : null);
+    if (!card) return;
+    // offsetTop, inte getBoundingClientRect: kortet tonar in med en liten
+    // förflyttning (sl-fade), och den ska inte mätas in i linjeringen.
+    var pTop = side.offsetTop + (parseFloat(getComputedStyle(side).paddingTop) || 0);
+    panel.style.marginTop = Math.max(0, card.offsetTop - pTop) + 'px';
+    panel.style.maxHeight = 'min(' + card.offsetHeight + 'px, calc(100vh - 32px))';
+  }
+  function placeSide() {
+    var nowDocked = fitsBeside();
+    if (nowDocked === docked) return;
+    docked = nowDocked;
+    stage.classList.toggle('is-docked', docked);
+    stage.classList.toggle('is-overlay', !docked);
+    // Bredvid: öppen om man inte själv har stängt den. Över innehållet: stängd.
+    setSide(docked ? sparat() !== 'stangd' : false);
+  }
+  if (stage && side && tocBtn && backdrop) {
+    placeSide();
+    window.addEventListener('resize', function () { placeSide(); alignSide(); });
+    tocBtn.addEventListener('click', function () { setSide(side.hidden, { save: true }); });
+    side.querySelector('[data-sl-toc-close]').addEventListener('click', function () { setSide(false, { save: true, returnFocus: true }); });
+    backdrop.addEventListener('click', function () { setSide(false, { returnFocus: true }); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !docked && !side.hidden) { e.preventDefault(); setSide(false, { returnFocus: true }); }
+    });
   } else if (tocBtn) {
     tocBtn.hidden = true;
   }
@@ -355,6 +429,7 @@
     // Är kortet högre än fönstret scrollar sidan som vanligt (enligt specen).
     var h = Math.min(tallest, 900);
     pages.forEach(function (p) { p.style.minHeight = h + 'px'; });
+    alignSide();
   }
   var eqTimer;
   function equalizeSoon() { clearTimeout(eqTimer); eqTimer = setTimeout(equalize, 120); }

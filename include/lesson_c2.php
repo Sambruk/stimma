@@ -210,7 +210,7 @@ $c2Nav = function (int $i) use ($c2Knapptext, $c2KursUrl, $h): string {
     <link rel="icon" href="favicon.ico">
     <link href="fonts/fonts.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
-    <link href="include/css/stimma-lesson-c2.css?v=20261001h" rel="stylesheet">
+    <link href="include/css/stimma-lesson-c2.css?v=20261002d" rel="stylesheet">
 </head>
 <body class="stimma-lesson">
 
@@ -242,6 +242,7 @@ $c2Nav = function (int $i) use ($c2Knapptext, $c2KursUrl, $h): string {
 
 <header class="sl-topbar">
     <?php $c2OrgLogga = getHeaderOrganizationIcon($userId); ?>
+    <div class="sl-topbar-left">
     <a class="sl-logo" href="index.php">
         <?php if ($c2OrgLogga): ?>
         <img src="upload/org_icons/<?= $h(basename($c2OrgLogga['url'])) ?>" alt="<?= $h($c2OrgLogga['name']) ?> — till översikten">
@@ -249,6 +250,10 @@ $c2Nav = function (int $i) use ($c2Knapptext, $c2KursUrl, $h): string {
         <img src="images/stimma-logo-transparent.png" alt="Stimma — till översikten">
         <?php endif; ?>
     </a>
+        <button type="button" class="sl-topbtn" data-sl-toc aria-controls="slSide" aria-expanded="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h9"/></svg><span>Innehåll</span>
+        </button>
+    </div>
     <p class="sl-where">
         <span class="sl-course"><?= $h($lesson['course_title']) ?></span>
         <span class="sl-sep" aria-hidden="true">·</span>
@@ -256,14 +261,45 @@ $c2Nav = function (int $i) use ($c2Knapptext, $c2KursUrl, $h): string {
         <span class="sl-lesson sl-narrow"><?= $h($c2KortEtikett) ?> · <span data-sl-counter>1/<?= $c2Antal ?></span></span>
     </p>
     <div class="sl-topbar-actions">
-        <button type="button" class="sl-topbtn" data-sl-toc aria-haspopup="dialog">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h9"/></svg><span>Innehåll</span>
-        </button>
         <a class="sl-topbtn" href="<?= $h($c2KursUrl) ?>">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg><span>Stäng</span>
         </a>
     </div>
 </header>
+
+<div class="sl-stage" id="slStage">
+<aside class="sl-side" id="slSide" aria-labelledby="slTocRubrik" hidden>
+<div class="sl-side-panel">
+    <div class="sl-toc-head">
+        <h2 id="slTocRubrik">Innehåll</h2>
+        <button type="button" class="sl-topbtn" data-sl-toc-close aria-label="Dölj innehållsförteckningen">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+    </div>
+    <ol class="sl-toc-list">
+        <?php $nr = 0; foreach ($c2Alla as $l):
+            $info = ($l['lesson_type'] ?? 'lesson') === 'info_page';
+            if (!$info) $nr++;
+            $aktuell = (int)$l['id'] === $lessonId;
+            $klar = isset($c2Klara[(int)$l['id']]);
+            $tillg = $aktuell || (isLessonAvailableForUser((int)$userId, (int)$l['id'], $courseId)
+                && ($isPreviewMode || userBypassesLessonOrder($userId) || !lessonOrderBlocker($userId, (int)$l['id'], $courseId)));
+            $status = $aktuell ? 'Pågår' : ($klar ? 'Klar' : ($tillg ? '' : 'Låst'));
+        ?>
+        <li class="<?= $aktuell ? 'is-current' : '' ?><?= $klar ? ' is-done' : '' ?><?= !$tillg ? ' is-locked' : '' ?>">
+            <?php if ($tillg && !$aktuell): ?>
+            <a href="lesson.php?id=<?= (int)$l['id'] ?><?= $isPreviewMode ? '&amp;preview=1' : '' ?>">
+            <?php else: ?><span<?= $aktuell ? ' aria-current="page"' : '' ?>><?php endif; ?>
+                <span class="sl-toc-nr" aria-hidden="true"><?= $info ? 'i' : $nr ?></span>
+                <span class="sl-toc-title"><?= $info ? '' : '<span class="sl-visually-hidden">Lektion ' . $nr . ': </span>' ?><?= $h($l['title']) ?></span>
+                <?php if ($status): ?><span class="sl-toc-status"><?= $status ?></span><?php endif; ?>
+            <?= ($tillg && !$aktuell) ? '</a>' : '</span>' ?>
+        </li>
+        <?php endforeach; ?>
+    </ol>
+</div>
+</aside>
+<div class="sl-backdrop" data-sl-backdrop hidden></div>
 
 <main class="sl-main <?= $c2Bred ? 'sl-lesson--wide' : 'sl-lesson--narrow' ?>" id="slMain"
       data-lesson-id="<?= (int)$lessonId ?>"
@@ -381,35 +417,8 @@ $c2Nav = function (int $i) use ($c2Knapptext, $c2KursUrl, $h): string {
 
 <p class="sl-keyhint" aria-hidden="true">Bläddra med piltangenterna ← →</p>
 </main>
+</div>
 
-<dialog class="sl-toc" id="slToc" aria-labelledby="slTocRubrik">
-    <div class="sl-toc-head">
-        <h2 id="slTocRubrik">Innehåll</h2>
-        <button type="button" class="sl-topbtn" data-sl-toc-close aria-label="Stäng innehållsförteckningen">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
-        </button>
-    </div>
-    <ol class="sl-toc-list">
-        <?php $nr = 0; foreach ($c2Alla as $l):
-            $info = ($l['lesson_type'] ?? 'lesson') === 'info_page';
-            if (!$info) $nr++;
-            $aktuell = (int)$l['id'] === $lessonId;
-            $klar = isset($c2Klara[(int)$l['id']]);
-            $tillg = $aktuell || isLessonAvailableForUser((int)$userId, (int)$l['id'], $courseId);
-            $status = $aktuell ? 'Pågår' : ($klar ? 'Klar' : ($tillg ? '' : 'Låst'));
-        ?>
-        <li class="<?= $aktuell ? 'is-current' : '' ?><?= $klar ? ' is-done' : '' ?><?= !$tillg ? ' is-locked' : '' ?>">
-            <?php if ($tillg && !$aktuell): ?>
-            <a href="lesson.php?id=<?= (int)$l['id'] ?><?= $isPreviewMode ? '&amp;preview=1' : '' ?>">
-            <?php else: ?><span<?= $aktuell ? ' aria-current="page"' : '' ?>><?php endif; ?>
-                <span class="sl-toc-nr" aria-hidden="true"><?= $info ? 'i' : $nr ?></span>
-                <span class="sl-toc-title"><?= $info ? '' : '<span class="sl-visually-hidden">Lektion ' . $nr . ': </span>' ?><?= $h($l['title']) ?></span>
-                <?php if ($status): ?><span class="sl-toc-status"><?= $status ?></span><?php endif; ?>
-            <?= ($tillg && !$aktuell) ? '</a>' : '</span>' ?>
-        </li>
-        <?php endforeach; ?>
-    </ol>
-</dialog>
 
 <script>
 window.STIMMA_LESSON = <?= json_encode([
@@ -428,6 +437,6 @@ window.STIMMA_LESSON = <?= json_encode([
 ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>;
 </script>
 <script src="include/js/quiz-client.js?v=20261001c" defer></script>
-<script src="include/js/lesson-c2.js?v=20261001f" defer></script>
+<script src="include/js/lesson-c2.js?v=20261002e" defer></script>
 </body>
 </html>
