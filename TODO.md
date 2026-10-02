@@ -2,6 +2,27 @@
 
 ## Pågående
 
+### Bilder till hela kursen + panelens linjering (2026-10-02)
+- [x] C2: innehållspanelen linjerar med kortets överkant (låg ovanför på höga skärmar). Scenen centrerar panel+lektion
+      som en rad (flex-wrap + align-content), alignSide() mäter med offsetTop (kortets intoning sl-fade flyttar 4 px)
+- [x] Admin → Lektioner → "Generera bilder": ajax/plan_course_images.php föreslår ett eget motiv per lektion (ett
+      textanrop, varierar miljö/avstånd/antal personer/ljus), redaktören granskar/ändrar, sedan genereras bilderna två
+      åt gången via generate_lesson_image.php / generate_course_image.php (samma kvot, loggning, kursstil)
+- [x] aiImageBuildPrompt: med önskemål styr motivet bildutsnittet i stället för fast "centred"
+- [x] Testat t.o.m. motivförslagen på kurs 161 (6 tydligt olika motiv). Själva bildgenereringen ej körd skarpt (kostar)
+- [x] Committad och pushad 2026-10-02
+
+### Kurser med quiz görs i ordning (2026-10-02)
+- [x] lessonOrderBlocker() + userBypassesLessonOrder() i include/functions.php: i kurs med quiz öppnas en lektion
+      när alla tidigare LEKTIONER är klara (infosidor inget krav — 9 fall i datan där senare lektion är klar men
+      infosidan före inte är markerad). Klara lektioner alltid öppna. Admin/redaktör/förhandsgranskning undantas.
+- [x] lesson.php: spärr även för direktlänkar → omdirigering till första ej klara lektionen (dess ingångssida) med meddelande
+- [x] Låsmarkering: klassiska sidomenyn i lesson.php, lektionslistan i course.php, innehållspanelen i C2
+- [x] Testat som deltagare 172 (kurs 65) och 132 (kurs 25, stegvis): spärr, omdirigering, klara lektioner öppna,
+      inga skrivningar i deras data. 29 av 32 aktiva kurser har quiz; 10 deltagare har redan hoppat i 3 kurser.
+- [ ] Känd kant: i stegvisa kurser kan omdirigeringen landa på en lektion som väntar på schemat → startsidan
+- [x] Committad och pushad 2026-10-02
+
 ### Nedladdningsbar instruktion "Skapa kurser med AI" (2026-10-02)
 - [x] public/admin/kursinstruktion.php — .md-nedladdning för admin och redaktör (läsbehörig får 403, testat).
       Del A: vägledning för redaktören (uppdragstext till Claude, import, granskning, bilder, aktivering).
@@ -69,6 +90,8 @@
         getHeaderOrganizationIcon() (Sambruk för sambruk.se), annars Stimmas riktiga logga
   - [x] Fast kortstorlek inom en lektion: bredd per lektion (sl-lesson--wide/narrow), lika höjd via equalize() (mäts på plats, tak 900 px), "Hoppa över frågan" ovanför knapparna, enhetlig bottenpadding — en kortstorlek och en knapposition per lektion på 1440 och 1024 (mobil: klistrad knapprad, höjden följer innehållet)
   - [x] Committad och pushad 2026-10-01 (0ec5c1b), docs/stimma-c2.zip medvetet utanför repot
+  - [x] Innehållsförteckningen som nedfällbar panel till vänster om kortet (2026-10-02): bredvid kortet när det finns plats (panel 220–300 px, valet sparas i localStorage), annars över innehållet (Esc/klick utanför stänger). Innehåll-knappen flyttad till vänster i toppraden. Kortets storlek oförändrad i alla lägen (uppmätt 1536/1440/1366/1280/1024/390)
+  - [x] Committad och pushad 2026-10-02
   - Kvar/kända begränsningar: Lektion utan quiz kan inte bli klar (som förut) → C2 visar "Tillbaka till kursen".
     background_color per lektion används inte i C2
 - [ ] (Låt bli tills vidare, beslut 2026-10-01) 210 lektioner med BARA legacy-quizfråga visas utan quiz (13 i aktiva

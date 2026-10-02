@@ -133,6 +133,11 @@ require_once 'include/header.php';
     <div class="card-header py-3 d-flex justify-content-between align-items-center">
         <h6 class="m-0 font-weight-bold text-muted">Lektioner</h6>
         <div class="d-flex gap-2">
+            <?php if (userCanModifyCourse($course)): ?>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#kursBilderModal">
+                <i class="bi bi-images"></i> Generera bilder
+            </button>
+            <?php endif; ?>
             <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#aiLessonModal">
                 <i class="bi bi-stars"></i> AI-generera lektion
             </button>
@@ -534,6 +539,193 @@ $parentCandidates = query(
     });
 })();
 </script>
+
+
+<?php if (userCanModifyCourse($course)):
+// Bilder till hela kursen: motivförslag (plan_course_images.php) → granska → generera
+// en i taget via de vanliga bildändpunkterna (samma kvot, loggning och kursstil).
+require_once __DIR__ . '/../../include/ai_image_helper.php';
+require_once __DIR__ . '/../../include/ai_quota.php';
+$kbLektioner = array_values(array_filter($lessons, fn($l) => ($l['lesson_type'] ?? 'lesson') === 'lesson'));
+$kbSaknas = count(array_filter($kbLektioner, fn($l) => trim((string)$l['image_url']) === ''));
+$kbStil = aiImageStyles()[aiImageStyleKey($course['image_style'] ?? '')]['namn'];
+?>
+<div class="modal fade" id="kursBilderModal" tabindex="-1" aria-labelledby="kursBilderRubrik" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="kursBilderRubrik"><i class="bi bi-images me-1" aria-hidden="true"></i>Generera bilder till kursen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Stäng"></button>
+            </div>
+            <div class="modal-body">
+                <div id="kbSteg1">
+                    <p>Varje lektion får ett <strong>eget motiv</strong> utifrån sitt innehåll, så att bilderna skiljer sig åt.
+                       Alla bilder görs i kursens bildstil: <strong><?= htmlspecialchars($kbStil) ?></strong>
+                       <span class="text-muted small">(ändras vid kursbilden under Redigera kurs)</span>.</p>
+                    <fieldset class="mb-3">
+                        <legend class="fs-6 fw-semibold">Vilka lektioner?</legend>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="kbLage" id="kbSaknas" value="saknas" <?= $kbSaknas > 0 ? 'checked' : 'disabled' ?>>
+                            <label class="form-check-label" for="kbSaknas">Lektioner som saknar bild (<?= $kbSaknas ?>)</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="kbLage" id="kbAlla" value="alla" <?= $kbSaknas > 0 ? '' : 'checked' ?>>
+                            <label class="form-check-label" for="kbAlla">Alla lektioner (<?= count($kbLektioner) ?>) — befintliga bilder ersätts</label>
+                        </div>
+                    </fieldset>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="kbOmslag" <?= trim((string)$course['image_url']) === '' ? 'checked' : '' ?>>
+                        <label class="form-check-label" for="kbOmslag">Även kursomslaget<?= trim((string)$course['image_url']) !== '' ? ' (ersätter nuvarande)' : '' ?></label>
+                    </div>
+                    <p class="text-muted small mb-0">Infosidor får ingen bild. Först föreslås motiven — du kan ändra dem innan något kostar pengar.</p>
+                </div>
+
+                <div id="kbSteg2" hidden>
+                    <p class="mb-2">Granska och ändra motiven. Bocka ur det du inte vill generera. Motivet beskriver bara <em>vad</em> bilden visar; stilen läggs till automatiskt.</p>
+                    <div id="kbLista"></div>
+                    <p class="small text-muted mt-2 mb-0" id="kbKostnad"></p>
+                </div>
+
+                <div id="kbStatus" class="mt-3" role="status" aria-live="polite"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="kbStang">Avbryt</button>
+                <button type="button" class="btn btn-primary" id="kbForeslaBtn"><i class="bi bi-lightbulb me-1" aria-hidden="true"></i>Föreslå motiv</button>
+                <button type="button" class="btn btn-primary" id="kbGenereraBtn" hidden><i class="bi bi-stars me-1" aria-hidden="true"></i><span>Generera</span></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var COURSE = <?= json_encode(['id' => (int)$courseId, 'title' => $course['title'], 'description' => (string)($course['description'] ?? ''), 'style' => aiImageStyleKey($course['image_style'] ?? '')], JSON_UNESCAPED_UNICODE) ?>;
+    var modal = document.getElementById('kursBilderModal');
+    var steg1 = document.getElementById('kbSteg1'), steg2 = document.getElementById('kbSteg2');
+    var lista = document.getElementById('kbLista'), status = document.getElementById('kbStatus');
+    var foreslaBtn = document.getElementById('kbForeslaBtn'), genBtn = document.getElementById('kbGenereraBtn');
+    var stangBtn = document.getElementById('kbStang');
+    var plan = null, igang = false, avbryt = false, nagotKlart = false;
+
+    function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+    function kostnad(c) {
+        if (c == null) return '';
+        return c < 10 ? c.toFixed(1).replace('.', ',') + ' US-cent' : '$' + (c / 100).toFixed(2).replace('.', ',');
+    }
+    function post(url, data) {
+        var fd = new FormData();
+        Object.keys(data).forEach(function (k) { fd.append(k, data[k]); });
+        fd.append('csrf_token', CSRF_TOKEN);
+        return fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' }).then(function (r) { return r.json(); });
+    }
+
+    function rad(nyckel, rubrik, motiv, harBild) {
+        var id = 'kbM-' + nyckel;
+        return '<div class="border rounded p-2 mb-2 kb-rad" data-key="' + esc(nyckel) + '" data-title="' + esc(rubrik) + '">'
+            + '<div class="d-flex gap-2 align-items-start">'
+            + '<input class="form-check-input mt-1 kb-med" type="checkbox" checked aria-label="Generera bild för ' + esc(rubrik) + '">'
+            + '<div class="flex-grow-1"><label for="' + id + '" class="form-label small fw-semibold mb-1">' + esc(rubrik)
+            + (harBild ? ' <span class="badge bg-warning text-dark">ersätter bild</span>' : '') + '</label>'
+            + '<textarea class="form-control form-control-sm kb-motiv" id="' + id + '" rows="2" maxlength="300">' + esc(motiv) + '</textarea>'
+            + '<div class="small mt-1 kb-resultat"></div></div>'
+            + '<div class="kb-tumme flex-shrink-0" style="width:72px;height:72px;"></div>'
+            + '</div></div>';
+    }
+    function uppdateraKostnad() {
+        if (!plan) return;
+        var rader = lista.querySelectorAll('.kb-rad'), n = 0, cent = 0, omslag = false;
+        rader.forEach(function (r) {
+            if (!r.querySelector('.kb-med').checked) return;
+            n++;
+            if (r.dataset.key === 'omslag') { omslag = true; cent += plan.cost_cover_cents || 0; } else { cent += plan.cost_lesson_cents || 0; }
+        });
+        genBtn.querySelector('span').textContent = 'Generera ' + n + ' bild' + (n === 1 ? '' : 'er');
+        genBtn.disabled = n === 0;
+        document.getElementById('kbKostnad').textContent = n ? ('Uppskattad kostnad: ca ' + kostnad(cent)
+            + ' totalt. Varje bild tar 15–60 sekunder; två görs åt gången. Låt fönstret vara öppet tills det är klart.') : '';
+    }
+
+    foreslaBtn.addEventListener('click', function () {
+        var lage = (modal.querySelector('input[name="kbLage"]:checked') || {}).value || 'saknas';
+        var omslag = document.getElementById('kbOmslag').checked;
+        foreslaBtn.disabled = true;
+        status.className = 'mt-3 text-muted';
+        status.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Läser lektionerna och föreslår motiv…';
+        post('ajax/plan_course_images.php', { course_id: COURSE.id, mode: lage, include_cover: omslag ? '1' : '' })
+            .then(function (d) {
+                if (!d || !d.success) throw new Error(d && d.message ? d.message : 'Okänt fel');
+                plan = d;
+                var html = '';
+                if (d.cover) html += rad('omslag', 'Kursomslag', d.cover.motif, d.cover.has_image);
+                d.lessons.forEach(function (l) { html += rad(String(l.id), l.title, l.motif, l.has_image); });
+                lista.innerHTML = html;
+                steg1.hidden = true; steg2.hidden = false;
+                foreslaBtn.hidden = true; genBtn.hidden = false;
+                status.className = 'mt-3'; status.textContent = '';
+                uppdateraKostnad();
+            })
+            .catch(function (e) {
+                status.className = 'mt-3 alert alert-danger';
+                status.textContent = e.message;
+                foreslaBtn.disabled = false;
+            });
+    });
+    lista.addEventListener('change', function (e) { if (e.target.classList.contains('kb-med')) uppdateraKostnad(); });
+
+    function generera(r) {
+        var nyckel = r.dataset.key, motiv = r.querySelector('.kb-motiv').value.trim();
+        var res = r.querySelector('.kb-resultat'), tumme = r.querySelector('.kb-tumme');
+        res.className = 'small mt-1 kb-resultat text-muted';
+        res.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Genererar…';
+        var anrop = nyckel === 'omslag'
+            ? post('ajax/generate_course_image.php', { course_id: COURSE.id, course_title: COURSE.title, course_description: COURSE.description, image_style: COURSE.style, image_wish: motiv })
+            : post('ajax/generate_lesson_image.php', { lesson_id: nyckel, lesson_title: r.dataset.title, course_name: COURSE.title, image_wish: motiv });
+        return anrop.then(function (d) {
+            if (!d || !d.success) throw new Error(d && d.message ? d.message : 'Okänt fel');
+            nagotKlart = true;
+            res.className = 'small mt-1 kb-resultat text-success';
+            res.innerHTML = '<i class="bi bi-check-circle me-1" aria-hidden="true"></i>Klar' + (d.cost_text ? ' (' + esc(d.cost_text) + ')' : '');
+            tumme.innerHTML = '<img src="../upload/' + encodeURIComponent(String(d.image_url).split('/').pop()) + '" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:6px;">';
+        }).catch(function (e) {
+            res.className = 'small mt-1 kb-resultat text-danger';
+            // Ett avbrutet svar betyder ofta att bilden ändå blev klar (lång generering).
+            res.textContent = (e instanceof TypeError)
+                ? 'Svaret kom inte fram — bilden kan ändå ha skapats. Kontrollera lektionen innan du försöker igen.'
+                : 'Misslyckades: ' + e.message;
+        });
+    }
+
+    genBtn.addEventListener('click', function () {
+        var ko = Array.prototype.filter.call(lista.querySelectorAll('.kb-rad'), function (r) { return r.querySelector('.kb-med').checked; });
+        if (!ko.length) return;
+        igang = true; avbryt = false;
+        genBtn.disabled = true;
+        lista.querySelectorAll('textarea, .kb-med').forEach(function (el) { el.disabled = true; });
+        stangBtn.textContent = 'Stoppa';
+        status.className = 'mt-3 text-muted';
+        var klara = 0, totalt = ko.length;
+        status.textContent = '0 av ' + totalt + ' klara…';
+        function nasta() {
+            if (avbryt || !ko.length) return Promise.resolve();
+            var r = ko.shift();
+            return generera(r).then(function () { klara++; status.textContent = klara + ' av ' + totalt + ' klara…'; return nasta(); });
+        }
+        Promise.all([nasta(), nasta()]).then(function () {
+            igang = false;
+            status.className = 'mt-3 alert ' + (avbryt ? 'alert-warning' : 'alert-success');
+            status.textContent = avbryt ? 'Stoppad. Bilder som redan var påbörjade har gjorts klart.' : 'Klart. Stäng fönstret för att se bilderna i listan.';
+            stangBtn.textContent = 'Stäng'; stangBtn.disabled = false;
+        });
+    });
+
+    stangBtn.addEventListener('click', function (e) {
+        if (igang) { e.preventDefault(); e.stopPropagation(); avbryt = true; stangBtn.disabled = true; stangBtn.textContent = 'Stoppar efter pågående…'; }
+    }, true);
+    modal.addEventListener('hide.bs.modal', function (e) { if (igang) e.preventDefault(); });
+    modal.addEventListener('hidden.bs.modal', function () { if (nagotKlart) window.location.reload(); });
+})();
+</script>
+<?php endif; ?>
 
 <?php
 // Inkludera footer

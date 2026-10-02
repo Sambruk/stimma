@@ -104,7 +104,11 @@ function aiImageBuildPrompt($typ, $titel, $sammanhang = '', $style = 'illustrati
     if ($typ === 'lektion') {
         $inledning = "Illustration for a lesson called '{$titel}'"
                    . ($sammanhang ? ", part of a course about '{$sammanhang}'" : '') . '.';
-        $komposition = " Centred, uncluttered composition with generous space around the subject.";
+        // Med ett önskemål styr det bildutsnittet (närbild, miljöbild …). Ett fast
+        // "centred" gjorde annars kursens lektionsbilder nästan likadana.
+        $komposition = $onskemal !== ''
+            ? " Uncluttered composition; follow the framing and distance described above."
+            : " Centred, uncluttered composition with generous space around the subject.";
     } else {
         $inledning = "Cover illustration for a course called '{$titel}'"
                    . ($sammanhang ? ". The course is about: '{$sammanhang}'" : '') . '.';
