@@ -1,6 +1,27 @@
 # Stimma - Utvecklingsuppgifter
 
 ## Pågående
+
+### Nedladdningsbar instruktion "Skapa kurser med AI" (2026-10-02)
+- [x] public/admin/kursinstruktion.php — .md-nedladdning för admin och redaktör (läsbehörig får 403, testat).
+      Del A: vägledning för redaktören (uppdragstext till Claude, import, granskning, bilder, aktivering).
+      Del B: docs/KURSFORMAT.md utan avsnitt markerade <!-- intern --> … <!-- /intern --> (kommandoradsverktyget,
+      gatewayen, källkodsbilagan). Formatet underhålls alltså bara i KURSFORMAT.md.
+- [x] Markerat interna avsnitt i docs/KURSFORMAT.md; "en admin" → "redaktör eller admin" där redaktörer kan göra det själva
+- [x] Ruta med nedladdningsknapp överst på Admin → Importera kurs; formattexten länkar dit i stället för docs/KURSFORMAT.md
+- [x] Committad och pushad 2026-10-02
+
+### "Kopiera kursen till min organisation" gjorde ingenting (2026-10-02)
+- [x] Orsak: kurstiteln skrevs med json_encode rakt in i onclick="…" — dubbelfnuttarna bröt attributet
+      ("Unexpected end of input"), funktionen anropades aldrig. Samma fel på raderingsknappen när kursen
+      ingår i en lärväg. Båda escapas nu med htmlspecialchars (public/admin/courses.php).
+- [x] Kopian tappade innehåll: quiz_questions (69 kurser har sådana), infosidornas lektionstyp och koppling
+      (belongs_to_lesson_id), videoposition, AI-chatt, quiztyp, svar 4–5, bildalternativ. copy_course.php
+      kopierar nu alla lektionskolumner, frågorna, resurser och pekar om infosidorna. Även image_style och
+      allow_quiz_retry på kursen.
+- [x] Testat: kurs 147 (infosidor bundna till lektion), 25 och 161 i webbläsaren — lika många lektioner och
+      frågor som källan. Testkopior 163–165 och deras kopierade mediafiler raderade.
+- [x] Committad och pushad 2026-10-02 (bara knapp-hunken i courses.php, inte SCORM-ändringen)
 - [ ] Ny lektionsvy C2 (kortformat) bakom en växel — underlag docs/stimma-c2.zip (SPEC.md, tokens, 5 mockuper) (2026-10-01)
   - [x] Steg 1 (spec): kodbasen utforskad och sammanfattad för Thomas
         lesson.php 1 883 rader: PHP-logik/POST-handlers (rad 1–674) → header.php (sidomeny, Google Fonts) →
@@ -47,7 +68,7 @@
   - [x] Logga: den påhittade trädloggan (från mockupen) ersatt med organisationens riktiga logga via
         getHeaderOrganizationIcon() (Sambruk för sambruk.se), annars Stimmas riktiga logga
   - [x] Fast kortstorlek inom en lektion: bredd per lektion (sl-lesson--wide/narrow), lika höjd via equalize() (mäts på plats, tak 900 px), "Hoppa över frågan" ovanför knapparna, enhetlig bottenpadding — en kortstorlek och en knapposition per lektion på 1440 och 1024 (mobil: klistrad knapprad, höjden följer innehållet)
-  - [ ] Committa och pusha (inväntar Thomas)
+  - [x] Committad och pushad 2026-10-01 (0ec5c1b), docs/stimma-c2.zip medvetet utanför repot
   - Kvar/kända begränsningar: Lektion utan quiz kan inte bli klar (som förut) → C2 visar "Tillbaka till kursen".
     background_color per lektion används inte i C2
 - [ ] (Låt bli tills vidare, beslut 2026-10-01) 210 lektioner med BARA legacy-quizfråga visas utan quiz (13 i aktiva

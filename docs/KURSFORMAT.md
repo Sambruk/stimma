@@ -4,8 +4,8 @@ Det här dokumentet beskriver hur en kurs i Stimma är uppbyggd och hur en ny ku
 systemet. Det är skrivet för att Claude ska kunna skapa kompletta kurser **på egen hand** utifrån en
 kort beskrivning, och själv besluta om struktur, innehåll, bilder och quiz.
 
-Allt här är kontrollerat mot koden och databasen 2026-10-01. Båda inläsningsvägarna i avsnitt 9 är
-testade skarpt, och alla frågetyper i avsnitt 6 rättas korrekt av Stimmas egen rättningsfunktion.
+Allt här är kontrollerat mot koden och databasen 2026-10-01. Inläsningen i avsnitt 9 är testad
+skarpt, och alla frågetyper i avsnitt 6 rättas korrekt av Stimmas egen rättningsfunktion.
 
 ---
 
@@ -19,8 +19,8 @@ För varje kursbeskrivning:
    exempel i avsnitt 10).
 3. **Skapa bilderna:** gör det med det bildverktyg du har tillgång till, och lägg dem i mappen
    `images/` (avsnitt 7). Packa sedan `course.json` och `images/` i en ZIP-fil.
-4. **Läs in:** via **Admin → Importera kurs** (avsnitt 9A), eller med kommandoradsverktyget om du
-   arbetar på servern (avsnitt 9B). Allt kontrolleras först. Vid fel sparas ingenting, och du får
+4. **Läs in:** via **Admin → Importera kurs** (avsnitt 9A).<!-- intern --> Arbetar du på servern
+   finns också kommandoradsverktyget (avsnitt 9B).<!-- /intern --> Allt kontrolleras först. Vid fel sparas ingenting, och du får
    alla fel i en lista. Rätta och försök igen. Kursen skapas **alltid som inaktiv**.
 5. **Rapportera:** ange kurs-id, antal lektioner och frågor, vilka bilder som saknas och allt du är
    osäker på (avsnitt 11).
@@ -308,18 +308,22 @@ för en bild.
 - **Kropp:** JSON-kroppen `{"prompt": …, "image_size": …}`.
 - **Svar:** bild-URL:en finns i `images[0].url`.
 
+<!-- intern -->
 Går anropen via Sambruks MCP-gateway i stället för direkt till fal.ai anges omslagets storlek som
 `"extra": {"image_size": {"width": 1536, "height": 1024}}`, eftersom gatewayens verktyg bara tar de
 fasta formaten i `image_size`.
+<!-- /intern -->
 
 ### 7B. Bilder som Stimma skapar (`image_wish`)
 
 Saknas `image_file` men finns `image_wish` kan Stimma skapa bilden med sin egen bildtjänst (OpenAI
 gpt-image), med samma prompt som knapparna i admin:
 
+<!-- intern -->
 - **Med kommandoradsverktyget och `--bilder`** skapas bilderna direkt vid inläsningen (avsnitt 9B).
+<!-- /intern -->
 - **Med webbimporten** skapas inga bilder vid importen. Resultatet listar i stället varje bild som
-  saknas tillsammans med önskemålet. En admin skapar dem sedan i redigeraren: önskemålet skrivs i
+  saknas tillsammans med önskemålet. En redaktör eller admin skapar dem sedan i redigeraren: önskemålet skrivs i
   fältet "Vad ska bilden visa?", och sedan klickar man på "Generera AI-bild" i lektionsredigeraren
   eller "AI" vid kursbilden i kursredigeraren.
 
@@ -393,9 +397,11 @@ används och tilltala läsaren med "du".
 
 ## 9. Läsa in kursen
 
+<!-- intern -->
 Två vägar, med exakt samma regler. Båda bygger på `include/kurspaket.php`.
+<!-- /intern -->
 
-### 9A. Admin → Importera kurs (utan serveråtkomst)
+### 9A. Admin → Importera kurs<!-- intern --> (utan serveråtkomst)<!-- /intern -->
 
 1. Logga in på https://stimma.sambruk.se som admin eller redaktör. Gå till **Admin → Kurser →
    Importera kurs**.
@@ -414,6 +420,7 @@ Importen känner igen ett kurspaket på `"format": "stimma-kurspaket-1"`. En fil
 behandlas som en gammal export från "Exportera kurs". Den vägen tappar quizfrågor, infosidor och
 bilder. **Kontrollera därför fältet `format` om kursen kommer in utan frågor.**
 
+<!-- intern -->
 ### 9B. Kommandoradsverktyget (på servern)
 
 Verktyget körs i webbcontainern. `tools/` ligger utanför webbroten och kan inte nås från webben.
@@ -439,7 +446,8 @@ docker exec stimma-web-1 rm /tmp/kurs.zip
 - **Resultatet:** den sista utskriften är en JSON-rad med `kurs_id`, lektionernas id:n, en länk till
   redigeringen, antal bilder och eventuella bilder som saknas.
 
-### För båda vägarna
+<!-- /intern -->
+### Att tänka på vid inläsningen
 
 - **Inläsningen sker i en transaktion:** antingen kommer hela kursen in, eller ingenting, och inga
   bilder blir kvar.
@@ -513,14 +521,14 @@ med `images/` (avsnitt 3 och 7A).
 
 Avsluta varje kurs med en kort rapport till uppdragsgivaren:
 
-- **Resultat:** kurs-id och titel, från importens gröna ruta eller verktygets JSON-rad.
+- **Resultat:** kurs-id och titel, från importens gröna ruta<!-- intern --> eller verktygets JSON-rad<!-- /intern -->.
 - **Omfång:** antal lektioner och infosidor, antal frågor och vilka typer.
 - **Bilder:** vilka som följde med i paketet, och vilka som saknas tillsammans med önskemålet, så att
-  en admin kan skapa dem.
+  redaktören kan skapa dem.
 - **Videor:** varje länk, så att granskaren kan provspela den.
 - **Antaganden:** de val du gjorde som beskrivningen inte styrde, t.ex. målgrupp, nivå och avgränsningar.
 - **Osäkerheter:** påståenden och källor som en ämnesexpert bör granska. Lista dem konkret.
-- **Påminnelse:** att kursen är **inaktiv** och måste granskas och aktiveras av en admin.
+- **Påminnelse:** att kursen är **inaktiv** och måste granskas och aktiveras av en redaktör eller admin.
 
 ---
 
@@ -539,6 +547,7 @@ Avsluta varje kurs med en kort rapport till uppdragsgivaren:
 
 ---
 
+<!-- intern -->
 ## Bilaga: var formatet kommer ifrån
 
 Dokumentet är för den som behöver underhålla verktyget eller formatet. Den som skapar kurser
@@ -557,3 +566,4 @@ behöver inte läsa det här.
 Om Stimma får en ny frågetyp, nya innehållsblock eller nya lektionsfält måste både det här
 dokumentet och valideringen i `include/kurspaket.php` uppdateras. Annars stoppar verktyget
 giltigt innehåll, eller släpper igenom sådant som inte visas.
+<!-- /intern -->

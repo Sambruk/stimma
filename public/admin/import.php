@@ -490,6 +490,23 @@ $page_title = 'Importera kurs';
 require_once 'include/header.php';
 ?>
 
+<?php if ($isAdmin || $isEditor): ?>
+<div class="card shadow mb-4 border-start border-success border-4">
+    <div class="card-body d-flex flex-wrap align-items-center gap-3">
+        <div class="flex-grow-1" style="min-width: 260px;">
+            <h2 class="h6 mb-1">Skapa kurser med AI</h2>
+            <p class="mb-0 text-muted small">
+                Instruktionen beskriver steg för steg hur du låter Claude skriva en kurs med lektioner, quiz och bilder,
+                och hur du läser in, granskar och aktiverar den. Ge samma fil till Claude — den innehåller också kursformatet.
+            </p>
+        </div>
+        <a href="kursinstruktion.php" class="btn btn-primary" download>
+            <i class="bi bi-download" aria-hidden="true"></i> Ladda ner instruktionen (.md)
+        </a>
+    </div>
+</div>
+<?php endif; ?>
+
 <div class="card shadow mb-4">
     <div class="card-header py-3">
         <h6 class="m-0 font-weight-bold text-muted">Importera kurs</h6>
@@ -505,7 +522,7 @@ require_once 'include/header.php';
                     <ul class="mb-0 mt-1">
                         <li><strong>Kurspaket</strong> (<code>stimma-kurspaket-1</code>) — en JSON-fil, eller en ZIP-fil med
                             <code>course.json</code> och färdiga bilder i mappen <code>images/</code>. Formatet beskrivs i
-                            <code>docs/KURSFORMAT.md</code>. Allt kontrolleras innan något sparas.</li>
+                            <a href="kursinstruktion.php" download>instruktionen ovan</a>. Allt kontrolleras innan något sparas.</li>
                         <li><strong>Export från Stimma</strong> — en fil från "Exportera kurs" i denna eller en annan Stimma-installation.</li>
                     </ul>
                     Importerade kurser blir alltid inaktiva tills du aktiverar dem.
