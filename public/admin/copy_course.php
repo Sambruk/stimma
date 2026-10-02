@@ -35,6 +35,18 @@ if (!$isAdmin && !$isEditor) {
 $page_title = 'Kopiera kurs';
 
 /**
+ * Infoga en rad med de kolumner som finns i $row. Kolumnnamnen kommer från
+ * databasens egen SELECT *, aldrig från användaren. Returnerar nytt id eller 0.
+ */
+function copyCourseInsertRow(string $table, array $row): int {
+    $cols = array_keys($row);
+    return (int)execute(
+        "INSERT INTO " . DB_DATABASE . ".`{$table}` (`" . implode('`, `', $cols) . "`) VALUES (" . implode(', ', array_fill(0, count($cols), '?')) . ")",
+        array_values($row)
+    );
+}
+
+/**
  * Kopiera en kurs med alla dess lektioner till den egna organisationen
  */
 function copyCourse($sourceCourseId, $targetDomain, $newAuthorId, $orgScopeDomains = null) {
@@ -72,8 +84,8 @@ function copyCourse($sourceCourseId, $targetDomain, $newAuthorId, $orgScopeDomai
     $result = execute(
         "INSERT INTO " . DB_DATABASE . ".courses
         (category_id, title, description, completion_content, difficulty_level, duration_minutes, prerequisites, tags,
-         image_url, status, sort_order, featured, author_id, organization_domain, original_organization_domain, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'inactive', ?, 0, ?, ?, ?, NOW())",
+         image_url, image_style, allow_quiz_retry, status, sort_order, featured, author_id, organization_domain, original_organization_domain, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'inactive', ?, 0, ?, ?, ?, NOW())",
         [
             $sourceCourse['category_id'],
             $newTitle,
@@ -84,6 +96,8 @@ function copyCourse($sourceCourseId, $targetDomain, $newAuthorId, $orgScopeDomai
             $sourceCourse['prerequisites'],
             $sourceCourse['tags'],
             $sourceCourse['image_url'],
+            $sourceCourse['image_style'] ?? null,
+            $sourceCourse['allow_quiz_retry'] ?? 1,
             $sourceCourse['sort_order'],
             $newAuthorId,
             $targetDomain,
@@ -110,6 +124,7 @@ function copyCourse($sourceCourseId, $targetDomain, $newAuthorId, $orgScopeDomai
     );
 
     $lessonsCopied = 0;
+    $lessonIdMap = [];
     foreach ($sourceLessons as $lesson) {
         // Copy local video file with new random name if applicable
         $videoUrl = $lesson['video_url'];
@@ -142,39 +157,48 @@ function copyCourse($sourceCourseId, $targetDomain, $newAuthorId, $orgScopeDomai
             }
         }
 
-        $lessonResult = execute(
-            "INSERT INTO " . DB_DATABASE . ".lessons
-            (course_id, title, estimated_duration, image_url, video_url, video_type, audio_url, content, resource_links, tags,
-             status, sort_order, ai_instruction, ai_prompt, quiz_question, quiz_answer1, quiz_answer2,
-             quiz_answer3, quiz_correct_answer, author_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
-            [
-                $newCourseId,
-                $lesson['title'],
-                $lesson['estimated_duration'],
-                $lesson['image_url'],
-                $videoUrl,
-                $videoType,
-                $audioUrl,
-                $lesson['content'],
-                $lesson['resource_links'],
-                $lesson['tags'],
-                $lesson['status'],
-                $lesson['sort_order'],
-                $lesson['ai_instruction'],
-                $lesson['ai_prompt'],
-                $lesson['quiz_question'],
-                $lesson['quiz_answer1'],
-                $lesson['quiz_answer2'],
-                $lesson['quiz_answer3'],
-                $lesson['quiz_correct_answer'],
-                $newAuthorId
-            ]
-        );
+        // Alla kolumner följer med (lektionstyp, videoposition, quiztyp, svar 4–5,
+        // bildalternativ, AI-chatt m.m.) — bara id, kurs, författare och tider sätts om.
+        $row = $lesson;
+        unset($row['id'], $row['created_at'], $row['updated_at']);
+        $row['course_id'] = $newCourseId;
+        $row['author_id'] = $newAuthorId;
+        $row['video_url'] = $videoUrl;
+        $row['audio_url'] = $audioUrl;
+        $newLessonId = copyCourseInsertRow('lessons', $row);
 
-        if ($lessonResult) {
+        if ($newLessonId) {
             $lessonsCopied++;
+            $lessonIdMap[(int)$lesson['id']] = $newLessonId;
+
+            // Quizfrågorna (nya formatet) hör till lektionen
+            foreach (query("SELECT * FROM " . DB_DATABASE . ".quiz_questions WHERE lesson_id = ? ORDER BY sort_order, id", [$lesson['id']]) as $q) {
+                unset($q['id'], $q['created_at'], $q['updated_at']);
+                $q['lesson_id'] = $newLessonId;
+                copyCourseInsertRow('quiz_questions', $q);
+            }
         }
+    }
+
+    // Infosidor pekar på den lektion de hör till — peka om till kopiorna
+    foreach ($sourceLessons as $lesson) {
+        $belongs = (int)($lesson['belongs_to_lesson_id'] ?? 0);
+        if ($belongs && isset($lessonIdMap[(int)$lesson['id']])) {
+            execute(
+                "UPDATE " . DB_DATABASE . ".lessons SET belongs_to_lesson_id = ? WHERE id = ?",
+                [$lessonIdMap[$belongs] ?? null, $lessonIdMap[(int)$lesson['id']]]
+            );
+        }
+    }
+
+    // Resurser på kurs- och lektionsnivå
+    foreach (query("SELECT * FROM " . DB_DATABASE . ".resources WHERE course_id = ?", [$sourceCourseId]) as $r) {
+        if (!empty($r['lesson_id']) && !isset($lessonIdMap[(int)$r['lesson_id']])) continue;
+        unset($r['id'], $r['created_at'], $r['updated_at']);
+        $r['course_id'] = $newCourseId;
+        $r['lesson_id'] = !empty($r['lesson_id']) ? $lessonIdMap[(int)$r['lesson_id']] : null;
+        $r['author_id'] = $newAuthorId;
+        copyCourseInsertRow('resources', $r);
     }
 
     // Lägg till användaren som redaktör på den nya kursen (om inte admin)

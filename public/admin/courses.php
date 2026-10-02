@@ -247,13 +247,13 @@ require_once 'include/header.php';
                                     <i class="bi bi-link-45deg"></i>
                                 </button>
                                 <button type="button" class="btn btn-sm btn-outline-success" title="Kopiera kursen till min organisation"
-                                        onclick="copyCourseInOrg(<?= (int)$course['id'] ?>, <?= json_encode($course['title']) ?>)">
+                                        onclick="copyCourseInOrg(<?= (int)$course['id'] ?>, <?= htmlspecialchars(json_encode($course['title']), ENT_QUOTES) ?>)">
                                     <i class="bi bi-files"></i>
                                 </button>
                                 <a href="export.php?id=<?= $course['id'] ?>" class="btn btn-sm btn-outline-secondary" title="Exportera kurs">
                                     <i class="bi bi-box-arrow-up"></i>
                                 </a>
-                                <button type="button" onclick="deleteCourse(<?= $course['id'] ?>, <?= json_encode($courseLearningPathsMap[$course['id']] ?? []) ?>)"
+                                <button type="button" onclick="deleteCourse(<?= (int)$course['id'] ?>, <?= htmlspecialchars(json_encode($courseLearningPathsMap[$course['id']] ?? []), ENT_QUOTES) ?>)"
                                    class="btn btn-sm btn-outline-danger" title="Radera kurs">
                                     <i class="bi bi-trash"></i>
                                 </button>
