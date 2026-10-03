@@ -23,6 +23,21 @@
 - [ ] Känd kant: i stegvisa kurser kan omdirigeringen landa på en lektion som väntar på schemat → startsidan
 - [x] Committad och pushad 2026-10-02
 
+### Filter och sortering i Admin → Kurser (2026-10-03)
+- [x] Filterrad ovanför kurslistan (allt i webbläsaren, listan har redan alla kurser i användarens scope):
+      sök (titel/ID), status (alla/aktiva/inaktiva), visa (publika, globala, delade, stegvisa, kopierade från
+      annan org, i lärväg, utan lektioner), organisation (bara om fler än en domän i listan), taggar som
+      knappar (någon av de valda + "Utan tagg"). Antal "Visar X av Y". Valen speglas i adressen (?status=…&tagg=…).
+- [x] Sortering: ID stigande/fallande, namn A–Ö/Ö–A (svensk ordning), senast ändrad, flest lektioner,
+      startsidans ordning
+- [x] Dra-och-släpp sparar den synliga ordningen som startsidans sort_order — men listan visades i ID-ordning,
+      så en dragning skrev om startsidans ordning utifrån ID. Nu är dragningen bara aktiv i "Startsidans
+      ordning" utan filter; annars döljs handtagen.
+- [x] "Taggar" = organisationstaggarna (course_org_tags). Kolumnen courses.tags är tom för alla 100 kurser.
+- [x] Testat i webbläsare som admin (Sambruk, 31 kurser): alla filter, sorteringar, omladdning med valen
+      kvar, Rensa filter, dragspärren. Inga JS-fel, inga POST-anrop. Tillfällig session raderad.
+- [x] Committad och pushad (bara filterändringen — SCORM-hunken i courses.php ligger kvar ocommittad)
+
 ### Lektionsordningen gäller även admin och redaktör (2026-10-02)
 - [x] Beslut av Thomas: bara förhandsgranskningen (?preview=1) undantas från ordningsspärren. Admins och
       redaktörer låses som alla andra när de går kursen. Orsak: Thomas testade med sitt admin-konto, kunde hoppa

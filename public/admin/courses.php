@@ -108,6 +108,17 @@ if (!empty($courses)) {
     }
 }
 
+// Underlag till filtret ovanför tabellen (2026-10-03): de taggar och
+// organisationer som faktiskt förekommer bland kurserna i listan.
+$filterTags = [];
+foreach ($courseOrgTagsMap as $taggar) {
+    foreach ($taggar as $tagg) $filterTags[$tagg] = true;
+}
+$filterTags = array_keys($filterTags);
+natcasesort($filterTags);
+$filterDomains = array_values(array_unique(array_filter(array_column($courses ?: [], 'organization_domain'))));
+sort($filterDomains);
+
 // Hämta max antal lektioner från AI-inställningar
 $maxLessonSetting = queryOne("SELECT setting_value FROM " . DB_DATABASE . ".ai_settings WHERE setting_key = 'max_lesson_count'");
 $maxLessonCount = (int)($maxLessonSetting['setting_value'] ?? 20);
@@ -151,6 +162,75 @@ require_once 'include/header.php';
         </div>
     </div>
     <div class="card-body">
+        <!-- Filter och sortering (2026-10-03). Allt sker i webbläsaren — listan
+             innehåller redan alla kurser användaren får se. Valen speglas i
+             adressen så att en filtrerad vy går att ladda om och dela. -->
+        <div id="courseFilter" class="border rounded p-3 mb-3 bg-light">
+            <div class="row g-2 align-items-end">
+                <div class="col-12 col-md-4">
+                    <label for="cfSok" class="form-label small mb-1">Sök</label>
+                    <input type="search" id="cfSok" class="form-control form-control-sm" placeholder="Titel eller ID">
+                </div>
+                <div class="col-6 col-md-2">
+                    <label for="cfStatus" class="form-label small mb-1">Status</label>
+                    <select id="cfStatus" class="form-select form-select-sm">
+                        <option value="">Alla</option>
+                        <option value="active">Bara aktiva</option>
+                        <option value="inactive">Bara inaktiva</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label for="cfEgenskap" class="form-label small mb-1">Visa</label>
+                    <select id="cfEgenskap" class="form-select form-select-sm">
+                        <option value="">Alla kurser</option>
+                        <option value="public">Publika</option>
+                        <option value="global">Globala</option>
+                        <option value="shared">Delade med andra domäner</option>
+                        <option value="sequential">Stegvisa</option>
+                        <option value="copied">Kopierade från annan organisation</option>
+                        <option value="inpath">Ingår i en lärväg</option>
+                        <option value="nolessons">Utan lektioner</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label for="cfSortering" class="form-label small mb-1">Sortera</label>
+                    <select id="cfSortering" class="form-select form-select-sm">
+                        <option value="id">ID, stigande</option>
+                        <option value="id-desc">ID, fallande</option>
+                        <option value="title">Namn A–Ö</option>
+                        <option value="title-desc">Namn Ö–A</option>
+                        <option value="updated">Senast ändrad först</option>
+                        <option value="lessons">Flest lektioner först</option>
+                        <option value="startpage">Startsidans ordning (dra för att ändra)</option>
+                    </select>
+                </div>
+                <?php if (count($filterDomains) > 1): ?>
+                <div class="col-6 col-md-4">
+                    <label for="cfDoman" class="form-label small mb-1">Organisation</label>
+                    <select id="cfDoman" class="form-select form-select-sm">
+                        <option value="">Alla organisationer</option>
+                        <?php foreach ($filterDomains as $dom): ?>
+                        <option value="<?= htmlspecialchars($dom) ?>"><?= htmlspecialchars($dom) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <?php endif; ?>
+                <div class="col-12 col-md">
+                    <span class="form-label small mb-1 d-block">Taggar <span class="text-muted">(visa kurser med någon av de valda)</span></span>
+                    <div id="cfTaggar" class="d-flex flex-wrap gap-1" role="group" aria-label="Filtrera på taggar">
+                        <?php foreach ($filterTags as $tagg): ?>
+                        <button type="button" class="btn btn-sm btn-outline-success" data-tag="<?= htmlspecialchars($tagg) ?>" aria-pressed="false"><?= htmlspecialchars($tagg) ?></button>
+                        <?php endforeach; ?>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-tag="__ingen__" aria-pressed="false">Utan tagg</button>
+                    </div>
+                </div>
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-3 mt-2 small">
+                <span id="cfAntal" aria-live="polite"></span>
+                <button type="button" id="cfRensa" class="btn btn-link btn-sm p-0">Rensa filter</button>
+                <span id="cfDragInfo" class="text-muted"></span>
+            </div>
+        </div>
         <div class="table-responsive">
             <table class="table table-hover">
                 <thead>
@@ -167,8 +247,23 @@ require_once 'include/header.php';
                     <?php foreach ($courses as $course): 
                         $lessons = query("SELECT * FROM " . DB_DATABASE . ".lessons WHERE course_id = ? ORDER BY sort_order, title", [$course['id']]);
                         $lessonCount = count($lessons);
+                        $courseSharedDoms = getCourseSharedDomains($course['id']);
+                        $origDomainF = $course['original_organization_domain'] ?? null;
                     ?>
-                    <tr data-id="<?= $course['id'] ?>">
+                    <tr data-id="<?= $course['id'] ?>"
+                        data-title="<?= htmlspecialchars(mb_strtolower($course['title'] ?? '')) ?>"
+                        data-status="<?= $course['status'] === 'active' ? 'active' : 'inactive' ?>"
+                        data-domain="<?= htmlspecialchars($course['organization_domain'] ?? '') ?>"
+                        data-tags="<?= htmlspecialchars(json_encode($courseOrgTagsMap[$course['id']] ?? [], JSON_UNESCAPED_UNICODE)) ?>"
+                        data-public="<?= !empty($course['is_public']) ? 1 : 0 ?>"
+                        data-global="<?= !empty($course['is_global']) ? 1 : 0 ?>"
+                        data-shared="<?= !empty($courseSharedDoms) ? 1 : 0 ?>"
+                        data-sequential="<?= !empty($course['sequential_mode']) ? 1 : 0 ?>"
+                        data-copied="<?= ($origDomainF && $origDomainF !== $course['organization_domain']) ? 1 : 0 ?>"
+                        data-inpath="<?= !empty($courseLearningPathsMap[$course['id']]) ? 1 : 0 ?>"
+                        data-lessons="<?= (int)$lessonCount ?>"
+                        data-sort="<?= (int)($course['sort_order'] ?? 0) ?>"
+                        data-updated="<?= htmlspecialchars((string)($course['updated_at'] ?? '')) ?>">
                         <td>
                             <i class="bi bi-grip-vertical grip-handle text-muted"></i>
                         </td>
@@ -217,10 +312,7 @@ require_once 'include/header.php';
                                     <i class="bi bi-globe2 me-1"></i>Global
                                 </span>
                                 <?php endif; ?>
-                                <?php
-                                $courseSharedDoms = getCourseSharedDomains($course['id']);
-                                if (!empty($courseSharedDoms)):
-                                ?>
+                                <?php if (!empty($courseSharedDoms)): ?>
                                 <span class="badge bg-warning text-dark" style="font-size: 0.7rem;"
                                       title="Kursen delas endast med: <?= htmlspecialchars(implode(', ', $courseSharedDoms)) ?>">
                                     <i class="bi bi-share me-1"></i>Delad: <?= count($courseSharedDoms) ?> domän<?= count($courseSharedDoms) === 1 ? '' : 'er' ?>
@@ -1376,6 +1468,158 @@ document.getElementById("scormImportBtn") && document.getElementById("scormImpor
         });
 });
 </script>';
+
+// Filter och sortering av kurslistan (2026-10-03). Läggs efter sortable-
+// initieringen i $extra_scripts så att dra-och-släpp kan slås av och på.
+$extra_scripts .= <<<'JS'
+<script>
+$(function () {
+    var tbody = document.getElementById('sortable-courses');
+    if (!tbody) return;
+    var rader = Array.prototype.slice.call(tbody.querySelectorAll('tr[data-id]'));
+    var el = {
+        sok: document.getElementById('cfSok'),
+        status: document.getElementById('cfStatus'),
+        egenskap: document.getElementById('cfEgenskap'),
+        sortering: document.getElementById('cfSortering'),
+        doman: document.getElementById('cfDoman'),
+        taggar: document.getElementById('cfTaggar'),
+        antal: document.getElementById('cfAntal'),
+        rensa: document.getElementById('cfRensa'),
+        draginfo: document.getElementById('cfDragInfo')
+    };
+    var namnOrdning = new Intl.Collator('sv', { sensitivity: 'base', numeric: true });
+
+    function valdaTaggar() {
+        return Array.prototype.slice.call(el.taggar.querySelectorAll('button[aria-pressed="true"]'))
+            .map(function (b) { return b.dataset.tag; });
+    }
+
+    function lasFranAdress() {
+        var q = new URLSearchParams(window.location.search);
+        el.sok.value = q.get('sok') || '';
+        el.status.value = q.get('status') || '';
+        el.egenskap.value = q.get('visa') || '';
+        el.sortering.value = q.get('sortera') || 'id';
+        if (!el.sortering.value) el.sortering.value = 'id';
+        if (el.doman) el.doman.value = q.get('org') || '';
+        var t = q.getAll('tagg');
+        el.taggar.querySelectorAll('button').forEach(function (b) {
+            var vald = t.indexOf(b.dataset.tag) !== -1;
+            b.setAttribute('aria-pressed', vald ? 'true' : 'false');
+            b.classList.toggle('active', vald);
+        });
+    }
+
+    function skrivTillAdress() {
+        var q = new URLSearchParams();
+        if (el.sok.value.trim()) q.set('sok', el.sok.value.trim());
+        if (el.status.value) q.set('status', el.status.value);
+        if (el.egenskap.value) q.set('visa', el.egenskap.value);
+        if (el.sortering.value && el.sortering.value !== 'id') q.set('sortera', el.sortering.value);
+        if (el.doman && el.doman.value) q.set('org', el.doman.value);
+        valdaTaggar().forEach(function (t) { q.append('tagg', t); });
+        var qs = q.toString();
+        history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''));
+    }
+
+    function matchar(tr) {
+        var d = tr.dataset;
+        var sok = el.sok.value.trim().toLowerCase();
+        if (sok && d.title.indexOf(sok) === -1 && d.id !== sok.replace(/^#/, '')) return false;
+        if (el.status.value && d.status !== el.status.value) return false;
+        if (el.doman && el.doman.value && d.domain !== el.doman.value) return false;
+        switch (el.egenskap.value) {
+            case 'public': if (d.public !== '1') return false; break;
+            case 'global': if (d.global !== '1') return false; break;
+            case 'shared': if (d.shared !== '1') return false; break;
+            case 'sequential': if (d.sequential !== '1') return false; break;
+            case 'copied': if (d.copied !== '1') return false; break;
+            case 'inpath': if (d.inpath !== '1') return false; break;
+            case 'nolessons': if (d.lessons !== '0') return false; break;
+        }
+        var valda = valdaTaggar();
+        if (valda.length) {
+            var kursens = [];
+            try { kursens = JSON.parse(d.tags || '[]'); } catch (e) {}
+            var traff = valda.some(function (t) {
+                return t === '__ingen__' ? kursens.length === 0 : kursens.indexOf(t) !== -1;
+            });
+            if (!traff) return false;
+        }
+        return true;
+    }
+
+    function jamfor(a, b) {
+        var x = a.dataset, y = b.dataset, idDiff = (+x.id) - (+y.id);
+        switch (el.sortering.value) {
+            case 'id-desc': return -idDiff;
+            case 'title': return namnOrdning.compare(x.title, y.title) || idDiff;
+            case 'title-desc': return namnOrdning.compare(y.title, x.title) || idDiff;
+            case 'updated': return (y.updated || '').localeCompare(x.updated || '') || -idDiff;
+            case 'lessons': return ((+y.lessons) - (+x.lessons)) || idDiff;
+            case 'startpage': return ((+x.sort) - (+y.sort)) || idDiff;
+            default: return idDiff;
+        }
+    }
+
+    function filterAktivt() {
+        return !!(el.sok.value.trim() || el.status.value || el.egenskap.value ||
+                  (el.doman && el.doman.value) || valdaTaggar().length);
+    }
+
+    function uppdatera() {
+        var synliga = 0;
+        rader.slice().sort(jamfor).forEach(function (tr) {
+            tbody.appendChild(tr);
+            var visa = matchar(tr);
+            tr.style.display = visa ? '' : 'none';
+            if (visa) synliga++;
+        });
+        el.antal.textContent = 'Visar ' + synliga + ' av ' + rader.length + ' kurser';
+        el.rensa.style.display = (filterAktivt() || el.sortering.value !== 'id') ? '' : 'none';
+
+        // Dra-och-släpp sparar den ordning som syns som startsidans ordning.
+        // Det stämmer bara när alla kurser visas i startsidans ordning.
+        var kanDra = el.sortering.value === 'startpage' && !filterAktivt();
+        try { $('#sortable-courses').sortable('option', 'disabled', !kanDra); } catch (e) {}
+        tbody.querySelectorAll('.grip-handle').forEach(function (g) { g.style.visibility = kanDra ? '' : 'hidden'; });
+        el.draginfo.textContent = kanDra
+            ? 'Dra i handtagen för att ändra ordningen på startsidan.'
+            : (el.sortering.value === 'startpage' ? 'Rensa filtren för att kunna ändra ordningen.' : '');
+        skrivTillAdress();
+    }
+
+    el.taggar.addEventListener('click', function (e) {
+        var b = e.target.closest('button[data-tag]');
+        if (!b) return;
+        var vald = b.getAttribute('aria-pressed') !== 'true';
+        b.setAttribute('aria-pressed', vald ? 'true' : 'false');
+        b.classList.toggle('active', vald);
+        uppdatera();
+    });
+    [el.status, el.egenskap, el.sortering, el.doman].forEach(function (s) {
+        if (s) s.addEventListener('change', uppdatera);
+    });
+    el.sok.addEventListener('input', uppdatera);
+    el.rensa.addEventListener('click', function () {
+        history.replaceState(null, '', window.location.pathname);
+        lasFranAdress();
+        uppdatera();
+    });
+
+    // Efter en dragning: håll data-sort i takt med den nya ordningen.
+    $('#sortable-courses').on('sortupdate', function () {
+        Array.prototype.slice.call(tbody.querySelectorAll('tr[data-id]')).forEach(function (tr, i) {
+            tr.dataset.sort = i;
+        });
+    });
+
+    lasFranAdress();
+    uppdatera();
+});
+</script>
+JS;
 
 // Inkludera footer
 require_once 'include/footer.php';
