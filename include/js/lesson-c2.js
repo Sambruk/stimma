@@ -212,7 +212,8 @@
       .then(function (d) {
         if (!d.success) { btn.disabled = false; alertIn(btn, d.message || 'Något gick fel.'); return; }
         var url = d.nextPageUrl || S.courseUrl;
-        if (preview && url.indexOf('lesson.php') === 0) url += '&preview=1';
+        // Servern lägger själv till preview=1 sedan 2026-10-02 — lägg bara till om det saknas.
+        if (preview && url.indexOf('lesson.php') === 0 && !/[?&]preview=1/.test(url)) url += '&preview=1';
         location.href = url;
       })
       .catch(function () { btn.disabled = false; alertIn(btn, 'Nätverksfel. Försök igen.'); });

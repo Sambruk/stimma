@@ -49,6 +49,10 @@
       redaktörer låses som alla andra när de går kursen. Orsak: Thomas testade med sitt admin-konto, kunde hoppa
       fritt i kurs 171 och trodde att spärren inte fungerade.
 - [x] userBypassesLessonOrder() borttagen; spärren i lesson.php, klassiska sidomenyn, C2-panelen och course.php
+- [x] 2026-10-03: följdfel — C2-vyns JS (include/js/lesson-c2.js) lade själv till preview=1 på infosidans
+      nästa-URL, som servern nu redan ger med preview=1 → "&preview=1&preview=1". Läggs nu bara till om det
+      saknas; ?v=20261003a. Testat: infosida 1774 (preview) → Fortsätt → lesson.php?id=1775&preview=1.
+      (Att man kan gå vidare med fel svar i förhandsgranskning är avsiktligt — inget sparas, inget spärras.)
 - [x] Förhandsgranskningen tappade preview=1 på tre ställen (klassiska sidomenyn, quizets "Fortsätt till nästa
       lektion", infosidans "Fortsätt" + nästa-URL) — märktes inte förut tack vare roll-undantaget, nu rättat
 - [x] Testat med tillfälliga sessioner (raderade): admin vanlig vy 1580 → 302 till 1577; admin preview 1580 → 200,
