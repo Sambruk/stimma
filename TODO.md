@@ -37,6 +37,12 @@
 - [x] Testat i webbläsare som admin (Sambruk, 31 kurser): alla filter, sorteringar, omladdning med valen
       kvar, Rensa filter, dragspärren. Inga JS-fel, inga POST-anrop. Tillfällig session raderad.
 - [x] Committad och pushad (bara filterändringen — SCORM-hunken i courses.php ligger kvar ocommittad)
+- [x] 2026-10-03: även de fristående taggarna (Admin → Taggar, tags + course_tags, kopplas under kursens
+      flik Tilldelning). Egen knappgrupp "Taggar" (?kurstagg=<id>) bredvid "Organisationstaggar" (?tagg=),
+      antal kurser per knapp, "Utan tagg" i båda. Inom grupp = någon av; mellan grupperna = båda.
+      Knapparna: organisationens taggar som i tags.php + taggar från andra orgs som sitter på kurser i listan.
+      Kursraderna visar nu de fristående taggarna som ljusa etiketter med tagg-ikon (syntes inte alls förut).
+      Testat: Baskurs → 161,171; +Tagg1 → 25,28,161,171; +Vaktmästeri → 25; omladdning behåller valen.
 
 ### Lektionsordningen gäller även admin och redaktör (2026-10-02)
 - [x] Beslut av Thomas: bara förhandsgranskningen (?preview=1) undantas från ordningsspärren. Admins och

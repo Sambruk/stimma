@@ -116,6 +116,37 @@ foreach ($courseOrgTagsMap as $taggar) {
 }
 $filterTags = array_keys($filterTags);
 natcasesort($filterTags);
+$orgTagCounts = [];
+foreach ($courseOrgTagsMap as $taggar) {
+    foreach (array_unique($taggar) as $tagg) $orgTagCounts[$tagg] = ($orgTagCounts[$tagg] ?? 0) + 1;
+}
+
+// Fristående taggar (Admin → Taggar, kopplas under kursens fliken Tilldelning):
+// tags + course_tags. Filtret erbjuder organisationens taggar som i tags.php,
+// plus taggar från andra organisationer som sitter på kurser i listan.
+$courseFreeTagsMap = [];
+$filterFreeTags = [];
+if (!empty($courses)) {
+    $ftIds = array_column($courses, 'id');
+    $ftPh = implode(',', array_fill(0, count($ftIds), '?'));
+    foreach (query(
+        "SELECT ct.course_id, t.id, t.name FROM " . DB_DATABASE . ".course_tags ct
+           JOIN " . DB_DATABASE . ".tags t ON t.id = ct.tag_id
+          WHERE ct.course_id IN ($ftPh) ORDER BY t.name",
+        $ftIds
+    ) ?: [] as $ft) {
+        $courseFreeTagsMap[$ft['course_id']][] = ['id' => (int)$ft['id'], 'name' => $ft['name']];
+        $filterFreeTags[(int)$ft['id']] = ['name' => $ft['name'], 'antal' => ($filterFreeTags[(int)$ft['id']]['antal'] ?? 0) + 1];
+    }
+}
+$scopeTagClause = buildDomainInClause($scopeDomains, 'organization_domain');
+foreach (query(
+    "SELECT id, name FROM " . DB_DATABASE . ".tags WHERE {$scopeTagClause['fragment']}",
+    $scopeTagClause['params']
+) ?: [] as $st) {
+    if (!isset($filterFreeTags[(int)$st['id']])) $filterFreeTags[(int)$st['id']] = ['name' => $st['name'], 'antal' => 0];
+}
+uasort($filterFreeTags, fn($a, $b) => strnatcasecmp($a['name'], $b['name']));
 $filterDomains = array_values(array_unique(array_filter(array_column($courses ?: [], 'organization_domain'))));
 sort($filterDomains);
 
@@ -215,13 +246,22 @@ require_once 'include/header.php';
                     </select>
                 </div>
                 <?php endif; ?>
-                <div class="col-12 col-md">
-                    <span class="form-label small mb-1 d-block">Taggar <span class="text-muted">(visa kurser med någon av de valda)</span></span>
-                    <div id="cfTaggar" class="d-flex flex-wrap gap-1" role="group" aria-label="Filtrera på taggar">
-                        <?php foreach ($filterTags as $tagg): ?>
-                        <button type="button" class="btn btn-sm btn-outline-success" data-tag="<?= htmlspecialchars($tagg) ?>" aria-pressed="false"><?= htmlspecialchars($tagg) ?></button>
+                <div class="col-12 col-md-6">
+                    <span class="form-label small mb-1 d-block">Taggar <span class="text-muted">(någon av de valda)</span></span>
+                    <div id="cfFriaTaggar" class="d-flex flex-wrap gap-1" role="group" aria-label="Filtrera på taggar">
+                        <?php foreach ($filterFreeTags as $ftId => $ft): ?>
+                        <button type="button" class="btn btn-sm btn-outline-dark" data-tag="<?= (int)$ftId ?>" aria-pressed="false"><i class="bi bi-tag me-1"></i><?= htmlspecialchars($ft['name']) ?> <span class="opacity-75">(<?= (int)$ft['antal'] ?>)</span></button>
                         <?php endforeach; ?>
                         <button type="button" class="btn btn-sm btn-outline-secondary" data-tag="__ingen__" aria-pressed="false">Utan tagg</button>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6">
+                    <span class="form-label small mb-1 d-block">Organisationstaggar <span class="text-muted">(någon av de valda)</span></span>
+                    <div id="cfTaggar" class="d-flex flex-wrap gap-1" role="group" aria-label="Filtrera på organisationstaggar">
+                        <?php foreach ($filterTags as $tagg): ?>
+                        <button type="button" class="btn btn-sm btn-outline-success" data-tag="<?= htmlspecialchars($tagg) ?>" aria-pressed="false"><?= htmlspecialchars($tagg) ?> <span class="opacity-75">(<?= (int)($orgTagCounts[$tagg] ?? 0) ?>)</span></button>
+                        <?php endforeach; ?>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-tag="__ingen__" aria-pressed="false">Utan organisationstagg</button>
                     </div>
                 </div>
             </div>
@@ -255,6 +295,7 @@ require_once 'include/header.php';
                         data-status="<?= $course['status'] === 'active' ? 'active' : 'inactive' ?>"
                         data-domain="<?= htmlspecialchars($course['organization_domain'] ?? '') ?>"
                         data-tags="<?= htmlspecialchars(json_encode($courseOrgTagsMap[$course['id']] ?? [], JSON_UNESCAPED_UNICODE)) ?>"
+                        data-ftags="<?= htmlspecialchars(json_encode(array_map('strval', array_column($courseFreeTagsMap[$course['id']] ?? [], 'id')))) ?>"
                         data-public="<?= !empty($course['is_public']) ? 1 : 0 ?>"
                         data-global="<?= !empty($course['is_global']) ? 1 : 0 ?>"
                         data-shared="<?= !empty($courseSharedDoms) ? 1 : 0 ?>"
@@ -285,9 +326,14 @@ require_once 'include/header.php';
                                     <i class="bi bi-calendar-event me-1"></i>Dynamiskt startdatum
                                 </span>
                                 <?php endif; ?>
+                                <?php foreach ($courseFreeTagsMap[$course['id']] ?? [] as $freeTag): ?>
+                                <span class="badge bg-light text-dark border" style="font-size: 0.7rem;" title="Tagg">
+                                    <i class="bi bi-tag me-1"></i><?= htmlspecialchars($freeTag['name']) ?>
+                                </span>
+                                <?php endforeach; ?>
                                 <?php if (!empty($courseOrgTagsMap[$course['id']])): ?>
                                     <?php foreach ($courseOrgTagsMap[$course['id']] as $orgTag): ?>
-                                    <span class="badge bg-success" style="font-size: 0.7rem;"><?= htmlspecialchars($orgTag) ?></span>
+                                    <span class="badge bg-success" style="font-size: 0.7rem;" title="Organisationstagg"><?= htmlspecialchars($orgTag) ?></span>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
                                 <?php
@@ -1484,15 +1530,26 @@ $(function () {
         sortering: document.getElementById('cfSortering'),
         doman: document.getElementById('cfDoman'),
         taggar: document.getElementById('cfTaggar'),
+        friaTaggar: document.getElementById('cfFriaTaggar'),
         antal: document.getElementById('cfAntal'),
         rensa: document.getElementById('cfRensa'),
         draginfo: document.getElementById('cfDragInfo')
     };
     var namnOrdning = new Intl.Collator('sv', { sensitivity: 'base', numeric: true });
 
-    function valdaTaggar() {
-        return Array.prototype.slice.call(el.taggar.querySelectorAll('button[aria-pressed="true"]'))
+    // Två taggrupper: organisationstaggar (data-tags, ?tagg=) och fristående
+    // taggar (data-ftags, ?kurstagg=). Inom en grupp räcker en träff.
+    var grupper = [
+        { ruta: el.taggar, attr: 'tags', param: 'tagg' },
+        { ruta: el.friaTaggar, attr: 'ftags', param: 'kurstagg' }
+    ].filter(function (g) { return g.ruta; });
+
+    function valda(g) {
+        return Array.prototype.slice.call(g.ruta.querySelectorAll('button[aria-pressed="true"]'))
             .map(function (b) { return b.dataset.tag; });
+    }
+    function valdaTaggar() {
+        return grupper.reduce(function (acc, g) { return acc.concat(valda(g)); }, []);
     }
 
     function lasFranAdress() {
@@ -1503,11 +1560,13 @@ $(function () {
         el.sortering.value = q.get('sortera') || 'id';
         if (!el.sortering.value) el.sortering.value = 'id';
         if (el.doman) el.doman.value = q.get('org') || '';
-        var t = q.getAll('tagg');
-        el.taggar.querySelectorAll('button').forEach(function (b) {
-            var vald = t.indexOf(b.dataset.tag) !== -1;
-            b.setAttribute('aria-pressed', vald ? 'true' : 'false');
-            b.classList.toggle('active', vald);
+        grupper.forEach(function (g) {
+            var t = q.getAll(g.param);
+            g.ruta.querySelectorAll('button').forEach(function (b) {
+                var vald = t.indexOf(b.dataset.tag) !== -1;
+                b.setAttribute('aria-pressed', vald ? 'true' : 'false');
+                b.classList.toggle('active', vald);
+            });
         });
     }
 
@@ -1518,7 +1577,7 @@ $(function () {
         if (el.egenskap.value) q.set('visa', el.egenskap.value);
         if (el.sortering.value && el.sortering.value !== 'id') q.set('sortera', el.sortering.value);
         if (el.doman && el.doman.value) q.set('org', el.doman.value);
-        valdaTaggar().forEach(function (t) { q.append('tagg', t); });
+        grupper.forEach(function (g) { valda(g).forEach(function (t) { q.append(g.param, t); }); });
         var qs = q.toString();
         history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''));
     }
@@ -1538,11 +1597,12 @@ $(function () {
             case 'inpath': if (d.inpath !== '1') return false; break;
             case 'nolessons': if (d.lessons !== '0') return false; break;
         }
-        var valda = valdaTaggar();
-        if (valda.length) {
+        for (var i = 0; i < grupper.length; i++) {
+            var vg = valda(grupper[i]);
+            if (!vg.length) continue;
             var kursens = [];
-            try { kursens = JSON.parse(d.tags || '[]'); } catch (e) {}
-            var traff = valda.some(function (t) {
+            try { kursens = JSON.parse(d[grupper[i].attr] || '[]'); } catch (e) {}
+            var traff = vg.some(function (t) {
                 return t === '__ingen__' ? kursens.length === 0 : kursens.indexOf(t) !== -1;
             });
             if (!traff) return false;
@@ -1590,13 +1650,15 @@ $(function () {
         skrivTillAdress();
     }
 
-    el.taggar.addEventListener('click', function (e) {
-        var b = e.target.closest('button[data-tag]');
-        if (!b) return;
-        var vald = b.getAttribute('aria-pressed') !== 'true';
-        b.setAttribute('aria-pressed', vald ? 'true' : 'false');
-        b.classList.toggle('active', vald);
-        uppdatera();
+    grupper.forEach(function (g) {
+        g.ruta.addEventListener('click', function (e) {
+            var b = e.target.closest('button[data-tag]');
+            if (!b) return;
+            var vald = b.getAttribute('aria-pressed') !== 'true';
+            b.setAttribute('aria-pressed', vald ? 'true' : 'false');
+            b.classList.toggle('active', vald);
+            uppdatera();
+        });
     });
     [el.status, el.egenskap, el.sortering, el.doman].forEach(function (s) {
         if (s) s.addEventListener('change', uppdatera);
