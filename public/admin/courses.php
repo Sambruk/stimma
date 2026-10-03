@@ -29,9 +29,9 @@ $user = queryOne("SELECT id, is_admin, is_editor, role FROM " . DB_DATABASE . ".
 $isAdmin = $user && $user['is_admin'] == 1;
 $userId = $user['id'] ?? 0;
 
-// SCORM-importen är tills vidare bara till för superadmin. Funktionen behöver
-// utvärderas mot fler paket innan den släpps till redaktörer och admins.
-$scormImportAllowed = $user && ($user['role'] ?? '') === 'super_admin';
+// SCORM-importen är avstängd i gränssnittet (2026-09-04). Knappen och modalen
+// renderas inte för någon; koden ligger kvar tills funktionen utvärderats.
+$scormImportAllowed = false;
 
 // Scope: huvuddomän-admins ser alla orgens domäner; sub-domän-admins bara
 // sin egen. En kurs är synlig om dess organization_domain finns i scope

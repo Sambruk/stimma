@@ -56,3 +56,4 @@ import_users.sql
 
 # Lokala backuper vid felsökning (ska aldrig checkas in)
 .bak-*/
+exports/
