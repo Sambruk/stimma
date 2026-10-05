@@ -57,3 +57,6 @@ import_users.sql
 # Lokala backuper vid felsökning (ska aldrig checkas in)
 .bak-*/
 exports/
+
+# Kurskatalogens API för landningssidan (/opt/app/stimmawebb) – webbsidan är inte öppen kod
+public/api/baskurser.php

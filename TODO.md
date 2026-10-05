@@ -2,6 +2,15 @@
 
 ## Pågående
 
+### Nya kurstitlar, Junglemap-kurserna (2026-10-04)
+- [x] Enligt docs/NYA-KURSTITLAR.md: alla 19 kurserna fanns redan (id 173–200) → bytt i databasen, inget läst in igen
+- [x] Hänvisningar bytta i prerequisites (182, 185), completion_content (197, 198) och lektioner 1647, 1649, 1678,
+      1748, 1753, 1760, 1774. Texterna är delvis HTML-kodade (&aring;) → sökning måste avkoda först
+- [x] Säkerhetskopia före ändringen: db/backups/fore-titelbyte-2026-10-04.sql (courses + lessons)
+- [x] Kurs 177 (lektion 1616, 1618) och 178 (1622) nämnde "kursen om säker generativ AI i arbetet" /
+      "kursen om skydd mot AI-manipulation" i löptext (stod inte i listan). Bytt till nya titlar efter Thomas besked
+      → OBS: kurspaketen för kurs 8 och 9 i C:\projekt\stimmabatch\ har fortfarande de gamla formuleringarna
+
 ### Bilder till hela kursen + panelens linjering (2026-10-02)
 - [x] C2: innehållspanelen linjerar med kortets överkant (låg ovanför på höga skärmar). Scenen centrerar panel+lektion
       som en rad (flex-wrap + align-content), alignSide() mäter med offsetTop (kortets intoning sl-fade flyttar 4 px)
