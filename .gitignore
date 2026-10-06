@@ -60,3 +60,7 @@ exports/
 
 # Kurskatalogens API för landningssidan (/opt/app/stimmawebb) – webbsidan är inte öppen kod
 public/api/baskurser.php
+
+# Lokala databasdumpar från backup-tjänsten (personuppgifter — aldrig i git)
+backups/
+.env.bak*

@@ -2,6 +2,24 @@
 
 ## Pågående
 
+### Backupschema för Stimma (2026-10-06)
+Beslut (Thomas): S3-lagring i EU, lagringstid 7 dagliga + 4 veckovisa + 3 månatliga.
+- [x] backup/Dockerfile (alpine + mariadb-client + restic) och backup/backup.sh
+- [x] backup/restore-test.sh — månatligt återställningstest mot tillfällig databas
+- [x] Tjänsten `backup` i docker-compose.yml med Ofelia-jobb 02:30 (backup) och 04:00 den 1:a (återställningstest)
+- [x] backups/ i .gitignore, RESTIC_PASSWORD genererat i .env
+- [x] Bygg, starta, kör en backup manuellt och verifiera den lokala dumpen
+      Verifierat 2026-10-06: Ofelia registrerade stimma-backup och stimma-restore-test; dump 2,1 MB;
+      återställningstest 58/58 tabeller, 977 användare, 140 kurser, testdatabasen borttagen.
+      Framkallat fel (DB_DATABASE=finns_inte_test) → larm loggat, .tmp städad, larmmejl skickat.
+      Fälla: Postal erbjuder CRAM-MD5 först men nekar det (535) → curl tvingas till AUTH=LOGIN.
+- [ ] Thomas: spara RESTIC_PASSWORD (i .env) utanför servern, t.ex. i lösenordshanteraren — utan det går
+      S3-backupen inte att läsa. Bekräfta att testlarmet kom fram.
+- [x] .env.bak* i .gitignore (.env.bak-before-backup-20261006 skapad innan RESTIC_*-raderna lades till)
+- [ ] Väntar på Thomas: S3-bucket + åtkomstnyckel (endpoint, bucket, key id, secret) → in i .env
+- [ ] Första S3-körningen + återställningstest mot S3
+- [ ] Därefter: radera stimma-backups/ och stimma-git-backup-20260821/
+
 ### Nya kurstitlar, Junglemap-kurserna (2026-10-04)
 - [x] Enligt docs/NYA-KURSTITLAR.md: alla 19 kurserna fanns redan (id 173–200) → bytt i databasen, inget läst in igen
 - [x] Hänvisningar bytta i prerequisites (182, 185), completion_content (197, 198) och lektioner 1647, 1649, 1678,

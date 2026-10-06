@@ -70,6 +70,45 @@ services:
     labels:
       ofelia.enabled: "true"
 
+  backup:
+    # Nattlig backup (2026-10-06): databasdump + uppladdade filer, PUB-dokument
+    # och konfiguration, krypterat till S3 med restic. Se backup/backup.sh.
+    # Utan S3-nycklar i .env görs bara den lokala dumpen (backups/, 7 st).
+    build: ./backup
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_DATABASE: ${DB_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      RESTIC_REPOSITORY: ${RESTIC_REPOSITORY:-}
+      RESTIC_PASSWORD: ${RESTIC_PASSWORD:-}
+      AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_ACCESS_KEY:-}
+      AWS_DEFAULT_REGION: ${BACKUP_S3_REGION:-}
+      BACKUP_ALERT_EMAIL: ${BACKUP_ALERT_EMAIL:-}
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-25}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
+    volumes:
+      - /opt/app/stimma/backups:/backup/local
+      - /opt/app/stimma/public/upload:/data/upload:ro
+      - /opt/app/stimma/public/docs:/data/docs:ro
+      - /opt/app/stimma/config:/data/config:ro
+      - /opt/app/stimma/.env:/data/env/.env:ro
+    labels:
+      ofelia.enabled: "true"
+      # Varje natt 02:30
+      ofelia.job-exec.stimma-backup.schedule: "0 30 2 * * *"
+      ofelia.job-exec.stimma-backup.command: "/usr/local/bin/backup.sh"
+      # Återställningstest 04:00 den 1:a varje månad
+      ofelia.job-exec.stimma-restore-test.schedule: "0 0 4 1 * *"
+      ofelia.job-exec.stimma-restore-test.command: "/usr/local/bin/restore-test.sh"
+
   db:
     image: mariadb:10.11
     restart: always
