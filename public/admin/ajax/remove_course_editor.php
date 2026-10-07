@@ -45,6 +45,12 @@ if (!userCanModifyCourse($course)) {
     exit;
 }
 
+// Extern redaktör ändrar inte vilka som får redigera kursen.
+if (isExternalCourseEditor($course)) {
+    echo json_encode(['success' => false, 'message' => 'Kursen tillhör en annan organisation. Kontakta den för att ändra redaktörerna.']);
+    exit;
+}
+
 try {
     // Ta bort redaktören
     execute("DELETE FROM " . DB_DATABASE . ".course_editors WHERE course_id = ? AND email = ?", [$courseId, $email]);

@@ -21,6 +21,9 @@ $isAdmin = $user && $user['is_admin'] == 1;
 $isEditor = $user && $user['is_editor'] == 1;
 $isViewer = $user && $user['is_viewer'] == 1;
 $isSuperAdmin = $user && $user['role'] === 'super_admin';
+// Kursredaktör utan egen roll: ser bara "Kurser" (se include/auth_check.php).
+$isCourseEditorOnly = !$isAdmin && !$isEditor && !$isViewer
+    && hasCourseEditorAssignments($_SESSION['user_email']);
 
 // Hämta användarens domän och PUB-avtalsstatus (org-scope om grupperad)
 $userDomain = getUserDomain($_SESSION['user_email']);
@@ -139,6 +142,13 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <li class="nav-item">
                     <a href="index.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'index.php' ? 'active' : '' ?>">
                         <i class="bi bi-graph-up me-2"></i> Översikt
+                    </a>
+                </li>
+                <?php endif; ?>
+                <?php if ($isCourseEditorOnly): ?>
+                <li class="nav-item">
+                    <a href="courses.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= in_array($current_page, ['courses.php', 'edit_course.php', 'lessons.php', 'edit_lesson.php', 'edit_quiz.php'], true) ? 'active' : '' ?>">
+                        <i class="bi bi-journal-text me-2"></i> Kurser
                     </a>
                 </li>
                 <?php endif; ?>

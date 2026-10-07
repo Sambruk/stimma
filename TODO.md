@@ -2,6 +2,29 @@
 
 ## Pågående
 
+### Kursredaktörer från andra organisationer (2026-10-07)
+Beslut (Thomas): en extern redaktör får redigera bara de kurser hen lagts till på – blir inte redaktör i sin
+egen org (is_editor sätts inte). Läggs till med exakt e-postadress; konto skapas om domänen är godkänd.
+Extern redaktör ändrar innehåll (titel, beskrivning, avslutssida, lektioner, quiz, bilder) – inte publicering,
+taggar, delning, slutdatum, stegvisa utskick, statistik eller radering.
+- [x] functions.php: isAssignedCourseEditor(), isExternalCourseEditor(), hasCourseEditorAssignments()
+- [x] auth_check.php + ajax_auth_check.php: släpp in kursredaktör utan roll, bara till kurssidorna
+- [x] Menyn i adminytan + länken till adminytan i användarvyn
+- [x] courses.php: visa kurser man är redaktör för oavsett org; dölj skapa-knappar för kursredaktör utan roll
+- [x] edit_course.php: spärra skapa ny kurs; extern redaktör ser/ändrar bara fliken Allmänt (servern behåller resten)
+- [x] edit_lesson.php: tillåt extern redaktör + fixa IDOR (lektionens nuvarande kurs kontrollerades aldrig)
+- [x] edit_quiz.php + ajax/ai_generate_lesson.php: tillåt extern redaktör
+- [x] delete_course.php + export.php: extern redaktör får inte radera eller exportera
+- [x] search_users.php (läge redaktör, exakt e-post) + add_course_editor.php (skapa konto, is_editor bara inom org)
+- [x] edit_course.php JS: redaktörsrutan, märk externa (+ innerHTML → textContent för namnet)
+- [x] Test 2026-10-07 med testkonto + två testkurser i test.invalid (borttagna efteråt): sidåtkomst, menyn,
+      spara kurs (bara titel/beskrivning ändras; status/deadline/stegvis/global/taggar/delning orörda), lektioner,
+      IDOR-försöket nekat, redaktörsanrop nekade, sökning (exakt adress ja, delsträng nej). Superadmin, admin och
+      redaktör i annan org: kurslistorna utan fel.
+- [x] Fix under testet: redirect() utgår från webbplatsens rot → auth_check skickar till admin/courses.php
+- [ ] Öppet (befintligt, inte ändrat): export.php låter admin i VILKEN org som helst exportera VILKEN kurs som helst
+- [ ] Att veta: AI-lektioner/bilder som en extern redaktör genererar dras från hens EGEN organisations AI-kvot
+
 ### Backupschema för Stimma (2026-10-06)
 Beslut (Thomas): S3-lagring i EU, lagringstid 7 dagliga + 4 veckovisa + 3 månatliga.
 - [x] backup/Dockerfile (alpine + mariadb-client + restic) och backup/backup.sh

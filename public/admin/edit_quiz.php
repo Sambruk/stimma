@@ -27,14 +27,17 @@ $currentUser = queryOne("SELECT id, email, is_admin, is_editor, role FROM " . DB
 $orgScope = getOrgScopeDomains($currentUser['email']);
 $isSuper = ($currentUser['role'] ?? '') === 'super_admin';
 
-// Behörighet: admin inom orgscope, eller editor som är författare/course_editor
-if (!$isSuper && !in_array($lesson['organization_domain'], $orgScope, true)) {
+// Behörighet: admin inom orgscope, eller editor som är författare/course_editor.
+// Tilldelad redaktör släpps igenom även när kursen tillhör en annan
+// organisation (kursredaktörer över organisationsgränser, 2026-10-07).
+$isAssignedEditor = isAssignedCourseEditor((int)$lesson['course_id'], $currentUser['email']);
+if (!$isSuper && !$isAssignedEditor && !in_array($lesson['organization_domain'], $orgScope, true)) {
     $_SESSION['message'] = 'Du har inte behörighet till den här lektionens organisation.';
     $_SESSION['message_type'] = 'danger';
     redirect('courses.php');
     exit;
 }
-if (!$isSuper && empty($currentUser['is_admin'])) {
+if (!$isSuper && !$isAssignedEditor && empty($currentUser['is_admin'])) {
     $isCourseEditor = queryOne("SELECT 1 FROM " . DB_DATABASE . ".course_editors WHERE course_id = ? AND email = ?", [$lesson['course_id'], $currentUser['email']]);
     $isAuthor = ((int)$lesson['course_author_id'] === (int)$currentUser['id']);
     if (!$isCourseEditor && !$isAuthor) {

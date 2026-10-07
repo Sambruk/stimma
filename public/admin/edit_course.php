@@ -30,6 +30,15 @@ if ($isViewer && !$isAdmin && !$isEditor) {
     exit;
 }
 
+// Kursredaktör utan egen roll (t.ex. från en annan organisation) redigerar bara
+// kurser hen lagts till på och får inte skapa nya.
+if ($isCourseEditorOnly && !isset($_GET['id'])) {
+    $_SESSION['message'] = 'Du är redaktör för enskilda kurser och kan inte skapa nya kurser.';
+    $_SESSION['message_type'] = 'danger';
+    header('Location: courses.php');
+    exit;
+}
+
 // Hämta användarens e-post för användning i kursbehörigheter
 $userEmail = $_SESSION['user_email'];
 
@@ -48,6 +57,7 @@ $tagDomClause = buildDomainInClause($orgScopeDomains, 'organization_domain');
 
 // Hämta kursdata om vi redigerar en befintlig kurs
 $course = null;
+$isExternalEditor = false;
 $courseTags = [];
 // Diplom-kriterium: min_quiz_percentage. Tomt = inget krav.
 $courseMinQuizPct = '';
@@ -80,6 +90,10 @@ if (isset($_GET['id'])) {
         header('Location: courses.php');
         exit;
     }
+
+    // Extern redaktör: kursen tillhör en annan organisation. Bara innehållet får
+    // ändras – se isExternalCourseEditor() i functions.php.
+    $isExternalEditor = isExternalCourseEditor($course);
 
     // Hämta kursredaktörer
     $editors = queryAll("SELECT ce.email, u.name
@@ -182,6 +196,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $sequentialStatus = ($existingStatus && $existingStatus !== 'pending') ? $existingStatus : 'pending';
     }
     $imageUrl = $course['image_url'] ?? null;
+
+    // Extern redaktör: publicering, slutdatum och stegvisa utskick rör kursens
+    // deltagare och beslutas av kursens organisation. Fälten finns i formuläret
+    // men döljs – det som skickas in ignoreras och kursens värden behålls.
+    if ($isExternalEditor) {
+        $status = $course['status'];
+        $deadline = $course['deadline'];
+        $startDate = $course['start_date'];
+        $sequentialMode = (int)$course['sequential_mode'];
+        $sequentialIntervalDays = (int)$course['sequential_interval_days'];
+        $sequentialReminderDelayDays = (int)$course['sequential_reminder_delay_days'];
+        $seqNewLessonSubject = $course['seq_new_lesson_subject'];
+        $seqNewLessonBody = $course['seq_new_lesson_body'];
+        $seqReminderSubject = $course['seq_reminder_subject'];
+        $seqReminderBody = $course['seq_reminder_body'];
+        $enrollmentType = $course['enrollment_type'];
+        $sequentialStatus = $course['sequential_status'];
+        $isGlobal = (int)$course['is_global'];
+    }
     
     if (empty($title)) {
         $error = 'Titel är obligatoriskt.';
@@ -274,57 +307,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             [$_GET['id'], $minQuizPct]);
                 }
 
-                // Uppdatera kursens taggar
-                // Ta bort befintliga taggar
-                execute("DELETE FROM " . DB_DATABASE . ".course_tags WHERE course_id = ?", [$_GET['id']]);
+                // Extern redaktör: taggar, organisationstaggar och delning tillhör
+                // kursens organisation. Hoppas över helt – annars raderas kursens
+                // taggar, eftersom bara redigerarens egna organisations taggar godtas.
+                if (!$isExternalEditor) {
+                    // Uppdatera kursens taggar
+                    // Ta bort befintliga taggar
+                    execute("DELETE FROM " . DB_DATABASE . ".course_tags WHERE course_id = ?", [$_GET['id']]);
 
-                // Lägg till nya taggar (endast taggar från användarens organisation)
-                foreach ($selectedTags as $tagId) {
-                    $tagId = (int)$tagId;
-                    // Verifiera att taggen tillhör någon av adminens orgs domäner
-                    $validTag = queryOne(
-                        "SELECT id FROM " . DB_DATABASE . ".tags WHERE id = ? AND {$tagDomClause['fragment']}",
-                        array_merge([$tagId], $tagDomClause['params'])
-                    );
-                    if ($validTag) {
-                        execute(
-                            "INSERT INTO " . DB_DATABASE . ".course_tags (course_id, tag_id) VALUES (?, ?)",
-                            [$_GET['id'], $tagId]
+                    // Lägg till nya taggar (endast taggar från användarens organisation)
+                    foreach ($selectedTags as $tagId) {
+                        $tagId = (int)$tagId;
+                        // Verifiera att taggen tillhör någon av adminens orgs domäner
+                        $validTag = queryOne(
+                            "SELECT id FROM " . DB_DATABASE . ".tags WHERE id = ? AND {$tagDomClause['fragment']}",
+                            array_merge([$tagId], $tagDomClause['params'])
                         );
+                        if ($validTag) {
+                            execute(
+                                "INSERT INTO " . DB_DATABASE . ".course_tags (course_id, tag_id) VALUES (?, ?)",
+                                [$_GET['id'], $tagId]
+                            );
+                        }
                     }
-                }
 
-                // Uppdatera organisationstaggar
-                execute("DELETE FROM " . DB_DATABASE . ".course_org_tags WHERE course_id = ?", [$_GET['id']]);
-                $selectedOrgTags = $_POST['org_tags'] ?? [];
-                $domainOrgTags = array_column($availableOrgTags, 'tag');
-                foreach ($selectedOrgTags as $orgTag) {
-                    if (in_array($orgTag, $domainOrgTags)) {
-                        execute(
-                            "INSERT INTO " . DB_DATABASE . ".course_org_tags (course_id, tag) VALUES (?, ?)",
-                            [$_GET['id'], $orgTag]
-                        );
+                    // Uppdatera organisationstaggar
+                    execute("DELETE FROM " . DB_DATABASE . ".course_org_tags WHERE course_id = ?", [$_GET['id']]);
+                    $selectedOrgTags = $_POST['org_tags'] ?? [];
+                    $domainOrgTags = array_column($availableOrgTags, 'tag');
+                    foreach ($selectedOrgTags as $orgTag) {
+                        if (in_array($orgTag, $domainOrgTags)) {
+                            execute(
+                                "INSERT INTO " . DB_DATABASE . ".course_org_tags (course_id, tag) VALUES (?, ?)",
+                                [$_GET['id'], $orgTag]
+                            );
+                        }
                     }
-                }
 
-                // Uppdatera delade domäner. share_mode = 'whole_org' rensar
-                // alla, 'specific_domains' sparar bara de rutade. Validerar att
-                // domänen faktiskt tillhör användarens organisation för att
-                // förhindra att admin begränsar till en främmande domän.
-                // Endast huvuddomän-admins får ändra synlighet — sub-domän-
-                // användares POST ignoreras helt (befintligt värde behålls).
-                if ($isOnPrimaryDomain) {
-                    $shareMode = $_POST['share_mode'] ?? 'whole_org';
-                    if ($shareMode === 'specific_domains') {
-                        $userOrgRow2 = getOrganizationByDomain(substr(strrchr($_SESSION['user_email'], '@'), 1));
-                        $allowedDomainList = $userOrgRow2 ? getOrganizationDomains($userOrgRow2['id']) : [];
-                        $submittedDomains = array_values(array_filter((array)($_POST['shared_domains'] ?? [])));
-                        $filtered = array_intersect($submittedDomains, $allowedDomainList);
-                        setCourseSharedDomains((int)$_GET['id'], $filtered);
-                    } else {
-                        // Hela organisationen — rensa alla
-                        setCourseSharedDomains((int)$_GET['id'], []);
+                    // Uppdatera delade domäner. share_mode = 'whole_org' rensar
+                    // alla, 'specific_domains' sparar bara de rutade. Validerar att
+                    // domänen faktiskt tillhör användarens organisation för att
+                    // förhindra att admin begränsar till en främmande domän.
+                    // Endast huvuddomän-admins får ändra synlighet — sub-domän-
+                    // användares POST ignoreras helt (befintligt värde behålls).
+                    if ($isOnPrimaryDomain) {
+                        $shareMode = $_POST['share_mode'] ?? 'whole_org';
+                        if ($shareMode === 'specific_domains') {
+                            $userOrgRow2 = getOrganizationByDomain(substr(strrchr($_SESSION['user_email'], '@'), 1));
+                            $allowedDomainList = $userOrgRow2 ? getOrganizationDomains($userOrgRow2['id']) : [];
+                            $submittedDomains = array_values(array_filter((array)($_POST['shared_domains'] ?? [])));
+                            $filtered = array_intersect($submittedDomains, $allowedDomainList);
+                            setCourseSharedDomains((int)$_GET['id'], $filtered);
+                        } else {
+                            // Hela organisationen — rensa alla
+                            setCourseSharedDomains((int)$_GET['id'], []);
+                        }
                     }
+
                 }
 
                 $_SESSION['message'] = 'Kursen har uppdaterats.';
@@ -479,6 +518,24 @@ require_once 'include/header.php';
                                 border-bottom-color: #fff !important;
                             }
                         </style>
+
+                        <?php if ($isExternalEditor): ?>
+                        <!-- Extern redaktör: bara fliken Allmänt. Övriga flikar och slutdatum
+                             döljs; servern behåller kursens värden även om de skickas in. -->
+                        <style>
+                            [data-course-tab="sequential"], [data-course-tab="assignment"], [data-course-tab="publishing"],
+                            .course-tab-section[data-tab-section="sequential"],
+                            .course-tab-section[data-tab-section="assignment"],
+                            .course-tab-section[data-tab-section="publishing"],
+                            .extern-dold { display: none !important; }
+                        </style>
+                        <div class="alert alert-info small">
+                            <i class="bi bi-person-badge me-1"></i>
+                            Kursen tillhör <strong><?= htmlspecialchars($course['organization_domain'] ?? '') ?></strong>.
+                            Som redaktör kan du ändra kursens innehåll. Publicering, slutdatum, stegvisa utskick,
+                            taggar och delning styrs av kursens organisation.
+                        </div>
+                        <?php endif; ?>
 
                         <!-- Flikrad — fyra logiska sektioner -->
                         <ul class="nav nav-tabs mb-3" id="editCourseTabs" role="tablist">
@@ -730,7 +787,7 @@ require_once 'include/header.php';
                                 </div>
                             </div>
 
-                            <div class="col-lg-2 col-md-4">
+                            <div class="col-lg-2 col-md-4<?= $isExternalEditor ? ' extern-dold' : '' ?>">
                                 <label for="deadline" class="form-label small mb-1">Slutdatum
                                     <span class="text-muted ms-1" data-bs-toggle="tooltip"
                                           data-bs-title="Datum då kursen ska vara genomförd. Lämna tomt om inget slutdatum.">
@@ -1743,7 +1800,9 @@ require_once 'include/header.php';
     </div>
 </div>
 
-<?php if (isset($course['id'])): ?>
+<?php if (isset($course['id']) && !$isExternalEditor): ?>
+<!-- Kursredaktörer hör till "Allmänt"-fliken (dold för extern redaktör: vilka som
+     får redigera kursen bestämmer kursens organisation) -->
 <!-- Kursredaktörer hör till "Allmänt"-fliken (data-tab-section="content")
      så den följer flikbytet som resten av sidan. -->
 <div class="course-tab-section" data-tab-section="content">
@@ -1771,7 +1830,10 @@ require_once 'include/header.php';
                     foreach ($editors as $editor):
                     ?>
                     <div class="d-flex justify-content-between align-items-center mb-2 editor-item" data-email="<?= htmlspecialchars($editor['email']) ?>">
-                        <span><?= htmlspecialchars($editor['name'] ?? $editor['email']) ?></span>
+                        <span><?= htmlspecialchars($editor['name'] ?? $editor['email']) ?><?php
+                            if (!in_array($course['organization_domain'], getOrgScopeDomains($editor['email']), true)): ?>
+                            <span class="badge bg-info text-dark ms-2" title="Kan bara redigera den här kursen">annan organisation</span><?php
+                            endif; ?></span>
                         <button class="btn btn-sm btn-danger remove-editor" type="button">Ta bort</button>
                     </div>
                     <?php endforeach; ?>
@@ -1934,7 +1996,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            fetch(`ajax/search_users.php?search=${encodeURIComponent(search)}`)
+            // lage=redaktor: en hel e-postadress hittar även personer i andra organisationer
+            fetch(`ajax/search_users.php?lage=redaktor&search=${encodeURIComponent(search)}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
@@ -1945,6 +2008,16 @@ document.addEventListener('DOMContentLoaded', function() {
                                 item.href = '#';
                                 item.className = 'list-group-item list-group-item-action';
                                 item.textContent = user.name ? `${user.name} (${user.email})` : user.email;
+                                // Annan organisation / inget konto än: säg det innan man lägger till
+                                const noter = [];
+                                if (user.extern) noter.push('annan organisation – kan bara redigera den här kursen');
+                                if (user.nytt_konto) noter.push('har inget konto än – det skapas');
+                                if (noter.length) {
+                                    const not = document.createElement('small');
+                                    not.className = 'd-block text-muted';
+                                    not.textContent = noter.join(' · ');
+                                    item.appendChild(not);
+                                }
                                 item.addEventListener('click', function(e) {
                                     e.preventDefault();
                                     editorSearch.value = user.name ? `${user.name} (${user.email})` : user.email;
@@ -1997,10 +2070,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     const editorItem = document.createElement('div');
                     editorItem.className = 'd-flex justify-content-between align-items-center mb-2 editor-item';
                     editorItem.setAttribute('data-email', selectedUser.email);
-                    editorItem.innerHTML = `
-                        <span>${selectedUser.name ? `${selectedUser.name} (${selectedUser.email})` : selectedUser.email}</span>
-                        <button class="btn btn-sm btn-danger remove-editor" type="button">Ta bort</button>
-                    `;
+                    // textContent, inte innerHTML: namnet kan komma från en annan organisation.
+                    const namn = document.createElement('span');
+                    namn.textContent = selectedUser.name ? `${selectedUser.name} (${selectedUser.email})` : selectedUser.email;
+                    if (data.extern) {
+                        const etikett = document.createElement('span');
+                        etikett.className = 'badge bg-info text-dark ms-2';
+                        etikett.textContent = 'annan organisation';
+                        namn.appendChild(etikett);
+                    }
+                    const taBort = document.createElement('button');
+                    taBort.className = 'btn btn-sm btn-danger remove-editor';
+                    taBort.type = 'button';
+                    taBort.textContent = 'Ta bort';
+                    editorItem.append(namn, taBort);
                     editorsList.appendChild(editorItem);
                     editorSearch.value = '';
                     selectedUser = null;

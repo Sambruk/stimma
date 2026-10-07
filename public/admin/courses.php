@@ -48,6 +48,14 @@ $visibilityFragment = "(
 )";
 $visibilityParams = array_merge($courseDomClause['params'], $sharedDomClause['params']);
 
+// Kurser där användaren uttryckligen lagts till som redaktör syns alltid, även
+// när kursen tillhör en annan organisation (kursredaktörer över
+// organisationsgränser, 2026-10-07).
+$assignedEditorFragment = "EXISTS (
+    SELECT 1 FROM " . DB_DATABASE . ".course_editors ace
+    WHERE ace.course_id = c.id AND ace.email = ?
+)";
+
 // Hämta kurser baserat på användarens behörighet
 if ($isAdmin) {
     // Administratörer ser kurser i sitt scope (sub-domän: egen domän,
@@ -56,10 +64,10 @@ if ($isAdmin) {
         SELECT c.*, COUNT(l.id) as lesson_count
         FROM " . DB_DATABASE . ".courses c
         LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id
-        WHERE $visibilityFragment
+        WHERE ($visibilityFragment OR $assignedEditorFragment)
         GROUP BY c.id
         ORDER BY c.id ASC
-    ", $visibilityParams);
+    ", array_merge($visibilityParams, [$userEmail]));
 } else {
     // Redaktörer ser kurser de skapat (author_id) ELLER tilldelats redaktörskap för
     $courses = queryAll("
@@ -67,12 +75,27 @@ if ($isAdmin) {
         FROM " . DB_DATABASE . ".courses c
         LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id
         LEFT JOIN " . DB_DATABASE . ".course_editors ce ON c.id = ce.course_id
-        WHERE $visibilityFragment
-          AND (c.author_id = ? OR ce.email = ?)
+        WHERE ($visibilityFragment AND (c.author_id = ? OR ce.email = ?))
+           OR $assignedEditorFragment
         GROUP BY c.id
         ORDER BY c.id ASC
-    ", array_merge($visibilityParams, [$userId, $userEmail]));
+    ", array_merge($visibilityParams, [$userId, $userEmail, $userEmail]));
 }
+
+// Kurser från en annan organisation där användaren bara är redaktör: markeras
+// i listan och får inte kopieras, exporteras eller raderas härifrån. Samma
+// regel som isExternalCourseEditor(), men beräknad en gång för hela listan.
+$myScopeDomains = getOrgScopeDomains($userEmail);
+$myEditorCourseIds = array_map('intval', array_column(
+    query("SELECT course_id FROM " . DB_DATABASE . ".course_editors WHERE email = ?", [$userEmail]) ?: [],
+    'course_id'
+));
+$iAmSuperAdmin = ($user['role'] ?? '') === 'super_admin';
+$isExternalRow = function (array $c) use ($myScopeDomains, $myEditorCourseIds, $iAmSuperAdmin) {
+    return !$iAmSuperAdmin
+        && !in_array($c['organization_domain'] ?? '', $myScopeDomains, true)
+        && in_array((int)$c['id'], $myEditorCourseIds, true);
+};
 
 // Hämta organisationstaggar per kurs
 $courseOrgTagsMap = [];
@@ -173,6 +196,8 @@ require_once 'include/header.php';
                     <div class="progress-bar bg-success progress-bar-striped progress-bar-animated" id="aiProgressBarSmall" style="width: 0%"></div>
                 </div>
             </div>
+            <?php /* Kursredaktör utan egen roll redigerar bara tilldelade kurser och skapar inga nya. */ ?>
+            <?php if (!$isCourseEditorOnly): ?>
             <button type="button" class="btn btn-sm btn-success" id="aiGenerateBtn" data-bs-toggle="modal" data-bs-target="#aiGenerateModal">
                 <i class="bi bi-robot"></i> AI Generera kurs
             </button>
@@ -190,6 +215,7 @@ require_once 'include/header.php';
             <a href="edit_course.php" class="btn btn-sm btn-primary">
                 <i class="bi bi-plus-lg"></i> Ny kurs
             </a>
+            <?php endif; ?>
         </div>
     </div>
     <div class="card-body">
@@ -289,6 +315,7 @@ require_once 'include/header.php';
                         $lessonCount = count($lessons);
                         $courseSharedDoms = getCourseSharedDomains($course['id']);
                         $origDomainF = $course['original_organization_domain'] ?? null;
+                        $externalRow = $isExternalRow($course);
                     ?>
                     <tr data-id="<?= $course['id'] ?>"
                         data-title="<?= htmlspecialchars(mb_strtolower($course['title'] ?? '')) ?>"
@@ -314,6 +341,12 @@ require_once 'include/header.php';
                                 <a href="lessons.php?course_id=<?= $course['id'] ?>" class="text-decoration-none">
                                     <?= htmlspecialchars($course['title']) ?>
                                 </a>
+                                <?php if ($externalRow): ?>
+                                <span class="badge bg-info text-dark" style="font-size: 0.7rem;"
+                                      title="Kursen tillhör <?= htmlspecialchars($course['organization_domain'] ?? '') ?>. Du är redaktör och kan ändra innehållet.">
+                                    <i class="bi bi-person-badge me-1"></i>Redaktör · <?= htmlspecialchars($course['organization_domain'] ?? '') ?>
+                                </span>
+                                <?php endif; ?>
                                 <?php if (!empty($course['sequential_mode'])): ?>
                                 <span class="badge bg-warning text-dark" style="font-size: 0.7rem;"
                                       title="Lektioner låses upp stegvis med tidsintervall">
@@ -384,6 +417,7 @@ require_once 'include/header.php';
                                         data-course-id="<?= (int)$course['id'] ?>">
                                     <i class="bi bi-link-45deg"></i>
                                 </button>
+                                <?php if (!$externalRow): ?>
                                 <button type="button" class="btn btn-sm btn-outline-success" title="Kopiera kursen till min organisation"
                                         onclick="copyCourseInOrg(<?= (int)$course['id'] ?>, <?= htmlspecialchars(json_encode($course['title']), ENT_QUOTES) ?>)">
                                     <i class="bi bi-files"></i>
@@ -395,6 +429,7 @@ require_once 'include/header.php';
                                    class="btn btn-sm btn-outline-danger" title="Radera kurs">
                                     <i class="bi bi-trash"></i>
                                 </button>
+                                <?php endif; ?>
                             </div>
                         </td>
                     </tr>

@@ -78,6 +78,15 @@ if (!userCanModifyCourse($course)) {
     exit;
 }
 
+// Extern redaktör (kursen tillhör en annan organisation) ändrar bara innehållet.
+// Att radera kursen beslutar kursens organisation.
+if (isExternalCourseEditor($course)) {
+    $_SESSION['message'] = 'Kursen tillhör en annan organisation. Som redaktör kan du ändra innehållet men inte radera kursen.';
+    $_SESSION['message_type'] = 'danger';
+    header('Location: courses.php');
+    exit;
+}
+
 // Radera kursen och alla relaterade data
 try {
     execute("START TRANSACTION");

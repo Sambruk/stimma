@@ -53,6 +53,32 @@ $users = queryAll(
     array_merge(["%$search%", "%$search%", $_SESSION['user_email']], $emailDomClause['params'])
 );
 
+// Redaktörsrutan i edit_course.php (?lage=redaktor): en hel e-postadress hittar
+// personen även i en annan organisation, så att hen kan bli redaktör för en
+// enskild kurs (2026-10-07). Bara exakt adress – det går inte att bläddra
+// bland andra organisationers användare. Finns inget konto men domänen är
+// ansluten till Stimma skapas kontot när redaktören läggs till.
+$exaktAdress = strtolower(trim($_GET['search']));
+if (($_GET['lage'] ?? '') === 'redaktor' && filter_var($exaktAdress, FILTER_VALIDATE_EMAIL)
+    && $exaktAdress !== strtolower($_SESSION['user_email'])
+    && !in_array($exaktAdress, array_map('strtolower', array_column($users, 'email')), true)) {
+    $adressDoman = substr(strrchr($exaktAdress, '@'), 1);
+    $arExtern = !in_array($adressDoman, $orgScopeDomains, true);
+    $finns = queryOne("SELECT email, name FROM " . DB_DATABASE . ".users WHERE email = ?", [$exaktAdress]);
+    if ($finns) {
+        $users[] = ['email' => $finns['email'], 'name' => $finns['name'], 'extern' => $arExtern];
+    } elseif (isDomainAllowed($adressDoman)) {
+        $users[] = ['email' => $exaktAdress, 'name' => null, 'extern' => $arExtern, 'nytt_konto' => true];
+    } else {
+        echo json_encode([
+            'success' => true,
+            'users' => [],
+            'message' => 'Domänen ' . $adressDoman . ' är inte ansluten till Stimma, så personen kan inte bli redaktör.'
+        ]);
+        exit;
+    }
+}
+
 // Om inga användare hittades, kontrollera om söksträngen är en e-postadress
 if (empty($users) && filter_var($search, FILTER_VALIDATE_EMAIL)) {
     echo json_encode([

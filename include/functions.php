@@ -1213,6 +1213,52 @@ function userCanModifyCourse(array $course) {
     return false;
 }
 
+/**
+ * Är användaren uttryckligen tillagd som redaktör för kursen (course_editors)?
+ */
+function isAssignedCourseEditor(int $courseId, ?string $email = null): bool {
+    $email = $email ?? ($_SESSION['user_email'] ?? null);
+    if (!$email || $courseId <= 0) return false;
+    return (bool)queryOne(
+        "SELECT 1 FROM " . DB_DATABASE . ".course_editors WHERE course_id = ? AND email = ? LIMIT 1",
+        [$courseId, $email]
+    );
+}
+
+/**
+ * Extern kursredaktör (2026-10-07): användaren når kursen enbart via
+ * course_editors, och kursen tillhör en annan organisation än användarens.
+ *
+ * En extern redaktör får ändra kursens innehåll – titel, beskrivning,
+ * avslutssida, lektioner, quiz och bilder – men inte publicering, taggar,
+ * delning, slutdatum eller stegvisa utskick. De besluten rör kursens
+ * deltagare och ligger kvar hos kursens organisation.
+ */
+function isExternalCourseEditor(array $course, ?string $email = null): bool {
+    $email = $email ?? ($_SESSION['user_email'] ?? null);
+    if (!$email || empty($course['id'])) return false;
+
+    $u = queryOne("SELECT role FROM " . DB_DATABASE . ".users WHERE email = ?", [$email]);
+    if (($u['role'] ?? '') === 'super_admin') return false;
+
+    $org = $course['organization_domain'] ?? '';
+    if ($org !== '' && in_array($org, getOrgScopeDomains($email), true)) return false;
+
+    return isAssignedCourseEditor((int)$course['id'], $email);
+}
+
+/**
+ * Har användaren minst ett kursredaktörskap? Adminytans grindar släpper in en
+ * sådan användare även utan egen roll (admin/redaktör/läsbehörig), men bara
+ * till kurssidorna – se admin/include/auth_check.php.
+ */
+function hasCourseEditorAssignments(string $email): bool {
+    return (bool)queryOne(
+        "SELECT 1 FROM " . DB_DATABASE . ".course_editors WHERE email = ? LIMIT 1",
+        [$email]
+    );
+}
+
 // =============================================================================
 // Organisationsgruppering (migration 023)
 //

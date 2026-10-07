@@ -25,7 +25,11 @@ if (!isset($_POST['course_id']) || !isset($_POST['email'])) {
 }
 
 $courseId = (int)$_POST['course_id'];
-$newEditorEmail = trim($_POST['email']);
+$newEditorEmail = strtolower(trim($_POST['email']));
+if (!filter_var($newEditorEmail, FILTER_VALIDATE_EMAIL)) {
+    echo json_encode(['success' => false, 'message' => 'Ogiltig e-postadress.']);
+    exit;
+}
 
 // Kontrollera om kursen finns (måste hämtas före behörighetscheck så att
 // userCanModifyCourse kan kolla organization_domain).
@@ -45,6 +49,13 @@ if (!userCanModifyCourse($course)) {
     exit;
 }
 
+// En extern redaktör (kursen tillhör en annan organisation) lägger inte till
+// fler redaktörer – vilka som får redigera kursen bestämmer kursens organisation.
+if (isExternalCourseEditor($course)) {
+    echo json_encode(['success' => false, 'message' => 'Kursen tillhör en annan organisation. Kontakta den för att lägga till fler redaktörer.']);
+    exit;
+}
+
 // Kontrollera om e-postadressen redan är redaktör
 $existingEditor = queryOne("SELECT 1 FROM " . DB_DATABASE . ".course_editors WHERE course_id = ? AND email = ?", [$courseId, $newEditorEmail]);
 if ($existingEditor) {
@@ -52,12 +63,26 @@ if ($existingEditor) {
     exit;
 }
 
-// Kontrollera om användaren finns
+// Kontrollera om användaren finns. Saknas kontot skapas det om domänen är
+// ansluten till Stimma – samma sak som händer vid första inloggningen
+// (index.php). Gör det möjligt att lägga till redaktörer från andra
+// organisationer innan de har loggat in (2026-10-07).
 $userExists = queryOne("SELECT 1 FROM " . DB_DATABASE . ".users WHERE email = ?", [$newEditorEmail]);
+$nyttKonto = false;
 if (!$userExists) {
-    echo json_encode(['success' => false, 'message' => 'Användaren måste skapas först.']);
-    exit;
+    $nyDoman = substr(strrchr($newEditorEmail, '@'), 1);
+    if (!isDomainAllowed($nyDoman)) {
+        echo json_encode(['success' => false, 'message' => 'Domänen ' . $nyDoman . ' är inte ansluten till Stimma.']);
+        exit;
+    }
+    execute("INSERT INTO " . DB_DATABASE . ".users (email, created_at) VALUES (?, NOW())", [$newEditorEmail]);
+    $nyttKonto = true;
 }
+
+// Redaktörsrollen på kontot (is_editor) ger rätt att skapa kurser i den egna
+// organisationen. Den sätts bara när redaktören hör till kursens organisation.
+// En redaktör från en annan organisation får bara redigera den här kursen.
+$sammaOrganisation = in_array($course['organization_domain'], getOrgScopeDomains($newEditorEmail), true);
 
 // Lägg till redaktör
 try {
@@ -68,9 +93,12 @@ try {
     $sql1 = "INSERT INTO " . DB_DATABASE . ".course_editors (course_id, email, created_by) VALUES (?, ?, ?)";
     $result1 = execute($sql1, [$courseId, $newEditorEmail, $userEmail]);
     
-    // Uppdatera is_editor i users-tabellen om den inte redan är satt till 1
-    $sql2 = "UPDATE " . DB_DATABASE . ".users SET is_editor = 1 WHERE email = ? AND (is_editor = 0 OR is_editor IS NULL)";
-    $result2 = execute($sql2, [$newEditorEmail]);
+    // Uppdatera is_editor i users-tabellen om den inte redan är satt till 1 –
+    // bara inom kursens egen organisation (se ovan)
+    if ($sammaOrganisation) {
+        $sql2 = "UPDATE " . DB_DATABASE . ".users SET is_editor = 1 WHERE email = ? AND (is_editor = 0 OR is_editor IS NULL)";
+        $result2 = execute($sql2, [$newEditorEmail]);
+    }
     
     if ($result1) {
         // Bekräfta transaktion
@@ -97,6 +125,8 @@ try {
                     <strong style='font-size: 1.1em;'>$courseTitle</strong>
                 </div>
                 <p>Som redaktör kan du redigera kursens innehåll och lektioner.</p>
+                <p>Logga in med din e-postadress på $siteUrl – du får en inloggningslänk till den här adressen.
+                   Kursen finns sedan under Administration → Kurser.</p>
                 <p style='text-align: center; margin-top: 25px;'>
                     <a href='$siteUrl/admin/courses.php' style='background: #0F3B5F; color: #fff; padding: 12px 30px; text-decoration: none; border-radius: 5px;'>Gå till kurser</a>
                 </p>
@@ -108,7 +138,10 @@ try {
 
         sendSmtpMail($newEditorEmail, "Du har lagts till som redaktör - $courseTitle", $emailBody);
 
-        echo json_encode(['success' => true]);
+        logActivity($userEmail, "Lade till redaktör {$newEditorEmail} för kurs {$courseId}"
+            . ($sammaOrganisation ? '' : ' (annan organisation)') . ($nyttKonto ? ', konto skapat' : ''));
+
+        echo json_encode(['success' => true, 'extern' => !$sammaOrganisation, 'nytt_konto' => $nyttKonto]);
     } else {
         // Återställ transaktion vid fel
         execute("ROLLBACK");

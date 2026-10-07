@@ -29,10 +29,14 @@ if (!isset($isAdmin) || !isset($isCourseEditor) || !isset($isViewer)) {
         $isViewer = $sbUser ? (bool)$sbUser['is_viewer'] : false;
     }
 }
-// Samma tre roller som admin/include/auth_check.php släpper in. Listan måste
+// Samma roller som admin/include/auth_check.php släpper in. Listan måste
 // hållas i takt med den, annars får någon roll sidor utan meny eller meny utan
-// sidor.
-$showAdminLink = ($isAdmin || $isCourseEditor || $isViewer) && empty($isHeaderPublicOnly);
+// sidor. Kursredaktör utan egen roll (t.ex. från en annan organisation) går
+// direkt till kurslistan – det är den enda adminsidan hen har.
+$rdCourseEditorOnly = !$isAdmin && !$isCourseEditor && !$isViewer
+    && isset($_SESSION['user_email']) && hasCourseEditorAssignments($_SESSION['user_email']);
+$showAdminLink = ($isAdmin || $isCourseEditor || $isViewer || $rdCourseEditorOnly) && empty($isHeaderPublicOnly);
+$rdAdminHref = $rdCourseEditorOnly ? 'admin/courses.php' : 'admin/index.php';
 
 // Användarinitialer för avatar
 $rdUserName = $headerUserName ?? '';
@@ -101,7 +105,7 @@ if ($rdUserDomain !== '' && function_exists('getOrganizationByDomain')) {
 
         <?php if ($showAdminLink): ?>
         <div class="rd-nav-section">System</div>
-        <a href="admin/index.php" class="rd-nav-link <?= $rdActive === 'admin' ? 'active' : '' ?>">
+        <a href="<?= $rdAdminHref ?>" class="rd-nav-link <?= $rdActive === 'admin' ? 'active' : '' ?>">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg>
             Administration
         </a>

@@ -52,6 +52,14 @@ if (!$course) {
     exit;
 }
 
+// Extern redaktör (kursen tillhör en annan organisation) får inte exportera.
+if (isExternalCourseEditor($course)) {
+    $_SESSION['message'] = 'Kursen tillhör en annan organisation och kan inte exporteras härifrån.';
+    $_SESSION['message_type'] = 'danger';
+    header('Location: courses.php');
+    exit;
+}
+
 // Hämta alla lektioner för kursen
 $lessons = queryAll("SELECT * FROM " . DB_DATABASE . ".lessons WHERE course_id = ? ORDER BY sort_order", [$courseId]);
 

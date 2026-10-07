@@ -35,6 +35,7 @@ if (isset($_GET['id'])) {
 //   - Admin: alla kurser i den egna organisationens samtliga domäner
 //   - Redaktör: bara kurser man själv är författare till ELLER tilldelats som
 //     redaktör för (via course_editors)
+//   - Båda: plus kurser i andra organisationer där man tilldelats som redaktör
 $userDomain = substr(strrchr($_SESSION['user_email'], "@"), 1);
 $lessonOrgScope = getOrgScopeDomains($_SESSION['user_email']);
 $lessonCourseClause = buildDomainInClause($lessonOrgScope, 'c.organization_domain');
@@ -42,19 +43,35 @@ if ($isAdmin) {
     $courses = queryAll(
         "SELECT c.* FROM " . DB_DATABASE . ".courses c
          WHERE {$lessonCourseClause['fragment']}
+            OR EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_editors ace
+                        WHERE ace.course_id = c.id AND ace.email = ?)
          ORDER BY c.sort_order ASC",
-        $lessonCourseClause['params']
+        array_merge($lessonCourseClause['params'], [$_SESSION['user_email']])
     );
 } else {
     $courses = queryAll(
         "SELECT DISTINCT c.* FROM " . DB_DATABASE . ".courses c
          LEFT JOIN " . DB_DATABASE . ".course_editors ce ON ce.course_id = c.id
-         WHERE {$lessonCourseClause['fragment']}
-           AND (c.author_id = ? OR ce.email = ?)
+         WHERE ({$lessonCourseClause['fragment']} AND (c.author_id = ? OR ce.email = ?))
+            OR ce.email = ?
          ORDER BY c.sort_order ASC",
-        array_merge($lessonCourseClause['params'], [$_SESSION['user_id'], $_SESSION['user_email']])
+        array_merge($lessonCourseClause['params'], [$_SESSION['user_id'], $_SESSION['user_email'], $_SESSION['user_email']])
     );
 }
+
+// Får användaren skriva lektioner i kursen? Admin i kursens organisation,
+// kursens författare eller tilldelad redaktör – den sista även när kursen
+// tillhör en annan organisation (kursredaktörer över organisationsgränser).
+$kanSkrivaLektioner = function (int $kursId) use ($lessonOrgScope) {
+    $kurs = queryOne(
+        "SELECT id, organization_domain, author_id FROM " . DB_DATABASE . ".courses WHERE id = ?",
+        [$kursId]
+    );
+    if (!$kurs) return false;
+    if (userCanModifyCourse($kurs)) return true;
+    return in_array($kurs['organization_domain'], $lessonOrgScope, true)
+        && (int)$kurs['author_id'] === (int)$_SESSION['user_id'];
+};
 
 // Hantera formulär
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -225,21 +242,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Titel är obligatoriskt.';
     } elseif ($course_id > 0) {
         // Säkerhetsnät: validera att användaren har rätt att skriva till kursen.
-        $targetCourse = queryOne(
-            "SELECT organization_domain, author_id FROM " . DB_DATABASE . ".courses WHERE id = ?",
-            [$course_id]
-        );
-        if (!$targetCourse || !in_array($targetCourse['organization_domain'], $lessonOrgScope, true)) {
+        // Både kursen lektionen ska ligga i och – vid redigering – kursen den
+        // ligger i nu. Tidigare kontrollerades bara målkursen, så en redaktör
+        // kunde skriva över (och flytta) en lektion i en annan organisations
+        // kurs genom att ange sin egen kurs i formuläret (rättat 2026-10-07).
+        if (!$kanSkrivaLektioner($course_id)) {
             $error = 'Du har inte behörighet att skapa/redigera lektioner i den valda kursen.';
-        } elseif (!$isAdmin) {
-            $isCourseEditor = queryOne(
-                "SELECT 1 FROM " . DB_DATABASE . ".course_editors WHERE course_id = ? AND email = ?",
-                [$course_id, $_SESSION['user_email']]
-            );
-            $isCourseAuthor = ((int)$targetCourse['author_id'] === (int)$_SESSION['user_id']);
-            if (!$isCourseEditor && !$isCourseAuthor) {
-                $error = 'Du är inte redaktör eller författare för den valda kursen.';
-            }
+        } elseif (isset($_GET['id']) && !$kanSkrivaLektioner((int)($lesson['course_id'] ?? 0))) {
+            $error = 'Du har inte behörighet att ändra den här lektionen.';
         }
     }
 
@@ -392,17 +402,19 @@ if ($isAdmin) {
     $courses = queryAll(
         "SELECT c.* FROM " . DB_DATABASE . ".courses c
          WHERE {$lessonCourseClause['fragment']}
+            OR EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_editors ace
+                        WHERE ace.course_id = c.id AND ace.email = ?)
          ORDER BY c.sort_order ASC",
-        $lessonCourseClause['params']
+        array_merge($lessonCourseClause['params'], [$_SESSION['user_email']])
     );
 } else {
     $courses = queryAll(
         "SELECT DISTINCT c.* FROM " . DB_DATABASE . ".courses c
          LEFT JOIN " . DB_DATABASE . ".course_editors ce ON ce.course_id = c.id
-         WHERE {$lessonCourseClause['fragment']}
-           AND (c.author_id = ? OR ce.email = ?)
+         WHERE ({$lessonCourseClause['fragment']} AND (c.author_id = ? OR ce.email = ?))
+            OR ce.email = ?
          ORDER BY c.sort_order ASC",
-        array_merge($lessonCourseClause['params'], [$_SESSION['user_id'], $_SESSION['user_email']])
+        array_merge($lessonCourseClause['params'], [$_SESSION['user_id'], $_SESSION['user_email'], $_SESSION['user_email']])
     );
 }
 ?>

@@ -60,13 +60,15 @@ if (!$course) {
 // Behörighet: admin/editor i kursens org, ELLER kursens författare, ELLER
 // uttryckligen tilldelad redaktör i course_editors. Speglar exakt
 // edit_lesson.php-mönstret.
+// Tilldelad redaktör släpps igenom även när kursen tillhör en annan organisation.
 $orgScope = getOrgScopeDomains($_SESSION['user_email']);
-if (!in_array($course['organization_domain'], $orgScope, true)) {
+$isAssignedEditor = isAssignedCourseEditor($courseId, $_SESSION['user_email']);
+if (!$isAssignedEditor && !in_array($course['organization_domain'], $orgScope, true)) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'Kursen tillhör inte din organisation.']);
     exit;
 }
-if (!$isAdmin) {
+if (!$isAdmin && !$isAssignedEditor) {
     $isAuthor = ((int)$course['author_id'] === (int)$_SESSION['user_id']);
     $isCourseEditor = queryOne(
         "SELECT 1 FROM " . DB_DATABASE . ".course_editors WHERE course_id = ? AND email = ? LIMIT 1",
