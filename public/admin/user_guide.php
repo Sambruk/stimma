@@ -316,8 +316,8 @@ require_once 'include/header.php';
                             <div class="tip-content">
                                 <strong>Tips!</strong>
                                 <ul class="mb-0 mt-2">
-                                    <li>Inloggningslänken är giltig i 15 minuter</li>
-                                    <li>Länken kan endast användas en gång</li>
+                                    <li>Inloggningslänken är giltig i <?= loginLinkValidityText() ?></li>
+                                    <li>Länken går att använda flera gånger tills den slutar gälla</li>
                                     <li>Kolla skräpposten om du inte hittar mailet</li>
                                     <li>Välj "Kom ihåg mig" för att slippa logga in varje gång</li>
                                 </ul>
@@ -396,7 +396,7 @@ require_once 'include/header.php';
                                         <!-- Step 2: generera token + skriv till DB -->
                                         <text x="30" y="125" font-size="11" fill="#6c757d">2</text>
                                         <rect x="290" y="110" width="180" height="40" rx="4" fill="#d1e7dd" stroke="#198754"/>
-                                        <text x="380" y="128" text-anchor="middle" font-size="11" fill="#0f5132">Genererar engångs-token</text>
+                                        <text x="380" y="128" text-anchor="middle" font-size="11" fill="#0f5132">Genererar token</text>
                                         <text x="380" y="143" text-anchor="middle" font-size="10" fill="#0f5132">Sparar i databasen (15 min)</text>
                                         <!-- Step 3: server → mail -->
                                         <text x="30" y="175" font-size="11" fill="#6c757d">3</text>
@@ -1171,7 +1171,7 @@ require_once 'include/header.php';
                         <ol class="small">
                             <li>Deltagaren öppnar den länk du delat</li>
                             <li>Formulär: <strong>e-postadress</strong> + <strong>namn</strong> (obligatoriska)</li>
-                            <li>En inloggningslänk skickas till e-posten (giltig 15 minuter)</li>
+                            <li>En inloggningslänk skickas till e-posten (giltig <?= loginLinkValidityText() ?>)</li>
                             <li>Vid klick på länken skapas deltagarkontot automatiskt och kopplas till just denna kurs</li>
                             <li>För stegvisa kurser: första lektionen är direkt upplåst</li>
                         </ol>
@@ -2092,8 +2092,8 @@ Authorization: Bearer stm_din_nyckel_här</code></pre>
                 <div class="troubleshoot-card">
                     <h6><i class="bi bi-link-45deg text-danger me-2"></i>Inloggningslänken fungerar inte</h6>
                     <ul class="mb-0">
-                        <li>Länken är giltig i max 15 minuter</li>
-                        <li>Länken kan endast användas en gång</li>
+                        <li>Länken är giltig i max <?= loginLinkValidityText() ?></li>
+                        <li>Har du begärt flera länkar fungerar bara den senaste</li>
                         <li>Begär en ny länk</li>
                     </ul>
                 </div>

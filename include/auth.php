@@ -73,6 +73,19 @@ function cleanupExpiredTokens() {
 }
 
 /**
+ * Inloggningslänkens giltighetstid som läsbar text, t.ex. "3 timmar" eller "15 minuter".
+ * Används i inloggningsmejlet och i användarhandboken så att de följer AUTH_TOKEN_EXPIRY_MINUTES.
+ */
+function loginLinkValidityText(): string {
+    $minuter = (int)getenv('AUTH_TOKEN_EXPIRY_MINUTES') ?: 15;
+    if ($minuter % 60 === 0) {
+        $timmar = intdiv($minuter, 60);
+        return $timmar === 1 ? '1 timme' : "{$timmar} timmar";
+    }
+    return "{$minuter} minuter";
+}
+
+/**
  * Skicka inloggningstoken till användarens e-post
  *
  * @param string $email Användarens e-post
@@ -102,45 +115,66 @@ function sendLoginToken($email) {
     // Hämta systemnamn från .env
     $systemName = trim(getenv('SYSTEM_NAME'), '"\'') ?: 'AI-kurser';
     
-    // Förbered e-post med SMTP-funktionen
-    $subject = mb_encode_mimeheader("Inloggningslänk till " . $systemName, 'UTF-8', 'Q');
-    
+    // Förbered e-post med SMTP-funktionen.
+    // Ämne, logga och förklaring är valda för att mejlet inte ska likna nätfiske:
+    // Microsoft 365 hos Göteborgs Stad (Intraservice) satte det gamla mejlet
+    // ("Inloggningslänk till …" med hela token-länken synlig) i karantän, 2026-10.
+    // Token-länken finns därför bara bakom knappen i HTML-delen, inte som synlig text.
+    $subject = mb_encode_mimeheader("Din länk till " . $systemName, 'UTF-8', 'Q');
+    $logoUrl = $systemUrl . '/images/mail-logo.png';
+    $systemHost = parse_url($systemUrl, PHP_URL_HOST) ?: $systemUrl;
+    $safeEmail = htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
+    $safeName = htmlspecialchars($systemName, ENT_QUOTES, 'UTF-8');
+    $safeLoginUrl = htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8');
+    $giltighetstid = loginLinkValidityText();
+    $textStyle = "font-family: Arial, sans-serif; font-size: 15px; color: #1a1a1a; line-height: 1.6;";
+
     $htmlMessage = "
     <!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">
-    <html xmlns=\"http://www.w3.org/1999/xhtml\">
+    <html xmlns=\"http://www.w3.org/1999/xhtml\" lang=\"sv\">
     <head>
         <meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\" />
-        <title>Inloggningslänk</title>
+        <title>Din länk till {$safeName}</title>
     </head>
-    <body style=\"font-family: Arial, sans-serif; line-height: 1.6; margin: 0; padding: 0;\">
+    <body style=\"margin: 0; padding: 0; background-color: #ffffff;\">
         <table cellpadding=\"0\" cellspacing=\"0\" border=\"0\" width=\"100%\" style=\"margin: 0; padding: 0;\">
             <tr>
-                <td style=\"padding: 20px;\">
-                    <h2 style=\"font-family: Arial, sans-serif; color: #000000;\">Inloggningslänk till " . $systemName . "</h2>
-                    <p style=\"font-family: Arial, sans-serif; color: #000000;\">Klicka på knappen nedan för att logga in:</p>
-                    
-                    <!--[if mso]>
-                    <v:roundrect xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:w=\"urn:schemas-microsoft-com:office:word\" href='" . $loginUrl . "' style=\"height:40px;v-text-anchor:middle;width:120px;\" arcsize=\"10%\" stroke=\"f\" fillcolor=\"#0d6efd\">
-                    <w:anchorlock/>
-                    <center>
-                    <![endif]-->
-                    <a href='" . $loginUrl . "' style=\"background-color: #0d6efd; border-radius: 5px; color: #ffffff; display: inline-block; font-family: Arial, sans-serif; font-size: 16px; line-height: 40px; text-align: center; text-decoration: none; width: 120px; -webkit-text-size-adjust: none;\">Logga in</a>
-                    <!--[if mso]>
-                    </center>
-                    </v:roundrect>
-                    <![endif]-->
-                    
-                    <p style=\"font-family: Arial, sans-serif; color: #000000; margin-top: 20px;\">Om knappen inte fungerar, kopiera denna länk och klistra in i din webbläsare:</p>
-                    <p style=\"font-family: Arial, sans-serif; color: #000000;\">" . $loginUrl . "</p>
-                    <p style=\"font-family: Arial, sans-serif; color: #000000;\">Länken är giltig i {$tokenExpiryMinutes} minuter.</p>
-                    <p style=\"font-family: Arial, sans-serif; color: #000000;\">Om du inte har begärt denna länk kan du ignorera detta meddelande.</p>
+                <td style=\"padding: 24px 20px;\">
+                    <table cellpadding=\"0\" cellspacing=\"0\" border=\"0\" width=\"100%\" style=\"max-width: 560px;\">
+                        <tr>
+                            <td style=\"padding-bottom: 16px;\">
+                                <img src=\"{$logoUrl}\" alt=\"{$safeName}\" width=\"80\" height=\"83\" style=\"display: block; border: 0;\" />
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <h1 style=\"font-family: Arial, sans-serif; font-size: 22px; color: #1a1a1a; margin: 0 0 16px 0;\">Hej!</h1>
+                                <p style=\"{$textStyle} margin: 0 0 16px 0;\">Du har bett om att få logga in i {$safeName}, Sambruks lärplattform för korta utbildningar, med adressen {$safeEmail}.</p>
+                                <p style=\"{$textStyle} margin: 0 0 20px 0;\">{$safeName} använder inga lösenord. I stället loggar du in med knappen nedan.</p>
+
+                                <!--[if mso]>
+                                <v:roundrect xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:w=\"urn:schemas-microsoft-com:office:word\" href=\"{$safeLoginUrl}\" style=\"height:44px;v-text-anchor:middle;width:200px;\" arcsize=\"10%\" stroke=\"f\" fillcolor=\"#3F7A11\">
+                                <w:anchorlock/>
+                                <center style=\"color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;\">Logga in i {$safeName}</center>
+                                </v:roundrect>
+                                <![endif]-->
+                                <!--[if !mso]><!-->
+                                <a href=\"{$safeLoginUrl}\" style=\"background-color: #3F7A11; border-radius: 5px; color: #ffffff; display: inline-block; font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; line-height: 44px; text-align: center; text-decoration: none; width: 200px; -webkit-text-size-adjust: none;\">Logga in i {$safeName}</a>
+                                <!--<![endif]-->
+
+                                <p style=\"{$textStyle} margin: 20px 0 16px 0;\">Knappen fungerar i {$giltighetstid}. Har den slutat fungera kan du gå till <a href=\"{$systemUrl}/\" style=\"color: #3F7A11;\">{$systemHost}</a> och be om en ny.</p>
+                                <p style=\"{$textStyle} margin: 0 0 24px 0;\">Har du inte bett om att logga in kan du strunta i det här mejlet. Ingen kan logga in utan att öppna länken i din inkorg.</p>
+                                <p style=\"font-family: Arial, sans-serif; font-size: 13px; color: #555555; line-height: 1.5; margin: 0; border-top: 1px solid #dddddd; padding-top: 12px;\">{$safeName} är en tjänst från Sambruk, en medlemsförening för samverkan kring digitalisering i offentlig sektor.</p>
+                            </td>
+                        </tr>
+                    </table>
                 </td>
             </tr>
         </table>
     </body>
     </html>
     ";
-    
+
     // Använd SMTP-funktionen från mail.php
     $mailFrom = getenv('MAIL_FROM_ADDRESS') ?: 'noreply@tropheus.se';
     $mailFromName = trim(getenv('MAIL_FROM_NAME'), '"\'') ?: 'AI-kurser';
@@ -148,11 +182,14 @@ function sendLoginToken($email) {
     // Använd sendSmtpMail från mail.php
     // Handskriven textversion i stället för den automatiska — länken ska stå ensam
     // på en rad och inte upprepas, som den hade gjort med både knapp och klartext.
-    $textMessage = "Inloggningslänk till {$systemName}\n\n"
-        . "Öppna länken nedan för att logga in:\n\n"
+    // Textdelen måste ha länken utskriven, annars går det inte att logga in från den.
+    $textMessage = "Hej!\n\n"
+        . "Du har bett om att få logga in i {$systemName}, Sambruks lärplattform för korta utbildningar, med adressen {$email}.\n\n"
+        . "{$systemName} använder inga lösenord. Öppna länken nedan för att logga in:\n\n"
         . "{$loginUrl}\n\n"
-        . "Länken är giltig i {$tokenExpiryMinutes} minuter.\n\n"
-        . "Om du inte har begärt denna länk kan du ignorera detta meddelande.\n";
+        . "Länken fungerar i {$giltighetstid}. Har den slutat fungera kan du gå till {$systemHost} och be om en ny.\n\n"
+        . "Har du inte bett om att logga in kan du strunta i det här mejlet.\n\n"
+        . "{$systemName} är en tjänst från Sambruk.\n";
 
     $mailSent = sendSmtpMail($email, $subject, $htmlMessage, $mailFrom, $mailFromName, $textMessage);
     

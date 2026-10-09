@@ -2,6 +2,20 @@
 
 ## Pågående
 
+### Inloggningsmejlet mindre likt nätfiske (2026-10-09)
+Bakgrund: M365 hos Göteborgs Stad (Intraservice) satte "Inloggningslänk till Stimma" i central karantän (första kontakt + ämne/token-länk liknade nätfiske).
+- [x] Ämne "Din länk till Stimma" i stället för "Inloggningslänk till Stimma" (include/auth.php)
+- [x] Logga i mejlet (public/images/mail-logo.png, 240×249 på vit botten, 36 kB)
+- [x] Kort förklaring: vad Stimma är, vilken adress, att Stimma inte använder lösenord
+- [x] Token-länken visas inte längre som text i HTML-delen; reserv = gå till stimma.sambruk.se och be om en ny
+- [x] Textdelen behåller länken (annars går det inte att logga in från den)
+- [x] Knappfärg #3F7A11 (Sambruk), escaping av e-post/URL i HTML
+- [x] Testmejl skickat till thomas.wennersten@sambruk.se
+- [x] Giltighetstid som "3 timmar" via loginLinkValidityText() (följer AUTH_TOKEN_EXPIRY_MINUTES=180), även i admin/user_guide.php (stod 15 minuter på tre ställen)
+- [x] Handboken sade "Länken kan endast användas en gång" – stämmer inte, verifyLoginToken tillåter flera klick inom giltighetstiden → rättat (flera gånger; bara senaste länken gäller)
+- [ ] Bekräfta att mejlet ser rätt ut i Outlook (desktop + webb + mobil)
+- [ ] Byt även ämnen/brödtext i övriga utskick med token-länkar om de har samma mönster
+
 ### Kursredaktörer från andra organisationer (2026-10-07)
 Beslut (Thomas): en extern redaktör får redigera bara de kurser hen lagts till på – blir inte redaktör i sin
 egen org (is_editor sätts inte). Läggs till med exakt e-postadress; konto skapas om domänen är godkänd.
