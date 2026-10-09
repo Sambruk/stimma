@@ -191,12 +191,17 @@
       .catch(function () { btn.disabled = false; feedback(q, 'Nätverksfel. Försök igen.', false); });
   }
 
-  // Nytt val efter ett fel svar: ta bort markeringen så att det inte ser bedömt ut
+  // Nytt val efter ett fel svar: ta bort bedömningen så att det inte ser bedömt ut.
+  // Får inte gå via markChoices(q, false) – den skriver "Fel" vid det nya valet
+  // innan det har skickats in (rapporterat 2026-10-09).
   main.addEventListener('change', function (e) {
     var q = e.target.closest('[data-sl-question]');
     if (!q || questionOk[q.dataset.slQuestion]) return;
-    markChoices(q, false, false);
-    q.querySelectorAll('.sl-choice').forEach(function (l) { l.classList.remove('is-wrong', 'is-right'); });
+    q.querySelectorAll('.sl-choice').forEach(function (l) {
+      l.classList.remove('is-wrong', 'is-right');
+      var status = l.querySelector('.sl-choice-status');
+      if (status) status.textContent = '';
+    });
     feedback(q, '', null);
   });
 

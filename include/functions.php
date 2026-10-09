@@ -1248,6 +1248,50 @@ function isExternalCourseEditor(array $course, ?string $email = null): bool {
 }
 
 /**
+ * Får användaren se kursens lektioner? Samma regler i lesson.php och ai_chat.php
+ * (2026-10-09: AI-läraren nekade en extern kursredaktör som kunde öppna lektionen).
+ *
+ * - public_only-användare: bara kurser de har publik åtkomst till
+ * - övriga: kursen i den egna organisationen (med hänsyn till shared_domains),
+ *   publik åtkomst eller global kurs (is_global)
+ * - den som får ändra kursen (userCanModifyCourse) får alltid se den
+ * - $forhandsgranskning: admin/redaktör i kursens organisation släpps förbi
+ *   shared_domains, så att de kan testa en kurs som är begränsad till andra domäner
+ *
+ * Inaktiva kurser och lektionsordning kontrolleras separat i lesson.php.
+ */
+function userCanViewCourseLessons(int $courseId, bool $forhandsgranskning = false): bool {
+    $userId = (int)($_SESSION['user_id'] ?? 0);
+    $email = $_SESSION['user_email'] ?? '';
+    if ($userId <= 0 || $email === '' || $courseId <= 0) return false;
+
+    $course = queryOne(
+        "SELECT id, organization_domain, is_global FROM " . DB_DATABASE . ".courses WHERE id = ?",
+        [$courseId]
+    );
+    if (!$course) return false;
+
+    if (userCanModifyCourse($course)) return true;
+
+    $u = queryOne(
+        "SELECT access_mode, is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE id = ?",
+        [$userId]
+    );
+    $hasPublic = hasPublicCourseAccess($userId, $courseId);
+    if (($u['access_mode'] ?? 'domain') === 'public_only') return $hasPublic;
+    if ($hasPublic || !empty($course['is_global'])) return true;
+
+    $courseOrg = $course['organization_domain'] ?? '';
+    if ($courseOrg === '' || !in_array($courseOrg, getOrgScopeDomains($email), true)) return false;
+
+    if ($forhandsgranskning && (!empty($u['is_admin']) || !empty($u['is_editor']))) return true;
+
+    // Kursen kan vara begränsad till utvalda domäner inom organisationen.
+    $sharedDoms = getCourseSharedDomains($courseId);
+    return empty($sharedDoms) || in_array(getUserDomain($email), $sharedDoms, true);
+}
+
+/**
  * Har användaren minst ett kursredaktörskap? Adminytans grindar släpper in en
  * sådan användare även utan egen roll (admin/redaktör/läsbehörig), men bara
  * till kurssidorna – se admin/include/auth_check.php.

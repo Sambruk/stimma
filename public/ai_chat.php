@@ -132,24 +132,9 @@ try {
         throw new Exception('Lektionen kunde inte hittas.');
     }
 
-    // Åtkomstkontroll: samma regler som lesson.php — förhindra att inloggad
-    // användare anropar AI-chatten för en lektion i en annan orgs kurs.
-    $chatUserInfo = queryOne(
-        "SELECT access_mode FROM " . DB_DATABASE . ".users WHERE id = ?",
-        [$userId]
-    );
-    $chatAccessMode = $chatUserInfo['access_mode'] ?? 'domain';
-    $chatHasPublic = hasPublicCourseAccess($userId, (int)$lesson['course_id']);
-    if ($chatAccessMode === 'public_only') {
-        $chatAllowed = $chatHasPublic;
-    } else {
-        $chatCourse = queryOne(
-            "SELECT organization_domain FROM " . DB_DATABASE . ".courses WHERE id = ?",
-            [$lesson['course_id']]
-        );
-        $chatOrgScope = getOrgScopeDomains($_SESSION['user_email'] ?? '');
-        $chatAllowed = !empty($chatCourse) && in_array($chatCourse['organization_domain'], $chatOrgScope, true) || $chatHasPublic;
-    }
+    // Åtkomstkontroll: samma regler som lesson.php, inklusive förhandsgranskning
+    // för den som får ändra kursen (t.ex. en kursredaktör från en annan organisation).
+    $chatAllowed = userCanViewCourseLessons((int)$lesson['course_id'], true);
     if (!$chatAllowed) {
         throw new Exception('Du har inte tillgång till den här lektionen.');
     }

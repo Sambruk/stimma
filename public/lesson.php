@@ -52,6 +52,7 @@ $lessonId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
 // Check if preview mode is enabled
 $isPreviewMode = isset($_GET['preview']) && $_GET['preview'] == '1';
+$harRoll = false;
 
 // Get current user's ID from session
 $userId = $_SESSION['user_id'];
@@ -59,7 +60,10 @@ $userId = $_SESSION['user_id'];
 // If preview mode, verify user has admin or editor privileges
 if ($isPreviewMode) {
     $currentUser = queryOne("SELECT is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE id = ?", [$userId]);
-    if (!$currentUser || (!$currentUser['is_admin'] && !$currentUser['is_editor'])) {
+    // Kursredaktörer utan egen roll (t.ex. från en annan organisation) får också
+    // förhandsgranska; rätten till just den här kursen kontrolleras nedan.
+    $harRoll = $currentUser && ($currentUser['is_admin'] || $currentUser['is_editor']);
+    if (!$harRoll && !hasCourseEditorAssignments($_SESSION['user_email'] ?? '')) {
         // Not authorized for preview - redirect to normal lesson view
         redirect("lesson.php?id=$lessonId");
         exit;
@@ -83,6 +87,19 @@ if (!$lesson) {
     exit;
 }
 
+// Förhandsgranskning kräver rätt till just den här kursen, inte bara en
+// admin-/redaktörsroll någonstans (2026-10-09). Annars nekas man som vanligt.
+if ($isPreviewMode && (
+        !userCanViewCourseLessons((int)$lesson['course_id'], true)
+        // Utan egen roll får man bara förhandsgranska kurser man är redaktör för.
+        || (!$harRoll && !isAssignedCourseEditor((int)$lesson['course_id']))
+    )) {
+    $_SESSION['flash_message'] = 'Du har inte tillgång till den här lektionen.';
+    $_SESSION['flash_type'] = 'warning';
+    redirect('index.php');
+    exit;
+}
+
 // Åtkomstkontroll mot direkt URL-åtkomst (/lesson.php?id=X):
 // - public_only-användare: måste ha public_course_access för kursen
 // - domain-användare: måste ha kursen i sin orgscope ELLER public_course_access
@@ -92,36 +109,9 @@ if (!$isPreviewMode) {
         "SELECT access_mode, is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE id = ?",
         [$userId]
     );
-    $accessMode = $currentUserInfo['access_mode'] ?? 'domain';
     $isAdminOrEditor = !empty($currentUserInfo['is_admin']) || !empty($currentUserInfo['is_editor']);
-    $hasPublic = hasPublicCourseAccess($userId, $lesson['course_id']);
-
-    if ($accessMode === 'public_only') {
-        $allowed = $hasPublic;
-    } else {
-        $courseRow = queryOne(
-            "SELECT organization_domain, is_global FROM " . DB_DATABASE . ".courses WHERE id = ?",
-            [$lesson['course_id']]
-        );
-        $courseOrg = $courseRow['organization_domain'] ?? '';
-        $isGlobalCourse = !empty($courseRow['is_global']);
-        $orgScope = getOrgScopeDomains($_SESSION['user_email'] ?? '');
-        $inOwnOrg = $courseOrg !== '' && in_array($courseOrg, $orgScope, true);
-
-        // Respektera eventuella shared_domains: om kursen är begränsad till
-        // utvalda domäner måste användarens domän finnas i listan.
-        if ($inOwnOrg) {
-            $sharedDoms = getCourseSharedDomains((int)$lesson['course_id']);
-            if (!empty($sharedDoms)) {
-                $userDom = getUserDomain($_SESSION['user_email'] ?? '');
-                if (!in_array($userDom, $sharedDoms, true)) {
-                    $inOwnOrg = false; // begränsad — hens domän är inte med
-                }
-            }
-        }
-        // Globala kurser (is_global=1) ger access till alla domain-användare.
-        $allowed = $inOwnOrg || $hasPublic || $isGlobalCourse;
-    }
+    // Samma regler som AI-läraren (ai_chat.php) – se userCanViewCourseLessons().
+    $allowed = userCanViewCourseLessons((int)$lesson['course_id']);
 
     if (!$allowed) {
         $_SESSION['flash_message'] = 'Du har inte tillgång till den här lektionen.';

@@ -2,6 +2,23 @@
 
 ## Pågående
 
+### "Fel" visas innan man svarat i C2-vyn (2026-10-09)
+Rapporterat av Anders Wockatz, kurs 172 lektion 2 fråga 2 (sant/falskt). Facit var rätt ({"correct":false}, servern rättar Falskt = rätt).
+- [x] Orsak: change-lyssnaren i include/js/lesson-c2.js anropade markChoices(q, false), som skriver "Fel" vid det markerade valet. Funnits sedan C2 infördes (0ec5c1b), gäller alla enkelval/flerval/sant-falskt i C2
+- [x] Rättat: change rensar bara bedömningen; ?v=20261009a i lesson_c2.php
+- [x] Facit-granskning av alla 1 695 frågor (enkelval, flerval, sant/falskt): ett fel – fråga 917 (kurs 103, lektion 1114) har correct=3 men bara 3 svar → ingen kan svara rätt
+- [x] Fråga 917 borttagen på Thomas begäran (inga sparade svar fanns; lektion 1114 har kvar fråga 918)
+- [ ] Provköra rättelsen i webbläsare (ingen Chrome på servern)
+
+### AI-läraren nekade extern kursredaktör (2026-10-09)
+Anders Wockatz (redaktör för 172 från storningsjouren.goteborg.se) fick "Du har inte tillgång till den här lektionen." i "Fråga AI-läraren". lesson.php?preview=1 hoppade över behörighetskontrollen helt, ai_chat.php krävde att kursen låg i egen org.
+- [x] Gemensam kontroll userCanViewCourseLessons($courseId, $forhandsgranskning) i include/functions.php
+- [x] ai_chat.php använder den (släpper nu även in den som får ändra kursen, globala kurser och shared_domains som lesson.php)
+- [x] lesson.php vanlig vy använder den (jämfört med gamla logiken på 7 200 slumpade par: bara de avsedda skillnaderna)
+- [x] lesson.php förhandsgranskning: kräver rätt till just den kursen. Tidigare kunde admin/redaktör i vilken org som helst förhandsgranska alla lektioner (IDOR)
+- [x] Kursredaktör utan egen roll får förhandsgranska, men bara kurser hen är redaktör för
+- [x] Testat: extern testredaktör fick AI-svar på lektion 1586; Svedala-admin nekas förhandsgranskning och chatt; super admin och Anders når förhandsgranskningen. Testdata borttagen.
+
 ### Inloggningsmejlet mindre likt nätfiske (2026-10-09)
 Bakgrund: M365 hos Göteborgs Stad (Intraservice) satte "Inloggningslänk till Stimma" i central karantän (första kontakt + ämne/token-länk liknade nätfiske).
 - [x] Ämne "Din länk till Stimma" i stället för "Inloggningslänk till Stimma" (include/auth.php)

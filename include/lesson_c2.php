@@ -437,6 +437,6 @@ window.STIMMA_LESSON = <?= json_encode([
 ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>;
 </script>
 <script src="include/js/quiz-client.js?v=20261001c" defer></script>
-<script src="include/js/lesson-c2.js?v=20261003a" defer></script>
+<script src="include/js/lesson-c2.js?v=20261009a" defer></script>
 </body>
 </html>
