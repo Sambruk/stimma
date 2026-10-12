@@ -14,7 +14,7 @@ Punkt 2 – AI-läraren: svaret klipps av, går inte att scrolla (kurs 172 lekti
 - [x] Verifiera (Playwright, AI-svaret routat lokalt – inget AI-anrop): rullbart, ingen horisontell överflöd, frågefältet synligt i alla sju storlekar. Edge ej testat (Chromium = samma motor)
 Punkt 3 – redaktörsbehörighet för "Informationssäkerhet i vardagen" (kurs 171)
 - [x] Kontrollera Anders konton och course_editors: anders.wockatz@storningsjouren.goteborg.se är redaktör för 172, 173, 186, 191 – INTE 171
-- [ ] Lägg till 171 för Anders – väntar på Thomas OK
+- [x] Lägg till 171 för Anders (course_editors, created_by Thomas, 2026-10-12 på Thomas OK)
 - [x] Kontrollera om adminvyn kan ge en redaktör flera kurser på en gång: nej, redaktörer läggs till per kurs i edit_course.php
 - [ ] Förslag: välj flera kurser åt en redaktör på en gång (t.ex. i användarvyn)
 - Testanvändaren claude-test-1012@sambruk.se (id 1042) borttagen efter testerna
