@@ -2,6 +2,23 @@
 
 ## Pågående
 
+### Testprotokoll Anders Wockatz 2026-10-12 (sammanställt av Magnus Nilsson, AIPL)
+Punkt 1 – quiz: efter "Fel svar" blir knappen "Nästa", går inte att svara igen (kurs 186 lektion 1677, kurs 172)
+- [x] Återskapa (Playwright, förhandsgranskning – Anders är admin i sin org): gamla skriptet gav "Nästa fråga" efter fel svar i 1677 och 1585
+- [x] Rätta lesson-c2.js: i förhandsgranskning räknades fel svar som "får gå vidare" (`ok = … || preview` borttaget; "Hoppa över frågan" finns kvar för att bläddra), ?v=20261012a
+- [x] Verifiera fel → nytt val → Svara → Rätt, enkelval + flerval + sant/falskt, även efter bakåt (Playwright, 1677 + 1585)
+- [ ] Valfritt: behåll sidan i lektionen vid omladdning (t.ex. #sida-N) – inte gjort
+Punkt 2 – AI-läraren: svaret klipps av, går inte att scrolla (kurs 172 lektion 1589)
+- [x] Återskapa vid 1280/1440/1920 (100 + 125 %) och mobil: chattloggen hade justify-content:flex-end → överflödet hamnade ovanför och gick inte att rulla till; långa ord bröts inte
+- [x] Rätta CSS (flex-start + margin-top:auto, overflow-x:hidden, overflow-wrap:anywhere), ?v=20261012a. JS: långt AI-svar rullas till sin början
+- [x] Verifiera (Playwright, AI-svaret routat lokalt – inget AI-anrop): rullbart, ingen horisontell överflöd, frågefältet synligt i alla sju storlekar. Edge ej testat (Chromium = samma motor)
+Punkt 3 – redaktörsbehörighet för "Informationssäkerhet i vardagen" (kurs 171)
+- [x] Kontrollera Anders konton och course_editors: anders.wockatz@storningsjouren.goteborg.se är redaktör för 172, 173, 186, 191 – INTE 171
+- [ ] Lägg till 171 för Anders – väntar på Thomas OK
+- [x] Kontrollera om adminvyn kan ge en redaktör flera kurser på en gång: nej, redaktörer läggs till per kurs i edit_course.php
+- [ ] Förslag: välj flera kurser åt en redaktör på en gång (t.ex. i användarvyn)
+- Testanvändaren claude-test-1012@sambruk.se (id 1042) borttagen efter testerna
+
 ### "Fel" visas innan man svarat i C2-vyn (2026-10-09)
 Rapporterat av Anders Wockatz, kurs 172 lektion 2 fråga 2 (sant/falskt). Facit var rätt ({"correct":false}, servern rättar Falskt = rätt).
 - [x] Orsak: change-lyssnaren i include/js/lesson-c2.js anropade markChoices(q, false), som skriver "Fel" vid det markerade valet. Funnits sedan C2 infördes (0ec5c1b), gäller alla enkelval/flerval/sant-falskt i C2

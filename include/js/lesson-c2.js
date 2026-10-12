@@ -172,7 +172,10 @@
         if (!d.success) { feedback(q, d.message || 'Något gick fel. Försök igen.', false); return; }
         markChoices(q, d.correct, d.lock_question);
         if (d.lock_question) q.querySelectorAll('.sl-quiz-widget input, .sl-quiz-widget select').forEach(function (el) { el.disabled = true; });
-        var ok = d.correct || d.lock_question || preview;
+        // Förhandsgranskningen räknade tidigare även fel svar som ok, och då blev knappen
+        // "Nästa" och gick inte att svara igen (Anders Wockatz 2026-10-12). Den som
+        // förhandsgranskar har "Hoppa över frågan" för att bläddra vidare utan att svara rätt.
+        var ok = d.correct || d.lock_question;
         if (d.correct) feedback(q, 'Rätt svar!', true);
         else if (d.lock_question) feedback(q, 'Fel svar. Ditt svar är sparat.', false);
         else feedback(q, 'Fel svar — försök igen.', false);
@@ -284,7 +287,9 @@
     m.className = 'sl-msg sl-msg--' + who;
     if (who === 'user' || who === 'wait') m.textContent = html; else m.innerHTML = html;   // AI-svaret är sanerat på servern
     chatLog.appendChild(m);
-    chatLog.scrollTop = chatLog.scrollHeight;
+    // Ett långt AI-svar ska läsas uppifrån: rulla till svarets början, inte till slutet
+    if (who === 'ai' && m.offsetHeight > chatLog.clientHeight) chatLog.scrollTop = m.offsetTop - chatLog.offsetTop - 8;
+    else chatLog.scrollTop = chatLog.scrollHeight;
     return m;
   }
 
