@@ -19,7 +19,7 @@ Testmiljö
 - [x] Fynd: run_cron_job letade skript under public/ sedan 2026-08-17 → "Kör nu" fungerade inte. Rättat
 - [x] 74/74 tester ok
 - [ ] BESLUT Thomas: copy_course låter alla org kopiera ALLA aktiva kurser (även icke-publika, 41 kopior i prod). Behålls tills vidare
-- [ ] Tabell: sida → kontroll
+- [x] Tabell: sida → kontroll – docs/arenden-770-781-782/BEHORIGHETER.md
 781 – statistik över org-gränsen
 - [x] Inventera statistikvyer + exporter
 - [x] Tester som visar felen (tests/test_781.php): 14 fel före
@@ -35,7 +35,8 @@ Testmiljö
 - [ ] BESLUT Thomas: påminnelserna har aldrig skickats (send_reminders läser progress.created_at som inte finns; 15 domäner har påslaget). Färdig patch: docs/arenden-770-781-782/forslag_paminnelser.patch – kör backfill först
 - [ ] BESLUT Thomas: lektion utan quiz blir klar när den öppnas (alternativ: när sista sidan nåtts)
 Rapport
-- [ ] Rapport per ärende (orsak, ändring, test, migrering, övriga fynd, beslut)
+- [x] Rapport per ärende – docs/arenden-770-781-782/RAPPORT.md
+- [ ] Fynd att ta vidare: query() sväljer SQL-fel utan loggning (dolde påminnelsefelet)
 
 ### Testprotokoll Anders Wockatz 2026-10-12 (sammanställt av Magnus Nilsson, AIPL)
 Punkt 1 – quiz: efter "Fel svar" blir knappen "Nästa", går inte att svara igen (kurs 186 lektion 1677, kurs 172)
