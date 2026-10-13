@@ -2,6 +2,13 @@
 
 ## Pågående
 
+### Anders Wockatz återkoppling 2026-10-13
+- [x] Redaktör för 161, 176, 177, 178, 198 (Thomas OK 2026-10-13) – nu 10 kurser
+- [x] Svarstext till Zammad: exports/aterkoppling_wockatz_baskurser_2026-10-13.txt
+- [x] Kurs 217 Kontinuitetshantering (6 sidor, 15 frågor) och 218 Cybersäkerhetskollen (6 sidor, 16 frågor) inlästa INAKTIVA i sambruk.se 2026-10-13. Källor: docs/kurspaket/*.json
+- [ ] Granska och aktivera 217 och 218 (ämnesgranskning, t.ex. Anders); ev. taggen Baskurs
+- [ ] Thomas: möten med Emma Sjölund (Inköp och Upphandling, Göteborg) och Pierre Wettergren (CCG Europe)
+
 ### Förvaltningsärenden 770, 781, 782 (underlag Magnus Nilsson 2026-10-13)
 Beslut Thomas 2026-10-13: andra organisationers deltagare i egen publik kurs visas BARA som antal i statistiken.
 Testmiljö

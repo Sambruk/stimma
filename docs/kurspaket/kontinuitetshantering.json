@@ -1,0 +1,291 @@
+{
+ "format": "stimma-kurspaket-1",
+ "course": {
+  "title": "Kontinuitetshantering – så håller verksamheten igång när något går fel",
+  "description": "En kurs för chefer och för dig som samordnar beredskap eller säkerhet i kommuner, regioner och myndigheter. Du lär dig vad kontinuitetshantering är, hur du hittar det som inte får stanna, hur analysen blir till planer och övningar, och hur du bedömer hur mogen er kontinuitetshantering är. Kursen tar cirka 50 minuter.",
+  "difficulty_level": "intermediate",
+  "image_style": "illustration",
+  "image_file": "omslag.jpg",
+  "image_wish": "En kommunal arbetsplats där lamporna slocknat men personalen lugnt fortsätter arbeta med ficklampor, papperslistor och telefon",
+  "completion_content": "<p>Bra jobbat! Du vet nu hur kontinuitetshantering går till: från konsekvensanalys och beroenden via åtgärder och kontinuitetsplan till övning, uppföljning och mognadsbedömning.</p><p>Nästa steg: ta reda på var er organisation står i dag, och välj ett område att utveckla. Stöd finns i <a href=\"https://www.mcf.se/sv/amnesomraden/beredskap-for-kris-och-krig/beredskap-for-aktorer/samhallsviktig-verksamhet/verktygslador/kontinuitetshantering/jobba-med-kontinuitetshantering---metodstod/\">MCF:s metodstöd för kontinuitetshantering</a>.</p>"
+ },
+ "lessons": [
+  {
+   "key": "valkommen",
+   "lesson_type": "info_page",
+   "title": "Välkommen till kursen",
+   "estimated_duration": 2,
+   "content": "<div class=\"lesson-intro\"><p>Alla verksamheter drabbas förr eller senare av störningar: ett it-avbrott, ett strömavbrott, en leverantör som inte levererar eller en personalstyrka som halveras. <strong>Kontinuitetshantering</strong> handlar om att det viktigaste ändå fungerar.</p></div><h3>Det här lär du dig</h3><ul><li>Vad kontinuitetshantering är och hur det skiljer sig från riskhantering</li><li>Hur du hittar de aktiviteter som inte får stanna och vad de är beroende av</li><li>Hur analysen blir till åtgärder, planer och övningar</li><li>Hur du bedömer hur mogen er kontinuitetshantering är, och vad nästa steg är</li></ul><h3>Så går kursen till</h3><p>Fem lektioner med quiz, cirka 50 minuter totalt. Kursen bygger på Myndigheten för civilt försvars (MCF, tidigare MSB) metodstöd för kontinuitetshantering och riktar sig främst till chefer och till dig som samordnar beredskap, säkerhet eller verksamhetsutveckling.</p>"
+  },
+  {
+   "key": "vad-ar-kontinuitet",
+   "title": "Vad kontinuitetshantering är och varför den behövs",
+   "estimated_duration": 9,
+   "image_file": "lektion-1.jpg",
+   "image_wish": "En chef och två medarbetare vid ett bord som lugnt planerar med papper och post-it-lappar medan lamporna i kontorslandskapet är släckta",
+   "content": "<div class=\"lesson-intro\"><p>Kontinuitetshantering är ett <strong>systematiskt arbete för att verksamheten ska kunna fortsätta leverera det viktigaste</strong>, även när något går fel. Det är inte en pärm i en hylla, utan ett arbetssätt som hålls levande.</p></div><!-- pagebreak --><h3>Funktion i stället för orsak</h3><p>Riskhantering frågar ofta <em>vad som kan hända</em>: brand, cyberangrepp, översvämning. Kontinuitetshantering frågar i stället <em>vad som händer med verksamheten om en resurs försvinner</em>, oavsett orsak. Om lokalen inte går att använda spelar det mindre roll om det beror på vattenläcka eller brand. Frågan är hur ni ändå tar emot besökare.</p><p>De två arbetssätten kompletterar varandra. Riskhanteringen minskar sannolikheten för störningar, kontinuitetshanteringen minskar konsekvenserna när de ändå inträffar.</p><div class=\"lesson-example\"><strong>Exempel:</strong> En kommuns hemtjänst planerar sina besök i ett digitalt system. Riskanalysen pekar ut ett cyberangrepp som ett hot. Kontinuitetsanalysen frågar: hur vet personalen vilka brukare som ska få insulin i dag om systemet ligger nere i två dygn, oavsett varför?</div><!-- pagebreak --><h3>Några centrala begrepp</h3><ul><li><strong>Störning:</strong> en händelse som påverkar verksamhetens förmåga att leverera.</li><li><strong>Kritisk aktivitet:</strong> en aktivitet som måste fungera för att verksamheten ska kunna leverera det viktigaste.</li><li><strong>Beroende:</strong> det en aktivitet behöver för att fungera, till exempel personal, lokaler, it-system, el, vatten och leverantörer.</li><li><strong>Acceptabel avbrottstid:</strong> hur länge en störning kan tolereras innan konsekvenserna blir oacceptabla. MCF använder det uttrycket i stället för <em>maximalt tolerabel avbrottstid</em>, som används i standarden ISO 22301.</li><li><strong>Kontinuitetsplan:</strong> dokumenterad information om hur störningen hanteras och leveransen återupptas.</li></ul><!-- pagebreak --><h3>Var stödet finns</h3><p>MCF:s metodstöd bygger på valda delar av standarden SS 22304:2023, en handbok för kontinuitetshantering enligt SS-EN ISO 22301. Det innehåller en lathund för den som leder arbetet, checklistor, mallar och förenklade exempel för bland annat ett vattenverk och en akutmottagning. Du hittar det på <a href=\"https://www.mcf.se/sv/amnesomraden/beredskap-for-kris-och-krig/beredskap-for-aktorer/samhallsviktig-verksamhet/verktygslador/kontinuitetshantering/jobba-med-kontinuitetshantering---metodstod/\">MCF:s sida om metodstöd för kontinuitetshantering</a>.</p><div class=\"lesson-info\"><strong>Visste du att…</strong> MCF framhåller att varje verksamhet är unik. Metodstödet ska anpassas, inte följas som en checklista.</div><!-- pagebreak --><div class=\"lesson-summary\"><h4>Sammanfattning</h4><ul><li>Kontinuitetshantering handlar om att det viktigaste fungerar även vid störningar</li><li>Den utgår från konsekvenser för verksamheten, inte från orsaker</li><li>Kritiska aktiviteter, beroenden och acceptabel avbrottstid är grundbegreppen</li><li>MCF:s metodstöd bygger på SS 22304:2023 och ISO 22301</li></ul></div>",
+   "questions": [
+    {
+     "question_type": "single_choice",
+     "question_text": "Vad skiljer kontinuitetshantering från riskhantering?",
+     "quiz_data": {
+      "answers": [
+       "Kontinuitetshantering handlar bara om it-system",
+       "Kontinuitetshantering utgår från konsekvenserna för verksamheten när en resurs försvinner, oavsett orsak",
+       "Kontinuitetshantering ersätter riskhantering",
+       "Kontinuitetshantering görs bara efter att en kris har inträffat"
+      ],
+      "correct": 1
+     }
+    },
+    {
+     "question_type": "match_pairs",
+     "question_text": "Para ihop begreppet med rätt beskrivning.",
+     "quiz_data": {
+      "pairs": [
+       {
+        "left": "Kritisk aktivitet",
+        "right": "Måste fungera för att det viktigaste ska levereras"
+       },
+       {
+        "left": "Beroende",
+        "right": "Det en aktivitet behöver, t.ex. personal, el eller ett it-system"
+       },
+       {
+        "left": "Acceptabel avbrottstid",
+        "right": "Hur länge en störning kan tolereras"
+       },
+       {
+        "left": "Kontinuitetsplan",
+        "right": "Hur störningen hanteras och leveransen återupptas"
+       }
+      ]
+     }
+    },
+    {
+     "question_type": "true_false",
+     "question_text": "Riskhantering och kontinuitetshantering kompletterar varandra.",
+     "quiz_data": {
+      "correct": true
+     }
+    }
+   ]
+  },
+  {
+   "key": "konsekvensanalys",
+   "title": "Så hittar du det som inte får stanna",
+   "estimated_duration": 11,
+   "image_file": "lektion-2.jpg",
+   "image_wish": "Två kollegor som ritar upp beroenden mellan personal, lokaler, el och it-system som enkla symboler på en whiteboard",
+   "ai_chat": {
+    "instruction": "Vill du pröva analysen på din egen verksamhet? Beskriv en aktivitet så hjälper AI:n dig att hitta beroenden och fundera på acceptabel avbrottstid.",
+    "prompt": "Du hjälper medarbetare och chefer i kommuner, regioner och myndigheter att göra en förenklad konsekvensanalys för kontinuitetshantering. Fråga efter vilken aktivitet det gäller, hjälp användaren att identifiera beroenden (personal, lokaler, it-system och information, el, vatten, värme, leverantörer, transporter) och resonera om acceptabel avbrottstid. Svara kort och konkret på svenska. Påpeka att den egna organisationens metod och beslut gäller, och hänvisa till MCF:s metodstöd för kontinuitetshantering för mer stöd. Hitta inte på lagkrav eller siffror."
+   },
+   "content": "<div class=\"lesson-intro\"><p>Allt kan inte prioriteras lika. Kontinuitetsarbetet börjar med att ta reda på <strong>vilka aktiviteter som är kritiska</strong>, <strong>vad de är beroende av</strong> och <strong>hur länge de kan stå still</strong>. MCF kallar det här steget konsekvensanalys.</p></div><!-- pagebreak --><h3>Börja i uppdraget</h3><p>Utgå från vad verksamheten levererar till invånare, patienter, elever eller andra organisationer. Fråga: vad blir konsekvensen om leveransen uteblir i en timme, ett dygn, en vecka? För vem? Konsekvenser kan gälla liv och hälsa, ekonomi, förtroende, miljö eller lagkrav.</p><p>De aktiviteter där konsekvenserna snabbt blir oacceptabla är era kritiska aktiviteter. Bestäm för var och en en <strong>acceptabel avbrottstid</strong>.</p><div class=\"lesson-example\"><strong>Exempel:</strong> Utbetalning av ekonomiskt bistånd kan kanske vänta två dagar. Larmmottagning i trygghetslarm kan inte vänta alls. Båda är viktiga, men de får olika avbrottstider och därmed olika krav på reservlösningar.</div><!-- pagebreak --><h3>Kartlägg beroendena</h3><p>För varje kritisk aktivitet: vad behövs för att den ska fungera? Tänk brett:</p><ul><li>personal med rätt kompetens och behörigheter</li><li>lokaler, el, vatten och värme</li><li>it-system, nätverk, telefoni och information</li><li>leverantörer, transporter och andra organisationer</li></ul><div class=\"lesson-warning\"><strong>Obs!</strong> Det vanligaste misstaget är att stanna vid de egna systemen. Fråga också vad era leverantörer i sin tur är beroende av, och om flera kritiska aktiviteter hänger på samma resurs.</div><!-- pagebreak --><h3>Bedöm riskerna mot beroendena</h3><p>När beroendena är kända gör ni en riskbedömning: vilka beroenden är sårbara, och hur sannolikt är det att de faller bort? Resultatet visar var åtgärder ger störst nytta. MCF:s metodstöd har en Excelmall för att dokumentera konsekvensanalys och riskbedömning, och mallar för att illustrera kritiska aktiviteter och beroenden.</p><div class=\"lesson-tip\"><strong>Tips:</strong> Gör analysen i en workshop med dem som gör jobbet. De vet vilka genvägar och beroenden som aldrig står i någon processbeskrivning.</div><!-- pagebreak --><div class=\"lesson-summary\"><h4>Sammanfattning</h4><ul><li>Utgå från vad verksamheten levererar och vilka konsekvenser ett avbrott får</li><li>Bestäm en acceptabel avbrottstid för varje kritisk aktivitet</li><li>Kartlägg beroenden brett, även hos leverantörer</li><li>Riskbedöm beroendena för att se var åtgärder behövs mest</li></ul></div>",
+   "questions": [
+    {
+     "question_type": "order",
+     "question_text": "Sätt stegen i konsekvensanalysen i en rimlig ordning.",
+     "quiz_data": {
+      "items": [
+       "Utgå från vad verksamheten levererar",
+       "Bedöm konsekvenserna av ett avbrott över tid",
+       "Peka ut kritiska aktiviteter och deras acceptabla avbrottstid",
+       "Kartlägg beroendena för de kritiska aktiviteterna",
+       "Riskbedöm beroendena"
+      ]
+     }
+    },
+    {
+     "question_type": "categorize",
+     "question_text": "Vilka är beroenden för en kritisk aktivitet, och vilka är konsekvenser av ett avbrott?",
+     "quiz_data": {
+      "categories": [
+       "Beroende",
+       "Konsekvens av avbrott"
+      ],
+      "items": [
+       {
+        "text": "Elförsörjning till lokalen",
+        "category": 0
+       },
+       {
+        "text": "En leverantör av it-drift",
+        "category": 0
+       },
+       {
+        "text": "Personal med rätt behörigheter",
+        "category": 0
+       },
+       {
+        "text": "Brukare får inte sin medicin i tid",
+        "category": 1
+       },
+       {
+        "text": "Förtroendet för kommunen minskar",
+        "category": 1
+       },
+       {
+        "text": "Utbetalningar försenas",
+        "category": 1
+       }
+      ]
+     }
+    },
+    {
+     "question_type": "single_choice",
+     "question_text": "Vilket är ett vanligt misstag när beroenden kartläggs?",
+     "quiz_data": {
+      "answers": [
+       "Att involvera medarbetarna som gör jobbet",
+       "Att också fråga vad leverantörerna är beroende av",
+       "Att stanna vid de egna systemen och missa leverantörers och gemensamma beroenden"
+      ],
+      "correct": 2
+     }
+    }
+   ]
+  },
+  {
+   "key": "atgarder-och-plan",
+   "title": "Från analys till åtgärder och kontinuitetsplan",
+   "estimated_duration": 10,
+   "image_file": "lektion-3.jpg",
+   "image_wish": "En medarbetare som arbetar vidare med en papperslista och en ficklampa vid sitt skrivbord under ett strömavbrott, lugn min",
+   "content": "<div class=\"lesson-intro\"><p>Analysen visar var verksamheten är sårbar. Nästa steg är att <strong>bestämma vad ni ska göra åt det</strong>: förebygga, förbereda reservlösningar och skriva ner hur ni agerar när det händer.</p></div><!-- pagebreak --><h3>Välj åtgärder</h3><p>För varje sårbart beroende finns i regel tre vägar, ofta i kombination:</p><ul><li><strong>Minska sannolikheten</strong>, till exempel dubblerade nätverksförbindelser eller avtal med krav på leverantören.</li><li><strong>Förbered en reservlösning</strong>, till exempel reservkraft, manuella rutiner, utskrivna listor eller en annan lokal.</li><li><strong>Acceptera</strong> risken, som ett medvetet och dokumenterat beslut av den som har mandat.</li></ul><p>Åtgärderna samlas i en <strong>handlingsplan</strong> med ansvariga och tidpunkter. Annars stannar analysen vid en rapport.</p><p>Välj efter den acceptabla avbrottstiden. En aktivitet som tål en veckas avbrott klarar sig ofta med en enkel manuell rutin. En aktivitet som inte tål något avbrott alls behöver en reservlösning som startar direkt och som är testad. Ställ krav på leverantörer redan vid upphandlingen, eftersom det är svårt att lägga till dem i efterhand.</p><!-- pagebreak --><h3>Kontinuitetsplanen</h3><p>Kontinuitetsplanen beskriver hur störningen hanteras och leveransen återupptas. Den ska gå att använda under press, så den ska vara kort och konkret:</p><ul><li>när planen aktiveras och av vem</li><li>vilka kritiska aktiviteter som prioriteras och i vilken ordning</li><li>reservrutiner steg för steg</li><li>kontaktuppgifter, även till leverantörer</li><li>hur ni återgår till normal drift</li></ul><div class=\"lesson-example\"><strong>Exempel:</strong> Ett äldreboende har en utskriven lista med vilka boende som behöver vilka läkemedel, och den uppdateras varje vecka. När journalsystemet går ner vet nattpersonalen exakt vad de ska göra.</div><!-- pagebreak --><h3>Planen måste gå att nå</h3><div class=\"lesson-warning\"><strong>Obs!</strong> En kontinuitetsplan som bara finns på intranätet är oanvändbar om nätverket är nere. Se till att planen och kontaktlistorna finns tillgängliga även utan de system som kan fallera.</div><div class=\"lesson-tip\"><strong>Tips:</strong> MCF:s metodstöd innehåller fördjupningar om kontinuitetspolicy, riktlinjer, kriteriemodell och kontinuitetsplan, samt stöd för att ta fram en handlingsplan.</div><!-- pagebreak --><div class=\"lesson-summary\"><h4>Sammanfattning</h4><ul><li>Minska sannolikheten, förbered reservlösningar eller acceptera risken medvetet</li><li>Samla åtgärderna i en handlingsplan med ansvar och tid</li><li>Kontinuitetsplanen ska vara kort, konkret och gå att nå vid avbrott</li></ul></div>",
+   "questions": [
+    {
+     "question_type": "multiple_choice",
+     "question_text": "Vilka är rimliga vägar att hantera ett sårbart beroende?",
+     "quiz_data": {
+      "answers": [
+       "Förbereda en reservlösning, till exempel en manuell rutin",
+       "Låta bli att dokumentera risken så att ingen behöver ta ansvar",
+       "Minska sannolikheten, till exempel med dubblerade förbindelser",
+       "Acceptera risken genom ett medvetet beslut av den som har mandat"
+      ],
+      "correct": [
+       0,
+       2,
+       3
+      ]
+     }
+    },
+    {
+     "question_type": "true_false",
+     "question_text": "Det räcker att kontinuitetsplanen finns på intranätet.",
+     "quiz_data": {
+      "correct": false
+     }
+    },
+    {
+     "question_type": "single_choice",
+     "question_text": "Vad behövs för att åtgärderna från analysen faktiskt ska genomföras?",
+     "quiz_data": {
+      "answers": [
+       "En handlingsplan med ansvariga och tidpunkter",
+       "En längre rapport",
+       "Att analysen görs om varje månad"
+      ],
+      "correct": 0
+     }
+    }
+   ]
+  },
+  {
+   "key": "ova-och-forbattra",
+   "title": "Öva, följ upp och förbättra",
+   "estimated_duration": 9,
+   "image_file": "lektion-4.jpg",
+   "image_wish": "En arbetsgrupp som genomför en övning runt ett bord med ett scenario på papper och en tidtagare, engagerade ansikten",
+   "content": "<div class=\"lesson-intro\"><p>En plan som aldrig har prövats är en gissning. Kontinuitetshantering blir en förmåga först när ni <strong>övar</strong>, <strong>följer upp</strong> och <strong>förbättrar</strong> arbetet över tid.</p></div><!-- pagebreak --><h3>Öva i lagom steg</h3><p>Börja enkelt och öka svårighetsgraden:</p><ul><li><strong>Genomgång:</strong> gruppen läser planen tillsammans och letar luckor.</li><li><strong>Diskussionsövning:</strong> ett scenario presenteras steg för steg och gruppen resonerar om vad den gör.</li><li><strong>Praktisk övning:</strong> reservrutinen används på riktigt, till exempel en arbetsdag utan ett visst system.</li></ul><div class=\"lesson-example\"><strong>Exempel:</strong> Under en diskussionsövning upptäcker en förvaltning att alla telefonnummer till jourhavande finns i samma system som ska ersättas. Upptäckten kostar en timme i ett mötesrum i stället för timmar under ett verkligt avbrott.</div><!-- pagebreak --><h3>Följ upp och lär</h3><p>Efter varje övning och varje verklig störning: vad fungerade, vad fungerade inte och vad ändrar vi? Uppdatera analys, plan och handlingsplan. Kontinuitetsarbetet följer samma förbättringscykel som annat ledningssystemsarbete: planera, genomför, följ upp och förbättra.</p><div class=\"lesson-info\"><strong>Visste du att…</strong> I Infosäkkollen 2025, en del av Cybersäkerhetskollen, var Incident- och kontinuitetshantering ett av de tre arbetsområden där minst andel organisationer nådde nivå 1. Uppföljning och utvärdering var ett annat.</div><!-- pagebreak --><h3>Ledningens roll</h3><p>Ledningen beslutar om ambitionsnivå, avbrottstider och vilka risker som accepteras, och ser till att arbetet får tid och resurser. Ledningen behöver också själv öva sin roll vid en störning: vem fattar vilka beslut, och hur nås ledningen om de vanliga kanalerna inte fungerar?</p><p>Tänk också på samverkan. Många kritiska aktiviteter är beroende av andra organisationer, till exempel kommunala bolag, regionen eller leverantörer. Öva gärna tillsammans med dem, så att ni vet hur ni når varandra och vem som gör vad.</p><div class=\"lesson-tip\"><strong>Tips:</strong> Lägg en återkommande punkt om kontinuitet på ledningens möten, med resultat från övningar och status i handlingsplanen.</div><!-- pagebreak --><div class=\"lesson-summary\"><h4>Sammanfattning</h4><ul><li>Öva i steg: genomgång, diskussion, praktisk övning</li><li>Följ upp efter övningar och verkliga störningar, och uppdatera planerna</li><li>Ledningen äger ambitionsnivån och behöver själv öva</li></ul></div>",
+   "questions": [
+    {
+     "question_type": "order",
+     "question_text": "Ordna övningsformerna från enklast till mest krävande.",
+     "quiz_data": {
+      "items": [
+       "Genomgång av planen",
+       "Diskussionsövning med scenario",
+       "Praktisk övning med reservrutinen"
+      ]
+     }
+    },
+    {
+     "question_type": "single_choice",
+     "question_text": "Vad bör hända efter en övning eller en verklig störning?",
+     "quiz_data": {
+      "answers": [
+       "Inget, om det gick bra",
+       "Planen arkiveras",
+       "En uppföljning av vad som fungerade och inte, och uppdatering av analys och planer",
+       "En ny konsekvensanalys från grunden varje gång"
+      ],
+      "correct": 2
+     }
+    },
+    {
+     "question_type": "true_false",
+     "question_text": "Det är ledningen som beslutar om vilka risker som accepteras.",
+     "quiz_data": {
+      "correct": true
+     }
+    }
+   ]
+  },
+  {
+   "key": "mognad",
+   "title": "Hur mogen är er kontinuitetshantering?",
+   "estimated_duration": 11,
+   "image_file": "lektion-5.jpg",
+   "image_wish": "En trappa med fem steg där en grupp kollegor tillsammans tar sig upp, symboliskt men i en vardaglig kontorsmiljö",
+   "content": "<div class=\"lesson-intro\"><p>Kontinuitetshantering byggs upp stegvis. Att bedöma <strong>var ni står i dag</strong> gör det lättare att välja <strong>nästa rimliga steg</strong> i stället för att försöka göra allt på en gång.</p></div><!-- pagebreak --><h3>Ett sätt att tänka i nivåer</h3><p>Mognadsmodeller beskriver ofta utvecklingen i ungefär de här stegen:</p><ol><li><strong>Beroende av enskilda:</strong> det finns ingen gemensam bild. Det som fungerar vid störningar fungerar tack vare erfarna personer.</li><li><strong>Påbörjat:</strong> några verksamheter har analyser eller planer, men arbetssätten skiljer sig åt.</li><li><strong>Etablerat:</strong> det finns en gemensam metod, beslutade avbrottstider och planer för de kritiska aktiviteterna.</li><li><strong>Styrt:</strong> planerna övas regelbundet, resultaten följs upp och ledningen fattar beslut utifrån dem.</li><li><strong>Integrerat:</strong> kontinuitet är en självklar del av upphandling, förändringar och verksamhetsplanering, och organisationen lär sig av varje händelse.</li></ol><!-- pagebreak --><h3>Kontinuitetskompassen</h3><p>Ett verktyg för att göra en sådan självbedömning är <a href=\"https://www.kontinuitetskompassen.se/\">Kontinuitetskompassen</a>, framtaget av CCG och Swedence och finansierat av MSB och NCC-SE. Det bedömer mognaden i fyra områden, <strong>styrning</strong>, <strong>analys</strong>, <strong>strategi</strong> och <strong>validering</strong>, med fem nivåer i varje område och ungefär hundra frågor.</p><p>Gratisversionen utgår från MSB:s riktlinjer för kontinuitetsplanering och är en HTML-fil som fungerar offline. Svaren sparas bara i webbläsaren på den egna datorn.</p><!-- pagebreak --><h3>Använd resultatet rätt</h3><div class=\"lesson-warning\"><strong>Obs!</strong> En mognadsbedömning är ett underlag för samtal och prioritering, inte ett betyg. Det svagaste området sätter ofta gränsen för hela förmågan. En utmärkt plan hjälper lite om den aldrig har övats.</div><div class=\"lesson-tip\"><strong>Tips:</strong> Gör bedömningen tillsammans, med både ledning och verksamhet. Välj sedan ett eller två områden att lyfta en nivå under det kommande året, och följ upp.</div><!-- pagebreak --><div class=\"lesson-summary\"><h4>Sammanfattning</h4><ul><li>Mognad byggs stegvis, från beroende av enskilda till integrerat arbetssätt</li><li>Kontinuitetskompassen bedömer styrning, analys, strategi och validering i fem nivåer</li><li>Det svagaste området sätter ofta gränsen</li><li>Använd bedömningen för att välja nästa steg, inte som betyg</li></ul></div>",
+   "questions": [
+    {
+     "question_type": "multiple_choice",
+     "question_text": "Vilka fyra områden bedöms i Kontinuitetskompassen?",
+     "quiz_data": {
+      "answers": [
+       "Styrning",
+       "Upphandling",
+       "Analys",
+       "Strategi",
+       "Validering"
+      ],
+      "correct": [
+       0,
+       2,
+       3,
+       4
+      ]
+     }
+    },
+    {
+     "question_type": "order",
+     "question_text": "Ordna mognadsstegen från lägst till högst.",
+     "quiz_data": {
+      "items": [
+       "Beroende av enskilda",
+       "Påbörjat",
+       "Etablerat",
+       "Styrt",
+       "Integrerat"
+      ]
+     }
+    },
+    {
+     "question_type": "single_choice",
+     "question_text": "Hur används en mognadsbedömning bäst?",
+     "quiz_data": {
+      "answers": [
+       "Som ett betyg att jämföra med andra organisationer",
+       "Som underlag för att välja och följa upp nästa steg",
+       "För att visa att arbetet är klart"
+      ],
+      "correct": 1
+     }
+    }
+   ]
+  }
+ ]
+}

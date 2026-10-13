@@ -1,0 +1,289 @@
+{
+ "format": "stimma-kurspaket-1",
+ "course": {
+  "title": "Cybersäkerhetskollen – mät och utveckla ert cybersäkerhetsarbete",
+  "description": "En kurs för informationssäkerhetsansvariga, it-chefer och chefer i offentlig sektor om Cybersäkerhetskollen. Du lär dig hur verktyget och dess fyra mognadsnivåer fungerar, vad Infosäkkollen, It-säkkollen, Ot-säkkollen och Leveranskedjekollen mäter, och hur ni går från resultat till förbättringsarbete. Kursen tar cirka 50 minuter.",
+  "difficulty_level": "intermediate",
+  "image_style": "illustration",
+  "image_file": "omslag.jpg",
+  "image_wish": "Ett ljust kommunalt kontor där en informationssäkerhetssamordnare, en it-chef och en chef tillsammans går igenom en mätning på en stor skärm",
+  "completion_content": "<p>Bra jobbat! Du vet nu hur Cybersäkerhetskollen fungerar: de fyra mätningarna, hur nivåerna räknas fram och varför det svagaste arbetsområdet avgör.</p><p>Nästa steg: ta fram ert senaste resultat, välj de arbetsområden som håller tillbaka er nivå och gör en plan. Mer stöd finns på <a href=\"https://www.ncsc.se/sv/radgivning-och-stod/arbeta-systematiskt-med-informationssakerhet-och-cybersakerhet/cybersakerhetskollen/\">NCSC:s sida om Cybersäkerhetskollen</a>.</p>"
+ },
+ "lessons": [
+  {
+   "key": "valkommen",
+   "lesson_type": "info_page",
+   "title": "Välkommen till kursen",
+   "estimated_duration": 2,
+   "content": "<div class=\"lesson-intro\"><p>Cybersäkerhetskollen är det nationella verktyget för att mäta hur systematiskt en organisation arbetar med cybersäkerhet. Resultatet visar var ni står och vad nästa steg är. Den här kursen förklarar hur verktyget och dess mognadsnivåer fungerar.</p></div><h3>Det här lär du dig</h3><ul><li>Vad Cybersäkerhetskollen är, vem som står bakom och vad den ska användas till</li><li>Hur de fyra mognadsnivåerna fungerar och hur nivån räknas fram</li><li>Vad huvudverktyget Infosäkkollen mäter</li><li>Vad It-säkkollen, Ot-säkkollen och Leveranskedjekollen mäter</li><li>Hur ni går från resultat till förbättringsarbete</li></ul><h3>Så går kursen till</h3><p>Fem lektioner med quiz, cirka 50 minuter. Kursen riktar sig till dig som är informationssäkerhetsansvarig, CISO, it-chef eller chef med ansvar för säkerhetsarbetet i offentlig sektor. Fakta bygger på NCSC:s information och på redovisningen av Cybersäkerhetskollen 2025.</p>"
+  },
+  {
+   "key": "om-kollen",
+   "title": "Vad Cybersäkerhetskollen är och vad den ska användas till",
+   "estimated_duration": 9,
+   "image_file": "lektion-1.jpg",
+   "image_wish": "En informationssäkerhetssamordnare och en it-chef som tillsammans går igenom ett kalkylblad på en stor skärm i ett ljust mötesrum",
+   "content": "<div class=\"lesson-intro\"><p>Cybersäkerhetskollen mäter <strong>nivån på organisationens systematiska cybersäkerhetsarbete</strong> och ger stöd för att förbättra det. Den svarar på frågan: hur långt har vi kommit, och var behöver vi bli bättre?</p></div><!-- pagebreak --><h3>Vem står bakom?</h3><p>Nationellt cybersäkerhetscenter (NCSC), som är en del av FRA, tog över ansvaret för Cybersäkerhetskollen den 1 juli 2026. Tidigare genomfördes mätningarna av Myndigheten för civilt försvar (MCF, tidigare MSB).</p><p>Cybersäkerhetskollen är ett samlingsnamn för fyra mätningar:</p><ul><li><strong>Infosäkkollen:</strong> informationssäkerhetsarbetet</li><li><strong>It-säkkollen:</strong> it-säkerhetsarbetet</li><li><strong>Ot-säkkollen:</strong> säkerhetsarbetet för operativ teknik, alltså styr- och kontrollsystem</li><li><strong>Leveranskedjekollen:</strong> säkerheten i digitala leveranskedjor</li></ul><!-- pagebreak --><h3>Två syften</h3><p>Enligt redovisningen av mätningen 2025 har Cybersäkerhetskollen två huvudsakliga syften:</p><ol><li><strong>Stödja det egna förbättringsarbetet.</strong> Resultatet visar läget vid mättillfället och hjälper organisationen att prioritera.</li><li><strong>Ge en nationell lägesbild</strong> av det systematiska cybersäkerhetsarbetet, som redovisas till regeringen.</li></ol><div class=\"lesson-info\"><strong>Visste du att…</strong> Verktyget riktar sig i första hand till verksamhetsutövare som omfattas av <a href=\"https://www.riksdagen.se/sv/dokument-och-lagar/dokument/svensk-forfattningssamling/cybersakerhetslag-20251506_sfs-2025-1506/\">cybersäkerhetslagen (2025:1506)</a>, men NCSC rekommenderar att alla typer av organisationer använder det.</div><!-- pagebreak --><h3>Så ser verktyget ut</h3><p>Cybersäkerhetskollen är en Excelfil med frågor. Den senaste versionen är Cybersäkerhetskollen 2025, version 1.33. Mätningen görs normalt vartannat år, och nästa mätning är planerad till 2027. Läs mer på <a href=\"https://www.ncsc.se/sv/radgivning-och-stod/arbeta-systematiskt-med-informationssakerhet-och-cybersakerhet/cybersakerhetskollen/om-cybersakerhetskollen/\">NCSC:s sida om Cybersäkerhetskollen</a>.</p><div class=\"lesson-warning\"><strong>Obs!</strong> Cybersäkerhetskollen är inte ett verktyg för att kontrollera regelefterlevnad. Resultatet är en uppskattning och en indikation, inte ett intyg om att organisationen uppfyller kraven.</div><!-- pagebreak --><div class=\"lesson-summary\"><h4>Sammanfattning</h4><ul><li>Cybersäkerhetskollen mäter hur systematiskt cybersäkerhetsarbetet bedrivs</li><li>NCSC ansvarar sedan 1 juli 2026</li><li>Fyra mätningar: Infosäkkollen, It-säkkollen, Ot-säkkollen och Leveranskedjekollen</li><li>Resultatet är ett stöd för förbättring, inte ett regelefterlevnadsintyg</li></ul></div>",
+   "questions": [
+    {
+     "question_type": "match_pairs",
+     "question_text": "Para ihop mätningen med vad den följer upp.",
+     "quiz_data": {
+      "pairs": [
+       {
+        "left": "Infosäkkollen",
+        "right": "Informationssäkerhetsarbetet"
+       },
+       {
+        "left": "It-säkkollen",
+        "right": "It-säkerhetsarbetet"
+       },
+       {
+        "left": "Ot-säkkollen",
+        "right": "Styr- och kontrollsystem"
+       },
+       {
+        "left": "Leveranskedjekollen",
+        "right": "Digitala leveranskedjor"
+       }
+      ]
+     }
+    },
+    {
+     "question_type": "single_choice",
+     "question_text": "Vem ansvarar för Cybersäkerhetskollen sedan den 1 juli 2026?",
+     "quiz_data": {
+      "answers": [
+       "Datainspektionen",
+       "Myndigheten för digital förvaltning",
+       "Nationellt cybersäkerhetscenter (NCSC)",
+       "Säkerhetspolisen"
+      ],
+      "correct": 2
+     }
+    },
+    {
+     "question_type": "true_false",
+     "question_text": "Ett bra resultat i Cybersäkerhetskollen är ett intyg om att organisationen uppfyller lagkraven.",
+     "quiz_data": {
+      "correct": false
+     }
+    }
+   ]
+  },
+  {
+   "key": "nivaerna",
+   "title": "Så fungerar mognadsnivåerna",
+   "estimated_duration": 11,
+   "image_file": "lektion-2.jpg",
+   "image_wish": "En grupp kollegor som bygger en trappa av klossar på ett bord, där varje steg vilar på det under",
+   "content": "<div class=\"lesson-intro\"><p>Resultatet i Cybersäkerhetskollen anges i <strong>nivåer</strong>. För att förstå resultatet behöver du veta vad nivåerna betyder och hur de räknas fram.</p></div><!-- pagebreak --><h3>De fyra nivåerna</h3><ol><li><strong>Nivå 1, grunderna:</strong> organisationen har grunderna i cybersäkerhetsarbetet på plats, åtminstone i begränsad utsträckning.</li><li><strong>Nivå 2, viss systematik:</strong> arbetet bedrivs med en viss systematik, och organisationen är bättre på grunderna än på nivå 1.</li><li><strong>Nivå 3, kvalificerat innehåll:</strong> organisationen har ett kvalificerat innehåll i arbetet och är bättre på både grunderna och systematiken.</li><li><strong>Nivå 4, ständiga förbättringar:</strong> organisationen arbetar avancerat med ständiga förbättringar.</li></ol><p>Varje nivå bygger på den föregående. Den som inte når nivå 1 hamnar på nivå 0.</p><!-- pagebreak --><h3>Så räknas nivån</h3><p>Varje fråga har svarsalternativ som beskriver åtgärder. Organisationen sätter ett X för varje åtgärd som stämmer med hur den arbetar, och varje X ger poäng. En fråga kan ge högst fem poäng. För att nå nivå 1 krävs minst en poäng på varje fråga på nivå 1, för nivå 2 minst två poäng på varje fråga på nivå 1 och 2, och så vidare.</p><p>Många frågor gäller om åtgärden har funnits på plats under <strong>hela den senaste tvåårsperioden</strong>, inte bara någon gång.</p><!-- pagebreak --><h3>Säkra bedömningar</h3><p>För varje X anger organisationen om bedömningen är säker. En <strong>säker bedömning</strong> betyder att det finns tydliga och dokumenterade belägg för att åtgärden genomförs. För nivå 1 krävs minst 50 procent säkra bedömningar, för nivå 2 minst 60, för nivå 3 minst 70 och för nivå 4 minst 80 procent.</p><div class=\"lesson-example\"><strong>Exempel:</strong> En kommun vet att alla nyanställda får en säkerhetsgenomgång, men det finns ingen rutin eller dokumentation som visar det. Åtgärden kan kryssas i, men bedömningen är inte säker.</div><!-- pagebreak --><h3>Det svagaste området avgör</h3><p>Varje mätning består av flera arbetsområden. Den <strong>övergripande nivån avgörs av det arbetsområde som har lägst nivå</strong>. Modellen premierar helhet framför spets: arbetet räknas som systematiskt först när det är systematiskt i alla delar.</p><div class=\"lesson-warning\"><strong>Obs!</strong> Ett mycket starkt resultat inom några arbetsområden lyfter inte den övergripande nivån om ett annat arbetsområde ligger på nivå 0.</div><!-- pagebreak --><div class=\"lesson-summary\"><h4>Sammanfattning</h4><ul><li>Fyra nivåer: grunderna, viss systematik, kvalificerat innehåll, ständiga förbättringar</li><li>Poäng ges per ikryssad åtgärd, högst fem per fråga</li><li>Andelen säkra bedömningar måste vara minst 50, 60, 70 respektive 80 procent</li><li>Det svagaste arbetsområdet avgör den övergripande nivån</li></ul></div>",
+   "questions": [
+    {
+     "question_type": "order",
+     "question_text": "Ordna nivåerna från lägst till högst.",
+     "quiz_data": {
+      "items": [
+       "Grunderna i cybersäkerhetsarbetet",
+       "Arbetet bedrivs med viss systematik",
+       "Kvalificerat innehåll i arbetet",
+       "Ständiga förbättringar"
+      ]
+     }
+    },
+    {
+     "question_type": "single_choice",
+     "question_text": "Vad är en säker bedömning?",
+     "quiz_data": {
+      "answers": [
+       "Att den som svarar är säker på sin sak",
+       "Att det finns tydliga och dokumenterade belägg för att åtgärden genomförs",
+       "Att ledningen har godkänt svaret",
+       "Att åtgärden har genomförts minst en gång"
+      ],
+      "correct": 1
+     }
+    },
+    {
+     "question_type": "numeric",
+     "question_text": "Hur många procent säkra bedömningar krävs minst för att nå nivå 3?",
+     "quiz_data": {
+      "correct": 70,
+      "tolerance": 0,
+      "unit": "procent"
+     }
+    },
+    {
+     "question_type": "true_false",
+     "question_text": "Den övergripande nivån avgörs av det arbetsområde där organisationen har lägst nivå.",
+     "quiz_data": {
+      "correct": true
+     }
+    }
+   ]
+  },
+  {
+   "key": "infosakkollen",
+   "title": "Infosäkkollen – huvudverktyget för informationssäkerhet",
+   "estimated_duration": 10,
+   "image_file": "lektion-3.jpg",
+   "image_wish": "En chef som håller ett kort möte med sin ledningsgrupp om informationssäkerhet, med pärmar och en bärbar dator på bordet",
+   "content": "<div class=\"lesson-intro\"><p>Infosäkkollen är den mätning som har funnits längst, och den har genomförts fyra gånger sedan 2021. Den följer upp det <strong>systematiska informationssäkerhetsarbetet</strong>: att organisationen medvetet och metodiskt analyserar, planerar, genomför, följer upp och förbättrar sin informationssäkerhet.</p></div><!-- pagebreak --><h3>Vad som mäts</h3><p>Infosäkkollen består av 40 frågor inom tio arbetsområden. Bland arbetsområdena finns:</p><ul><li>Ledningens styrning och kontroll</li><li>Analys och hantering av informationssäkerhetsrisker</li><li>Informationsklassning</li><li>Upphandling</li><li>Incident- och kontinuitetshantering</li><li>Uppföljning och utvärdering</li></ul><p>Frågorna har tagits fram med hänsyn till föreskrifterna om informationssäkerhet för statliga myndigheter (MSBFS 2020:6), som bygger på standardserien ISO/IEC 27000. Nivå 3 indikerar att organisationen efterlever föreskrifterna.</p><!-- pagebreak --><h3>Läget 2025</h3><p>Omkring 300 organisationer deltog i Infosäkkollen 2025. Enligt redovisningen nådde nästan sex av tio inte nivå 1, och bara sex procent nådde nivå 3 eller högre.</p><p>Svagast var Ledningens styrning och kontroll, där 53 procent nådde nivå 1 eller högre, Uppföljning och utvärdering med 59 procent och Incident- och kontinuitetshantering med 65 procent.</p><div class=\"lesson-info\"><strong>Visste du att…</strong> Kommunerna är den aktörsgrupp som har förbättrat sig mest i antal vidtagna åtgärder sedan tidigare mätningar, men de presterar fortfarande sämre än myndigheter och regioner i Infosäkkollen. Läs mer i <a href=\"https://rib.msb.se/filer/pdf/31260.pdf\">redovisningen av Cybersäkerhetskollen 2025</a>.</div><!-- pagebreak --><h3>Jämför med andra</h3><p>För Infosäkkollen finns ett jämförelseverktyg, en benchmark. Där kan ni jämföra ert resultat med till exempel en typisk kommun, region eller myndighet, baserat på alla deltagares svar. Enskilda organisationers resultat går inte att se.</p><div class=\"lesson-tip\"><strong>Tips:</strong> Titta särskilt på de arbetsområden där er nivå är lägst. Det är de som håller tillbaka den övergripande nivån.</div><!-- pagebreak --><div class=\"lesson-summary\"><h4>Sammanfattning</h4><ul><li>Infosäkkollen har 40 frågor inom tio arbetsområden</li><li>Den bygger på MSBFS 2020:6 och ISO/IEC 27000, och nivå 3 indikerar efterlevnad</li><li>2025 nådde nästan sex av tio inte nivå 1</li><li>Ledningens styrning och uppföljning är vanliga svagheter</li></ul></div>",
+   "ai_chat": {
+    "instruction": "Undrar du vad ett arbetsområde i Infosäkkollen innebär i praktiken, eller hur ni kan komma vidare? Fråga AI:n.",
+    "prompt": "Du hjälper informationssäkerhetsansvariga, it-chefer och chefer i svensk offentlig sektor att förstå Cybersäkerhetskollen och särskilt Infosäkkollen. Fakta du kan lita på: Cybersäkerhetskollen ansvaras sedan 1 juli 2026 av NCSC (del av FRA), tidigare MCF/MSB. Fyra mätningar: Infosäkkollen (40 frågor, tio arbetsområden, bygger på MSBFS 2020:6 och ISO/IEC 27000), It-säkkollen (53 frågor, MSBFS 2020:7), Ot-säkkollen (52 frågor, IEC 62443) och Leveranskedjekollen (15 frågor). Fyra nivåer; minst 50/60/70/80 procent säkra bedömningar för nivå 1–4; det svagaste arbetsområdet avgör övergripande nivå; nivå 3 indikerar efterlevnad men verktyget är inte en regelefterlevnadskontroll. Svara kort på svenska med konkreta exempel på arbetssätt. Hitta inte på frågenummer, poäng eller krav som du inte vet; hänvisa då till verktyget, NCSC:s webbplats eller metodstödet på informationssakerhet.se."
+   },
+   "questions": [
+    {
+     "question_type": "single_choice",
+     "question_text": "Vad indikerar nivå 3 i Infosäkkollen?",
+     "quiz_data": {
+      "answers": [
+       "Att organisationen är certifierad enligt ISO/IEC 27001",
+       "Att organisationen har grunderna på plats",
+       "Att organisationen efterlever föreskrifterna om informationssäkerhet (MSBFS 2020:6)",
+       "Att organisationen har klarat alla fyra mätningar"
+      ],
+      "correct": 2
+     }
+    },
+    {
+     "question_type": "multiple_choice",
+     "question_text": "Vilka var de tre svagaste arbetsområdena i Infosäkkollen 2025?",
+     "quiz_data": {
+      "answers": [
+       "Ledningens styrning och kontroll",
+       "Informationsklassning",
+       "Uppföljning och utvärdering",
+       "Incident- och kontinuitetshantering",
+       "Upphandling"
+      ],
+      "correct": [
+       0,
+       2,
+       3
+      ]
+     }
+    },
+    {
+     "question_type": "true_false",
+     "question_text": "I Infosäkkollen går det att jämföra sitt resultat med en typisk kommun, region eller myndighet.",
+     "quiz_data": {
+      "correct": true
+     }
+    }
+   ]
+  },
+  {
+   "key": "delverktygen",
+   "title": "It-säkkollen, Ot-säkkollen och Leveranskedjekollen",
+   "estimated_duration": 10,
+   "image_file": "lektion-4.jpg",
+   "image_wish": "En tekniker i ett kommunalt vattenverk som går igenom en kontrollpanel tillsammans med en it-kollega",
+   "content": "<div class=\"lesson-intro\"><p>Utöver Infosäkkollen finns tre mätningar som täcker <strong>it-miljön</strong>, <strong>operativ teknik</strong> och <strong>digitala leveranskedjor</strong>. De följer samma struktur och nivåmodell som Infosäkkollen.</p></div><!-- pagebreak --><h3>It-säkkollen</h3><p>It-säkkollen följer upp det systematiska it-säkerhetsarbetet med 53 frågor inom tio arbetsområden. Frågorna har tagits fram med hänsyn till föreskrifterna om säkerhetsåtgärder för statliga myndigheter (MSBFS 2020:7), och nivå 3 indikerar efterlevnad.</p><p>Bara informationssystem som den egna organisationen driftar ska räknas, till exempel nätverk och it-tjänster. It-chefen är en naturlig deltagare när frågorna besvaras.</p><!-- pagebreak --><h3>Ot-säkkollen</h3><p>Ot står för operativ teknik, alltså de styr- och kontrollsystem som styr fysiska processer. Ot-säkkollen har 52 frågor inom sju arbetsområden och bygger på standarden IEC 62443. Den riktar sig främst till organisationer med sådana system, till exempel inom energi, dricksvatten och transporter.</p><div class=\"lesson-example\"><strong>Exempel:</strong> En kommun med eget vattenverk har styrsystem för pumpar och rening. Ot-säkkollen gäller de systemen, medan It-säkkollen gäller kommunens kontorsnätverk.</div><!-- pagebreak --><h3>Leveranskedjekollen</h3><p>Leveranskedjekollen följer upp säkerheten i digitala leveranskedjor med 15 frågor. De 12 första gäller organisationer som tar emot digitala produkter eller tjänster, och de tre sista gäller organisationer som levererar dem.</p><p>It-säkkollen, Ot-säkkollen och Leveranskedjekollen genomfördes alla som piloter 2025 och har utvärderats efteråt.</p><!-- pagebreak --><h3>Läget 2025</h3><p>Enligt redovisningen saknade drygt hälften grunderna i It-säkkollen, nio av tio i Ot-säkkollen och sju av tio i Leveranskedjekollen. Av de 47 organisationer som gjorde alla fyra mätningarna nådde bara tre nivå 1 i den samlade Cybersäkerhetskollen.</p><div class=\"lesson-info\"><strong>Visste du att…</strong> För nivå 1 i den samlade Cybersäkerhetskollen krävs nivå 1 eller högre i alla fyra mätningar. Eftersom alla inte har operativ teknik redovisas också ett resultat utan Ot-säkkollen.</div><!-- pagebreak --><div class=\"lesson-summary\"><h4>Sammanfattning</h4><ul><li>It-säkkollen: 53 frågor, egna driftade system, MSBFS 2020:7</li><li>Ot-säkkollen: 52 frågor, styr- och kontrollsystem, IEC 62443</li><li>Leveranskedjekollen: 15 frågor, för mottagande och levererande organisationer</li><li>Den samlade nivån kräver minst nivå 1 i alla fyra mätningar</li></ul></div>",
+   "questions": [
+    {
+     "question_type": "match_pairs",
+     "question_text": "Para ihop mätningen med det den bygger på eller gäller.",
+     "quiz_data": {
+      "pairs": [
+       {
+        "left": "It-säkkollen",
+        "right": "MSBFS 2020:7"
+       },
+       {
+        "left": "Ot-säkkollen",
+        "right": "IEC 62443"
+       },
+       {
+        "left": "Leveranskedjekollen",
+        "right": "Mottagande och levererande organisationer"
+       }
+      ]
+     }
+    },
+    {
+     "question_type": "categorize",
+     "question_text": "Vilken mätning gäller systemet?",
+     "quiz_data": {
+      "categories": [
+       "It-säkkollen",
+       "Ot-säkkollen"
+      ],
+      "items": [
+       {
+        "text": "Kommunens kontorsnätverk",
+        "category": 0
+       },
+       {
+        "text": "En e-tjänst som kommunen själv driftar",
+        "category": 0
+       },
+       {
+        "text": "Styrsystemet för pumparna i vattenverket",
+        "category": 1
+       },
+       {
+        "text": "Styrningen av ett fjärrvärmeverk",
+        "category": 1
+       }
+      ]
+     }
+    },
+    {
+     "question_type": "true_false",
+     "question_text": "I It-säkkollen ska även system som en leverantör driftar åt organisationen räknas med.",
+     "quiz_data": {
+      "correct": false
+     }
+    }
+   ]
+  },
+  {
+   "key": "fran-resultat-till-forbattring",
+   "title": "Från resultat till förbättringsarbete",
+   "estimated_duration": 9,
+   "image_file": "lektion-5.jpg",
+   "image_wish": "En ledningsgrupp som prioriterar åtgärder med lappar på en tavla, en person pekar på en kolumn medan de andra nickar",
+   "content": "<div class=\"lesson-intro\"><p>Resultatet visar var ni står. Värdet uppstår först när det blir <strong>beslut om vad ni ska förbättra</strong>, och när ni följer upp att det blir gjort.</p></div><!-- pagebreak --><h3>Organisera arbetet med frågorna</h3><p>NCSC rekommenderar att CISO eller motsvarande samordnar arbetet och att relevanta roller deltar, till exempel it-chefen för It-säkkollen. Alla organisationer behöver inte besvara alla mätningar. En organisation utan operativ teknik behöver till exempel inte göra Ot-säkkollen.</p><div class=\"lesson-warning\"><strong>Obs!</strong> Skönmåla inte. Ett X utan dokumenterade belägg är inte en säker bedömning. Ett för positivt svar ger en felaktig bild och leder till fel prioriteringar.</div><!-- pagebreak --><h3>Prioritera det svagaste</h3><p>Återkopplingen i verktyget visar vilka arbetsområden som behöver utvecklas för att nå nästa nivå. Eftersom det svagaste området avgör den övergripande nivån är det oftast där insatsen ger mest. Dokumentera också det ni redan gör, så att fler bedömningar blir säkra.</p><div class=\"lesson-example\"><strong>Exempel:</strong> En region ligger på nivå 2 i de flesta arbetsområden men på nivå 0 i Uppföljning och utvärdering. Genom att införa en årlig genomgång av säkerhetsarbetet i ledningsgruppen, med protokoll, tar regionen sig en bit mot en högre övergripande nivå.</div><!-- pagebreak --><h3>Stöd för att komma vidare</h3><ul><li><a href=\"https://www.informationssakerhet.se/\">Metodstödet på informationssakerhet.se</a> beskriver arbetet steg för steg, bland annat riskhantering, incidenthantering, kontinuitetshantering, klassning och ledningens genomgång.</li><li>Mognadsdialogen är ett stöd för att ledningen tillsammans ska kartlägga nivån på cybersäkerhetsarbetet.</li><li>NCSC samlar stöd för vidareutvecklingsarbetet på <a href=\"https://www.ncsc.se/sv/radgivning-och-stod/arbeta-systematiskt-med-informationssakerhet-och-cybersakerhet/cybersakerhetskollen/stod-for-vidareutvecklingsarbete/\">sidan om stöd efter Cybersäkerhetskollen</a>.</li></ul><div class=\"lesson-tip\"><strong>Tips:</strong> Gör en enkel handlingsplan per arbetsområde med ansvarig och tidpunkt, och stäm av den i ledningsgruppen inför nästa mätning 2027.</div><!-- pagebreak --><div class=\"lesson-summary\"><h4>Sammanfattning</h4><ul><li>CISO samordnar, och rätt roller deltar</li><li>Svara ärligt. Bara dokumenterade belägg ger säkra bedömningar</li><li>Prioritera de svagaste arbetsområdena</li><li>Använd metodstödet och följ upp i ledningen</li></ul></div>",
+   "questions": [
+    {
+     "question_type": "single_choice",
+     "question_text": "Var ger en förbättringsinsats oftast störst effekt på den övergripande nivån?",
+     "quiz_data": {
+      "answers": [
+       "I det arbetsområde där organisationen redan är starkast",
+       "I det arbetsområde där organisationen har lägst nivå",
+       "Jämnt fördelat över alla frågor"
+      ],
+      "correct": 1
+     }
+    },
+    {
+     "question_type": "multiple_choice",
+     "question_text": "Vilka arbetssätt följer kursens råd?",
+     "quiz_data": {
+      "answers": [
+       "CISO samordnar arbetet med frågorna",
+       "Svaren sätts så högt som möjligt för att ge ett bra intryck",
+       "Det man redan gör dokumenteras så att fler bedömningar blir säkra",
+       "En handlingsplan följs upp i ledningsgruppen"
+      ],
+      "correct": [
+       0,
+       2,
+       3
+      ]
+     }
+    },
+    {
+     "question_type": "true_false",
+     "question_text": "Alla organisationer måste besvara alla fyra mätningarna, även om de saknar operativ teknik.",
+     "quiz_data": {
+      "correct": false
+     }
+    }
+   ]
+  }
+ ]
+}
