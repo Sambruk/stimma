@@ -61,6 +61,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$canManageUsers) {
     exit;
 }
 
+// Alla ändringar kräver giltig CSRF-token. Rollväxlingarna (toggle_admin/editor/viewer)
+// saknade kontrollen, så en annan webbplats kunde ändra roller via en inloggad admin
+// (ärende 770, 2026-10-13). Formulären skickar redan med token.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !validateCsrfToken($_POST['csrf_token'] ?? '')) {
+    $_SESSION['message'] = 'Ogiltig säkerhetstoken. Försök igen.';
+    $_SESSION['message_type'] = 'danger';
+    header('Location: users.php');
+    exit;
+}
+
 // Sidtitel sätts senare efter domänfilter har hanterats
 
 // Hantera radering av användare (SECURITY FIX: Changed from GET to POST with CSRF validation)

@@ -23,12 +23,14 @@ $page_title = isset($_GET['id']) ? 'Redigera lektion' : 'Skapa ny lektion';
 // Om ID finns, hämta lektionsinformation
 if (isset($_GET['id'])) {
     $lesson = queryOne("SELECT * FROM " . DB_DATABASE . ".lessons WHERE id = ?", [$_GET['id']]);
-    if (!$lesson) {
-        $_SESSION['message'] = 'Lektionen hittades inte.';
-        $_SESSION['message_type'] = 'danger';
-        header('Location: lessons.php');
-        exit;
+    // Ärende 770: samma svar för lektion som inte finns och lektion man saknar rätt till
+    if (!$lesson || !canEditLesson((int)$lesson['id'])) {
+        denyCourseAccess(false, 'Lektionen');
     }
+}
+// ?course_id= (ny lektion i kurs) får bara gälla en kurs användaren får ändra
+if (!empty($_GET['course_id']) && !canEditCourse((int)$_GET['course_id'])) {
+    denyCourseAccess();
 }
 
 // Hämta kurser för dropdown — scope:as per behörighet:
@@ -85,6 +87,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $title = trim($_POST['title'] ?? '');
     $course_id = (int)($_POST['course_id'] ?? 0);
+
+    // Ärende 770: pröva behörigheten INNAN något görs (förr raderades gamla bild-,
+    // video- och ljudfiler före kontrollen, och course_id=0 hoppade över den helt).
+    // Lektionen måste ligga i en kurs, och användaren måste få ändra både kursen den
+    // ligger i nu och kursen den ska ligga i.
+    if ($course_id <= 0 || !canEditCourse($course_id)
+        || (isset($lesson) && !canEditCourse((int)$lesson['course_id']))) {
+        denyCourseAccess();
+    }
     $status = isset($_POST['status']) && $_POST['status'] === 'active' ? 'active' : 'inactive';
     
     // Hantera innehåll från editorn
@@ -112,6 +123,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $belongs_to_raw = trim($_POST['belongs_to_lesson_id'] ?? '');
     $belongs_to_lesson_id = ($lesson_type === 'info_page' && $belongs_to_raw !== '' && (int)$belongs_to_raw > 0)
         ? (int)$belongs_to_raw : null;
+    // Infosidan får bara höra till en lektion i samma kurs
+    if ($belongs_to_lesson_id !== null && !queryOne(
+            "SELECT 1 FROM " . DB_DATABASE . ".lessons WHERE id = ? AND course_id = ?",
+            [$belongs_to_lesson_id, $course_id])) {
+        $belongs_to_lesson_id = null;
+    }
     
     // Hantera bilduppladdning
     // SECURITY FIX: Enhanced file upload validation

@@ -12,6 +12,14 @@ if (!isLoggedIn()) {
     exit;
 }
 
+// Bara admin, redaktör eller kursredaktör söker användare (ärende 770, 2026-10-13:
+// förr räckte inloggning, så vanliga användare kunde lista sin organisation)
+$sokare = queryOne("SELECT is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE email = ?", [$_SESSION['user_email']]);
+if (empty($sokare['is_admin']) && empty($sokare['is_editor']) && !hasCourseEditorAssignments($_SESSION['user_email'])) {
+    echo json_encode(['success' => false, 'message' => 'Ingen behörighet.']);
+    exit;
+}
+
 // Validera input
 if (!isset($_GET['search'])) {
     echo json_encode(['success' => false, 'message' => 'Ogiltig förfrågan.']);
@@ -66,7 +74,8 @@ if (($_GET['lage'] ?? '') === 'redaktor' && filter_var($exaktAdress, FILTER_VALI
     $arExtern = !in_array($adressDoman, $orgScopeDomains, true);
     $finns = queryOne("SELECT email, name FROM " . DB_DATABASE . ".users WHERE email = ?", [$exaktAdress]);
     if ($finns) {
-        $users[] = ['email' => $finns['email'], 'name' => $finns['name'], 'extern' => $arExtern];
+        // Namnet på en person i en annan organisation lämnas inte ut – adressen räcker
+        $users[] = ['email' => $finns['email'], 'name' => $arExtern ? '' : $finns['name'], 'extern' => $arExtern];
     } elseif (isDomainAllowed($adressDoman)) {
         $users[] = ['email' => $exaktAdress, 'name' => null, 'extern' => $arExtern, 'nytt_konto' => true];
     } else {

@@ -2,7 +2,7 @@
 /**
  * Trigga ett cronjob manuellt från admin-UI:t.
  *
- * Behörighet: admin eller superadmin. CSRF krävs.
+ * Behörighet: bara superadmin (ärende 770, 2026-10-13). CSRF krävs.
  * Input: POST job_id (motsvarar rad i cron_jobs-tabellen).
  *
  * Kör script_path med PHP-binary och returnerar stdout/stderr + exit code
@@ -21,7 +21,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['csrf_token']) || !va
 
 $currentUser = queryOne("SELECT role, is_admin FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
 $isSuper = ($currentUser['role'] ?? '') === 'super_admin';
-if (!$isSuper && empty($currentUser['is_admin'])) {
+// Cronjobben är globala och utdata kan röra alla organisationer: bara superadmin (ärende 770)
+if (!$isSuper) {
     echo json_encode(['success' => false, 'message' => 'Otillräcklig behörighet.']);
     exit;
 }
@@ -33,8 +34,10 @@ if (!$job) {
     exit;
 }
 
-// Bygg säker sökväg — script_path är relativ mot Stimma-rot
-$scriptRoot = realpath(__DIR__ . '/../..');
+// Bygg säker sökväg — script_path är relativ mot Stimma-rot (/var/www/html, där cron/
+// ligger). Pekade på public/ sedan webbroten flyttades 2026-08-17, så "Kör nu" hittade
+// inga skript (rättat 2026-10-13).
+$scriptRoot = realpath(__DIR__ . '/../../..');
 $scriptPath = $scriptRoot . '/' . ltrim($job['script_path'], '/');
 if (!file_exists($scriptPath) || strpos(realpath($scriptPath), $scriptRoot) !== 0) {
     echo json_encode(['success' => false, 'message' => 'Skriptfilen hittades inte eller är utanför Stimma-roten.']);

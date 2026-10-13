@@ -1214,6 +1214,76 @@ function userCanModifyCourse(array $course) {
 }
 
 /**
+ * Central behörighet för att ändra en kurs med dess moduler, lektioner och quiz
+ * (ärende 770, 2026-10-13). Används av ALLA admin-sidor och ajax-anrop som läser
+ * redigeringsläget för eller ändrar en kurs – vid både GET och POST.
+ *
+ * Får ändra: Sambruks centrala administratör, administratör i den organisation som
+ * äger kursen, tilldelad redaktör (course_editors, även över org-gränsen) samt
+ * kursens författare inom den egna organisationen (äldre kurser saknar ibland
+ * course_editors-rad för skaparen).
+ */
+function canEditCourse(int $courseId): bool {
+    if ($courseId <= 0 || empty($_SESSION['user_email'])) return false;
+    $course = queryOne(
+        "SELECT id, organization_domain, author_id FROM " . DB_DATABASE . ".courses WHERE id = ?",
+        [$courseId]
+    );
+    if (!$course) return false;
+    if (userCanModifyCourse($course)) return true;
+    return !empty($course['author_id'])
+        && (int)$course['author_id'] === (int)($_SESSION['user_id'] ?? 0)
+        && in_array($course['organization_domain'] ?? '', getOrgScopeDomains($_SESSION['user_email']), true);
+}
+
+/** Behörighet för en lektion = behörighet för kursen den ligger i. */
+function canEditLesson(int $lessonId): bool {
+    if ($lessonId <= 0) return false;
+    $lesson = queryOne("SELECT course_id FROM " . DB_DATABASE . ".lessons WHERE id = ?", [$lessonId]);
+    return $lesson ? canEditCourse((int)$lesson['course_id']) : false;
+}
+
+/**
+ * Läsrätt till en kurs i adminytan (lektionslista, förhandsvisning av diplom m.m.):
+ * den som får ändra kursen, eller admin/redaktör/läsbehörig vars organisation
+ * (effektivt scope – underdomän ser bara sin domän) äger kursen.
+ */
+function canViewCourseAdmin(int $courseId): bool {
+    if (canEditCourse($courseId)) return true;
+    $email = $_SESSION['user_email'] ?? '';
+    if ($email === '') return false;
+    $u = queryOne("SELECT is_admin, is_editor, is_viewer FROM " . DB_DATABASE . ".users WHERE email = ?", [$email]);
+    if (!$u || (empty($u['is_admin']) && empty($u['is_editor']) && empty($u['is_viewer']))) return false;
+    $course = queryOne("SELECT organization_domain FROM " . DB_DATABASE . ".courses WHERE id = ?", [$courseId]);
+    return $course && in_array($course['organization_domain'] ?? '', getEffectiveOrgScopeDomains($email), true);
+}
+
+/** Sambruks centrala administratör? */
+function isSuperAdminUser(): bool {
+    $email = $_SESSION['user_email'] ?? '';
+    if ($email === '') return false;
+    $u = queryOne("SELECT role FROM " . DB_DATABASE . ".users WHERE email = ?", [$email]);
+    return ($u['role'] ?? '') === 'super_admin';
+}
+
+/**
+ * Neka utan att avslöja om kursen/lektionen finns: samma svar som för ett id som
+ * inte finns. $json för ajax-anrop, annars tillbaka till kurslistan med meddelande.
+ */
+function denyCourseAccess(bool $json = false, string $what = 'Kursen'): void {
+    if ($json) {
+        http_response_code(404);
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => $what . ' hittades inte.']);
+        exit;
+    }
+    $_SESSION['message'] = $what . ' hittades inte.';
+    $_SESSION['message_type'] = 'danger';
+    header('Location: courses.php');
+    exit;
+}
+
+/**
  * Är användaren uttryckligen tillagd som redaktör för kursen (course_editors)?
  */
 function isAssignedCourseEditor(int $courseId, ?string $email = null): bool {

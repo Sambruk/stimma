@@ -15,8 +15,9 @@ require_once 'include/auth_check.php';
 
 $currentUser = queryOne("SELECT role, is_admin FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
 $isSuper = ($currentUser['role'] ?? '') === 'super_admin';
-if (!$isSuper && empty($currentUser['is_admin'])) {
-    $_SESSION['message'] = 'Endast admin/superadmin kan köra cronjobb.';
+// Cronjobben är globala (alla organisationer): bara superadmin (ärende 770, 2026-10-13)
+if (!$isSuper) {
+    $_SESSION['message'] = 'Endast Sambruks centrala administratör kan hantera cronjobb.';
     $_SESSION['message_type'] = 'danger';
     redirect('index.php');
     exit;

@@ -30,11 +30,10 @@ $courseId = (int)$_GET['course_id'];
 // Hämta kursinformation
 $course = queryOne("SELECT * FROM " . DB_DATABASE . ".courses WHERE id = ?", [$courseId]);
 
-if (!$course) {
-    $_SESSION['message'] = "Kursen kunde inte hittas.";
-    $_SESSION['message_type'] = "danger";
-    header('Location: courses.php');
-    exit;
+// Ärende 770: bara kurser användaren får ändra, eller se i den egna organisationen.
+// Samma svar som för en kurs som inte finns.
+if (!$course || !canViewCourseAdmin($courseId)) {
+    denyCourseAccess();
 }
 
 // Sätt sidtitel med kursnamn

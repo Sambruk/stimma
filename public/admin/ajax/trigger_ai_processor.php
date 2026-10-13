@@ -19,6 +19,13 @@ if (!isLoggedIn()) {
     exit;
 }
 
+// Bara den som kan skapa kurser startar processorn (ärende 770, 2026-10-13: förr räckte inloggning)
+$aiUser = queryOne("SELECT is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE email = ?", [$_SESSION['user_email']]);
+if (empty($aiUser['is_admin']) && empty($aiUser['is_editor'])) {
+    echo json_encode(['success' => false, 'message' => 'Ingen behörighet']);
+    exit;
+}
+
 // Validera CSRF
 if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
     echo json_encode(['success' => false, 'message' => 'Ogiltig säkerhetstoken']);

@@ -1,0 +1,35 @@
+# Fristående testmiljö för Stimma (2026-10-13). Rör aldrig produktionsdatabasen:
+# egen MariaDB på tmpfs (tom vid varje start), eget .env, egna uppladdningar och loggar.
+# Koden monteras skrivskyddad från /opt/app/stimma. Kör: tests/run.sh
+name: stimma-test
+services:
+  web:
+    build: /opt/app/stimma/tests
+    network_mode: bridge
+    ports:
+      - "172.17.0.1:23050:80"
+    volumes:
+      - /opt/app/stimma:/var/www/html:ro
+      - /opt/app/stimma/tests/env.test:/var/www/html/.env:ro
+      - /opt/app/stimma/tests/allowed_domains.test.txt:/var/www/html/allowed_domains.txt:ro
+      - /opt/app/stimma/tests/runtime/upload:/var/www/html/public/upload
+      - /opt/app/stimma/tests/runtime/logs:/var/www/html/logs
+      - /opt/app/stimma/config/vhost.conf:/etc/apache2/sites-enabled/000-default.conf:ro
+  db:
+    image: mariadb:10.11
+    network_mode: bridge
+    ports:
+      - "172.17.0.1:23306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: stimma_test_root
+      MYSQL_DATABASE: stimma_test
+      MYSQL_USER: stimma_test
+      MYSQL_PASSWORD: stimma_test
+    tmpfs:
+      - /var/lib/mysql
+    volumes:
+      - /opt/app/stimma/tests/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      retries: 20

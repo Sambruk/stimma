@@ -80,17 +80,12 @@ if ($enrollmentType === 'rolling') {
 }
 
 // Redaktörskontroll
-if (!$isAdmin) {
-    $hasAccess = queryOne(
-        "SELECT c.id FROM " . DB_DATABASE . ".courses c
-         LEFT JOIN " . DB_DATABASE . ".course_editors ce ON c.id = ce.course_id
-         WHERE c.id = ? AND (c.author_id = ? OR ce.email = ?)",
-        [$courseId, $currentUser['id'], $_SESSION['user_email']]
-    );
-    if (!$hasAccess) {
-        echo json_encode(['success' => false, 'message' => 'Du har inte behörighet till denna kurs.']);
-        exit;
-    }
+// Ärende 770: förr släpptes varje admin igenom till alla organisationers kurser,
+// och författarkontrollen saknade org-villkor. Extern kursredaktör får inte styra
+// stegvisa utskick (de rör kursens deltagare, se isExternalCourseEditor()).
+$accessCourse = queryOne("SELECT id, organization_domain FROM " . DB_DATABASE . ".courses WHERE id = ?", [$courseId]);
+if (!$accessCourse || !canEditCourse($courseId) || isExternalCourseEditor($accessCourse)) {
+    denyCourseAccess(true);
 }
 
 // Samla användare att skriva in

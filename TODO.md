@@ -2,6 +2,37 @@
 
 ## Pågående
 
+### Förvaltningsärenden 770, 781, 782 (underlag Magnus Nilsson 2026-10-13)
+Beslut Thomas 2026-10-13: andra organisationers deltagare i egen publik kurs visas BARA som antal i statistiken.
+Testmiljö
+- [x] Schema utan data från prod → tests/schema.sql
+- [x] tests/docker-compose.yml: egen web + MariaDB på tmpfs (port 23050/23306), eget .env, egna uppladdningar, ingen mail/AI. Koden monteras skrivskyddad
+- [x] Testdata tests/seed.sql: orga.test + orgb.test (admin, redaktör, användare, läsbehörig, kurser inkl. publik och kopierad, lektioner med/utan quiz) + Sambruk superadmin
+- [x] Testramverk tests/lib.php + tests/run.sh (PHP CLI + curl, inloggning via remember_token). Rökprov ok
+770 – IDOR, redigera andras kurser
+- [x] Inventera alla admin-sidor + ajax (77 filer): 13 med hål
+- [x] Tester som visar felen (tests/test_770.php): 20 fel före rättelsen, bl.a. admin A startade B:s stegvisa kurs (4 mejl köade)
+- [x] Central canEditCourse/canEditLesson/canViewCourseAdmin/denyCourseAccess i functions.php, använd i edit_lesson, lessons, export, certificates, 4 stegvis-ajax
+- [x] logs.php + cron_jobs + run_cron_job bara superadmin (menyn visade dem redan bara för superadmin)
+- [x] search_users kräver roll, extern exakt träff utan namn; trigger_ai_processor kräver admin/redaktör
+- [x] users.php: CSRF för rollväxlingarna; delete_module.php borttagen (tabellen modules finns inte)
+- [x] Fynd: run_cron_job letade skript under public/ sedan 2026-08-17 → "Kör nu" fungerade inte. Rättat
+- [x] 74/74 tester ok
+- [ ] BESLUT Thomas: copy_course låter alla org kopiera ALLA aktiva kurser (även icke-publika, 41 kopior i prod). Behålls tills vidare
+- [ ] Tabell: sida → kontroll
+781 – statistik över org-gränsen
+- [ ] Inventera statistikvyer + exporter
+- [ ] Tester som visar felen
+- [ ] Rätta: org-filter, redaktör bara egna kurser, andra orgs deltagare bara som antal
+782 – framsteg registreras inte
+- [ ] Kartlägg progress vs user_progress, var lektion/kurs blir klar
+- [ ] Tester som visar felen
+- [ ] Central regel för lektion klar / kurs klar, ordning styr åtkomst inte sparande
+- [ ] Migrering: en tabell med unikt index + rätta kursstatus för de som gått klart
+- [ ] SQL för Thomas: antal användare med alla lektioner klara men kurs ej klar (inga personuppgifter)
+Rapport
+- [ ] Rapport per ärende (orsak, ändring, test, migrering, övriga fynd, beslut)
+
 ### Testprotokoll Anders Wockatz 2026-10-12 (sammanställt av Magnus Nilsson, AIPL)
 Punkt 1 – quiz: efter "Fel svar" blir knappen "Nästa", går inte att svara igen (kurs 186 lektion 1677, kurs 172)
 - [x] Återskapa (Playwright, förhandsgranskning – Anders är admin i sin org): gamla skriptet gav "Nästa fråga" efter fel svar i 1677 och 1585

@@ -27,19 +27,9 @@ if (!isset($_GET['id'])) {
 
 $courseId = (int)$_GET['id'];
 
-// Kontrollera behörighet
-$user = queryOne("SELECT is_admin FROM " . DB_DATABASE . ".users WHERE id = ?", [$_SESSION['user_id']]);
-$isAdmin = $user && $user['is_admin'] == 1;
-
-if (!$isAdmin) {
-    // Kontrollera om användaren är redaktör för kursen
-    $isEditor = queryOne("SELECT 1 FROM " . DB_DATABASE . ".course_editors WHERE course_id = ? AND email = ?", [$courseId, $_SESSION['user_email']]);
-    if (!$isEditor) {
-        $_SESSION['message'] = 'Du har inte behörighet att exportera denna kurs.';
-        $_SESSION['message_type'] = 'danger';
-        header('Location: courses.php');
-        exit;
-    }
+// Ärende 770: förr räckte is_admin för att exportera vilken organisations kurs som helst
+if (!canEditCourse($courseId)) {
+    denyCourseAccess();
 }
 
 // Hämta kursinformation

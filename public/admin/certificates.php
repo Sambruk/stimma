@@ -70,6 +70,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     $courseId = (int)($_POST['course_id'] ?? 0);
 
+    // Ärende 770: diplombilden får bara ändras för kurser användaren får ändra
+    if (!canEditCourse($courseId)) {
+        $_SESSION['message'] = 'Kursen hittades inte.';
+        $_SESSION['message_type'] = 'danger';
+        redirect('admin/certificates.php');
+        exit;
+    }
+
     if ($_POST['action'] === 'upload_image' && isset($_FILES['certificate_image'])) {
         $file = $_FILES['certificate_image'];
 
@@ -80,7 +88,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             finfo_close($finfo);
 
             if (in_array($mimeType, $allowedTypes)) {
-                $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
+                // Filändelsen från den kontrollerade MIME-typen, inte från klientens filnamn
+                $ext = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp'][$mimeType];
                 $filename = 'cert_' . $courseId . '_' . time() . '.' . $ext;
                 $uploadPath = __DIR__ . '/../upload/' . $filename;
 
@@ -118,6 +127,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 $previewCourseId = (int)($_GET['preview'] ?? 0);
 $previewCourse = null;
 $previewOrgIcon = null;
+if ($previewCourseId && !canViewCourseAdmin($previewCourseId)) {
+    $previewCourseId = 0; // ärende 770: ingen förhandsvisning av andra organisationers kurser
+}
 if ($previewCourseId) {
     $previewCourse = queryOne("SELECT * FROM " . DB_DATABASE . ".courses WHERE id = ?", [$previewCourseId]);
     // Slå upp kursens orgikon för toppen av förhandsvisningen (matchar certificate.php-logiken).

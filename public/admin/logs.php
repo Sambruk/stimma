@@ -17,8 +17,10 @@ require_once '../include/auth.php';
 // Include centralized authentication and authorization check
 require_once 'include/auth_check.php';
 
-// Only administrators should be able to access logs
-if (!$isAdmin) {
+// Bara Sambruks centrala administratör: loggen är gemensam för alla organisationer
+// (ärende 770, 2026-10-13 – förr såg varje org-admin hela systemets logg via adressen;
+// menylänken visades redan bara för superadmin)
+if (!isSuperAdminUser()) {
     $_SESSION['message'] = 'Du har inte behörighet att se loggar. Endast administratörer har tillgång till den här funktionen.';
     $_SESSION['message_type'] = 'warning';
     redirect('index.php');
