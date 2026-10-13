@@ -1628,6 +1628,112 @@ function getStatsDomainScope($email) {
     ];
 }
 
+// ---------------------------------------------------------------------------
+// Statistik över organisationsgränsen (ärende 781, 2026-10-13)
+//
+// Regel: statistik visar uppgifter om användare i det aktiva domänscopet
+// (getStatsDomainScope – underdomän ser bara sin domän). Deltagare från en ANNAN
+// organisation i den egna kursen visas bara som antal (beslut Thomas 2026-10-13).
+// Publika deltagare utan organisation (t.ex. gmail-konton på en publik kurs) hör
+// till kursens organisation och visas för den. Sambruks centrala administratör ser allt.
+//
+// Sektorsadmin (förvaltningsplanen): filtrering på organisatoriska enheter läggs
+// till genom att snäva in 'active' i getStatsDomainScope()/getOrgTagFilter() –
+// alla statistikvyer går via statsVisibleUserClause() och får det automatiskt.
+// ---------------------------------------------------------------------------
+
+/** Domäner som tillhör någon organisation i Stimma (organization_domains + allowed_domains.txt). */
+function getMemberDomains(): array {
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    $doms = array_column(query("SELECT domain FROM " . DB_DATABASE . ".organization_domains") ?: [], 'domain');
+    $file = __DIR__ . '/../allowed_domains.txt';
+    if (is_readable($file)) {
+        foreach (file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+            $line = strtolower(trim($line));
+            if ($line !== '' && $line[0] !== '#') $doms[] = $line;
+        }
+    }
+    return $cache = array_values(array_unique(array_map('strtolower', $doms)));
+}
+
+/**
+ * SQL-villkor för användare vars IDENTITET (namn, e-post, enskilda rader) får visas
+ * i statistik: e-postdomän i $activeDomains, eller – om $courseId anges och inget
+ * filter är aktivt – publik deltagare i kursen vars domän inte tillhör någon organisation.
+ *
+ * @return array{fragment:string,params:array}
+ */
+function statsVisibleUserClause(string $alias, array $activeDomains, ?int $courseId = null, bool $filterActive = false): array {
+    if (isSuperAdminUser() && !$filterActive) {
+        return ['fragment' => '1=1', 'params' => []];
+    }
+    $own = buildEmailDomainInClause($activeDomains, "$alias.email");
+    if ($courseId === null || $filterActive) return $own;
+    $members = getMemberDomains();
+    $notMember = empty($members)
+        ? ['fragment' => '1=1', 'params' => []]
+        : ['fragment' => "LOWER(SUBSTRING_INDEX($alias.email, '@', -1)) NOT IN (" . implode(',', array_fill(0, count($members), '?')) . ")",
+           'params' => $members];
+    return [
+        'fragment' => "(({$own['fragment']}) OR (EXISTS (SELECT 1 FROM " . DB_DATABASE . ".public_course_access pcav
+                         WHERE pcav.user_id = $alias.id AND pcav.course_id = ?) AND {$notMember['fragment']}))",
+        'params' => array_merge($own['params'], [(int)$courseId], $notMember['params']),
+    ];
+}
+
+/**
+ * Antal deltagare (inskrivna/med framsteg) i en kurs som inte får visas med identitet,
+ * och hur många av dem som är klara. Används för raden "N deltagare från andra organisationer".
+ *
+ * @return array{total:int,completed:int}
+ */
+function statsHiddenParticipantCounts(int $courseId, array $activeDomains): array {
+    if (isSuperAdminUser()) return ['total' => 0, 'completed' => 0];
+    $vis = statsVisibleUserClause('u', $activeDomains, $courseId);
+    $rows = query(
+        "SELECT u.id,
+                (SELECT COUNT(DISTINCT p.lesson_id) FROM " . DB_DATABASE . ".progress p
+                   JOIN " . DB_DATABASE . ".lessons l ON l.id = p.lesson_id
+                  WHERE p.user_id = u.id AND l.course_id = ? AND l.status = 'active' AND p.status = 'completed') AS done
+           FROM " . DB_DATABASE . ".users u
+          WHERE (EXISTS (SELECT 1 FROM " . DB_DATABASE . ".course_enrollments ce WHERE ce.user_id = u.id AND ce.course_id = ?)
+              OR EXISTS (SELECT 1 FROM " . DB_DATABASE . ".progress p2 JOIN " . DB_DATABASE . ".lessons l2 ON l2.id = p2.lesson_id
+                          WHERE p2.user_id = u.id AND l2.course_id = ?))
+            AND NOT ({$vis['fragment']})",
+        array_merge([$courseId, $courseId, $courseId], $vis['params'])
+    ) ?: [];
+    $lessons = (int)(queryOne("SELECT COUNT(*) n FROM " . DB_DATABASE . ".lessons WHERE course_id = ? AND status = 'active'", [$courseId])['n'] ?? 0);
+    $completed = 0;
+    foreach ($rows as $r) if ($lessons > 0 && (int)$r['done'] >= $lessons) $completed++;
+    return ['total' => count($rows), 'completed' => $completed];
+}
+
+/**
+ * Får användaren se statistik för kursen?
+ * - superadmin: alla
+ * - admin/läsbehörig: kurser i organisationens statistikscope (buildOrgCourseScopeClause)
+ * - redaktör: kurser hen får ändra, men inte som extern kursredaktör (statistiken
+ *   rör kursorganisationens deltagare, se isExternalCourseEditor())
+ */
+function statsCanViewCourse(int $courseId): bool {
+    if ($courseId <= 0) return false;
+    if (isSuperAdminUser()) return true;
+    $email = $_SESSION['user_email'] ?? '';
+    $u = queryOne("SELECT is_admin, is_editor, is_viewer FROM " . DB_DATABASE . ".users WHERE email = ?", [$email]);
+    if (!$u) return false;
+    if (!empty($u['is_admin']) || !empty($u['is_viewer'])) {
+        $scope = buildOrgCourseScopeClause(getStatsDomainScope($email)['scope'], 'c');
+        if (queryOne("SELECT 1 FROM " . DB_DATABASE . ".courses c WHERE c.id = ? AND {$scope['fragment']}",
+                     array_merge([$courseId], $scope['params']))) return true;
+    }
+    if (canEditCourse($courseId)) {
+        $course = queryOne("SELECT id, organization_domain FROM " . DB_DATABASE . ".courses WHERE id = ?", [$courseId]);
+        return $course && !isExternalCourseEditor($course);
+    }
+    return false;
+}
+
 /**
  * Bygg en querystring-fragment (&domains[]=...) för att föra vidare ett aktivt
  * domänfilter i länkar (t.ex. export). Returnerar tom sträng om inget valts.

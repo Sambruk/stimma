@@ -368,15 +368,26 @@ require_once 'include/header.php';
                                  WHERE {$coDomClause['fragment']}",
                                 $coDomClause['params']
                             );
+                            // Ärende 781: e-post bara för den egna organisationens användare och publika
+                            // deltagare utan organisation – andra organisationers diplomtagare ingår
+                            // bara i antalet ovan (beslut 2026-10-13)
+                            $certUserClause = statsVisibleUserClause('u', getEffectiveOrgScopeDomains($_SESSION['user_email']));
+                            $certMembers = getMemberDomains();
+                            if (!isSuperAdminUser() && !empty($certMembers)) {
+                                $certUserClause = [
+                                    'fragment' => "(({$certUserClause['fragment']}) OR LOWER(SUBSTRING_INDEX(u.email, '@', -1)) NOT IN (" . implode(',', array_fill(0, count($certMembers), '?')) . "))",
+                                    'params' => array_merge($certUserClause['params'], $certMembers),
+                                ];
+                            }
                             $recentCerts = query(
                                 "SELECT c.*, co.title as course_title, u.email
                                  FROM " . DB_DATABASE . ".certificates c
                                  JOIN " . DB_DATABASE . ".courses co ON c.course_id = co.id
                                  JOIN " . DB_DATABASE . ".users u ON c.user_id = u.id
-                                 WHERE {$coDomClause['fragment']}
+                                 WHERE {$coDomClause['fragment']} AND {$certUserClause['fragment']}
                                  ORDER BY c.issued_at DESC
                                  LIMIT 5",
-                                $coDomClause['params']
+                                array_merge($coDomClause['params'], $certUserClause['params'])
                             );
                             ?>
                             <div class="row mb-3">

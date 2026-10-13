@@ -90,14 +90,18 @@ if ($isAdmin || $isViewer) {
     );
     $courseIds = array_column($courses, 'id');
 } else {
-    // Redaktör ser endast kurser de är redaktör för eller har skapat
+    // Redaktör ser endast kurser hen är redaktör för eller har skapat – och bara i den
+    // egna organisationen (ärende 781: förr även kurser i andra organisationer där hen
+    // är extern kursredaktör, med alla deltagare)
+    $editorOrgClause = buildDomainInClause(getOrgScopeDomains($userEmail), 'c.organization_domain');
     $courses = query("SELECT DISTINCT c.id, c.title
         FROM " . DB_DATABASE . ".courses c
         LEFT JOIN " . DB_DATABASE . ".course_editors ce ON c.id = ce.course_id
         WHERE c.status = 'active'
         AND (c.author_id = ? OR ce.email = ?)
+        AND {$editorOrgClause['fragment']}
         ORDER BY c.title ASC",
-        [$currentUser['id'], $userEmail]);
+        array_merge([$currentUser['id'], $userEmail], $editorOrgClause['params']));
 
     $courseIds = array_column($courses, 'id');
 }
@@ -107,18 +111,8 @@ if ($isAdmin || $isViewer) {
 // annars hade ett kurs-id i URL:en räckt för att nå en annan organisations kurs
 // förbi den avgränsade kurslistan ovan.
 if ($selectedCourseId) {
-    if ($isAdmin || $isViewer) {
-        $hasAccess = queryOne(
-            "SELECT c.id FROM " . DB_DATABASE . ".courses c
-             WHERE c.id = ? AND {$statsCourseScope['fragment']}",
-            array_merge([$selectedCourseId], $statsCourseScope['params'])
-        );
-    } else {
-        $hasAccess = queryOne("SELECT c.id FROM " . DB_DATABASE . ".courses c
-            LEFT JOIN " . DB_DATABASE . ".course_editors ce ON c.id = ce.course_id
-            WHERE c.id = ? AND (c.author_id = ? OR ce.email = ?)",
-            [$selectedCourseId, $currentUser['id'], $userEmail]);
-    }
+    // Ärende 781: samma kontroll för alla roller (statsCanViewCourse i functions.php)
+    $hasAccess = statsCanViewCourse($selectedCourseId);
 
     if (!$hasAccess) {
         $_SESSION['message'] = 'Du har inte behörighet att se statistik för denna kurs.';
@@ -172,8 +166,9 @@ if ($isAdmin || $isViewer) {
         JOIN " . DB_DATABASE . ".progress p ON u.id = p.user_id
         JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
         WHERE l.course_id IN ($courseIdsPlaceholder)
+          AND {$userEmailClauseU['fragment']}
         GROUP BY u.id, u.email, u.name, u.created_at, u.last_login_at
-        ORDER BY u.email ASC", $courseIds);
+        ORDER BY u.email ASC", array_merge($courseIds, $userEmailClauseU['params']));
     } else {
         $usersInDomain = [];
     }
@@ -208,14 +203,15 @@ if (!empty($courseIds)) {
             c.id as course_id,
             c.title as course_title,
             COUNT(DISTINCT l.id) as total_lessons,
-            COUNT(DISTINCT CASE WHEN p.status = 'completed' THEN p.id END) as completed_count,
-            COUNT(DISTINCT p.user_id) as users_started
+            COUNT(DISTINCT CASE WHEN p.status = 'completed' AND u.id IS NOT NULL THEN p.id END) as completed_count,
+            COUNT(DISTINCT u.id) as users_started
         FROM " . DB_DATABASE . ".courses c
         LEFT JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id AND l.status = 'active'
         LEFT JOIN " . DB_DATABASE . ".progress p ON l.id = p.lesson_id
+        LEFT JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id AND {$userEmailClauseU['fragment']}
         WHERE c.id IN ($courseIdsPlaceholder) AND c.status = 'active'
         GROUP BY c.id, c.title
-        ORDER BY c.title ASC", $courseIds);
+        ORDER BY c.title ASC", array_merge($userEmailClauseU['params'], $courseIds));
     }
 } else {
     $courseStats = [];
@@ -273,9 +269,11 @@ if ($selectedCourseId) {
                 JOIN " . DB_DATABASE . ".lessons l2 ON p2.lesson_id = l2.id
                 WHERE l2.course_id = ?
             )
+            AND {$userEmailClauseU['fragment']}
             AND l.course_id = ?
             AND l.status = 'active'
-            ORDER BY u.email ASC, l.sort_order ASC", [$selectedCourseId, $selectedCourseId]);
+            ORDER BY u.email ASC, l.sort_order ASC",
+            array_merge([$selectedCourseId], $userEmailClauseU['params'], [$selectedCourseId]));
         }
 
         // Organisera data per användare

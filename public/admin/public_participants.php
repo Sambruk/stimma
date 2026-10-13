@@ -39,16 +39,14 @@ if (!$course) {
     exit;
 }
 
-// Org-scope: vanlig admin/redaktör får bara se kurser i sin org
+// Ärende 781: samma statistikbehörighet som övriga vyer (admin/läsbehörig i orgen,
+// kursens egna redaktörer – inte varje redaktör i organisationen)
 $isSuperAdmin = ($currentUser['role'] ?? '') === 'super_admin';
-if (!$isSuperAdmin) {
-    $scope = getOrgScopeDomains($currentUser['email']);
-    if (!in_array($course['organization_domain'], $scope, true)) {
-        $_SESSION['message'] = 'Kursen tillhör inte din organisation.';
-        $_SESSION['message_type'] = 'danger';
-        redirect('courses.php');
-        exit;
-    }
+if (!statsCanViewCourse($courseId)) {
+    $_SESSION['message'] = 'Kursen hittades inte.';
+    $_SESSION['message_type'] = 'danger';
+    redirect('courses.php');
+    exit;
 }
 
 // Lektioner för progress-rendering
@@ -58,15 +56,21 @@ $lessons = query(
 );
 $lessonIds = array_map('intval', array_column($lessons, 'id'));
 
-// Deltagare: alla med public_course_access för denna kurs
+// Deltagare med public_course_access för denna kurs – med identitet bara om de hör till
+// den egna organisationen eller inte tillhör någon organisation (ärende 781)
+$ppVisible = statsVisibleUserClause('u', getEffectiveOrgScopeDomains($currentUser['email']), $courseId);
 $participants = query("
     SELECT u.id, u.email, u.name, u.access_mode, u.verified_at, u.last_login_at,
            pca.registered_at, pca.organization_id
     FROM " . DB_DATABASE . ".public_course_access pca
     JOIN " . DB_DATABASE . ".users u ON u.id = pca.user_id
-    WHERE pca.course_id = ?
+    WHERE pca.course_id = ? AND {$ppVisible['fragment']}
     ORDER BY pca.registered_at DESC
-", [$courseId]);
+", array_merge([$courseId], $ppVisible['params']));
+// Andra organisationers användare som registrerat sig publikt: bara antal (beslut 2026-10-13)
+$ppHidden = (int)(queryOne("SELECT COUNT(*) n FROM " . DB_DATABASE . ".public_course_access pca
+    JOIN " . DB_DATABASE . ".users u ON u.id = pca.user_id
+    WHERE pca.course_id = ? AND NOT ({$ppVisible['fragment']})", array_merge([$courseId], $ppVisible['params']))['n'] ?? 0);
 
 // Hämta progress per (user, lesson) för snabb rendering
 $progressMap = [];
@@ -116,6 +120,9 @@ require_once 'include/header.php';
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <div>
             <h4 class="mb-1"><i class="bi bi-globe me-2 text-info"></i>Publika deltagare</h4>
+            <?php if ($ppHidden > 0): ?>
+            <p class="text-muted small mb-1" data-hidden-participants>Dessutom <?= $ppHidden ?> deltagare från andra organisationer. De visas bara som antal.</p>
+            <?php endif; ?>
             <div class="text-muted">
                 <a href="edit_course.php?id=<?= (int)$course['id'] ?>" class="text-decoration-none">
                     <i class="bi bi-arrow-left me-1"></i><?= htmlspecialchars($course['title']) ?>

@@ -63,26 +63,13 @@ if (!$selectedCourseId) {
 // ägarskap/redaktörskap precis som en redaktör, och eftersom en läsande roll
 // varken äger eller redigerar kurser blev exporten alltid nekad. Rollen prövas
 // nu mot organisationens kursscope, samma regel som statistics.php.
-if (!$isAdmin) {
-    if ($isViewer) {
-        $hasAccess = queryOne(
-            "SELECT c.id FROM " . DB_DATABASE . ".courses c
-             WHERE c.id = ? AND {$statsCourseScope['fragment']}",
-            array_merge([$selectedCourseId], $statsCourseScope['params'])
-        );
-    } else {
-        $hasAccess = queryOne("SELECT c.id FROM " . DB_DATABASE . ".courses c
-            LEFT JOIN " . DB_DATABASE . ".course_editors ce ON c.id = ce.course_id
-            WHERE c.id = ? AND (c.author_id = ? OR ce.email = ?)",
-            [$selectedCourseId, $currentUser['id'], $userEmail]);
-    }
-
-    if (!$hasAccess) {
-        $_SESSION['message'] = 'Du har inte behörighet att exportera statistik för denna kurs.';
-        $_SESSION['message_type'] = 'danger';
-        header('Location: statistics.php');
-        exit;
-    }
+// Ärende 781: samma kontroll för alla roller. Förr hoppades den över för admin, så
+// vilken organisations kurs som helst gick att exportera (titel och lektioner).
+if (!statsCanViewCourse($selectedCourseId)) {
+    $_SESSION['message'] = 'Kursen hittades inte.';
+    $_SESSION['message_type'] = 'danger';
+    header('Location: statistics.php');
+    exit;
 }
 
 // Hämta kursinformation
@@ -130,6 +117,9 @@ if ($isAdmin || $isViewer) {
     AND l.status = 'active'
     ORDER BY u.email ASC, l.sort_order ASC", array_merge($emailClause['params'], [$selectedCourseId]));
 } else {
+    // Redaktör: bara den egna organisationens användare (ärende 781 – förr alla
+    // som rört kursen, i alla organisationer)
+    $editorEmailClause = combineSqlClauses(buildEmailDomainInClause($activeDomains, 'u.email'), $orgTagClauseU);
     $userProgressInCourse = query("SELECT
         u.id as user_id,
         u.email,
@@ -147,9 +137,11 @@ if ($isAdmin || $isViewer) {
         JOIN " . DB_DATABASE . ".lessons l2 ON p2.lesson_id = l2.id
         WHERE l2.course_id = ?
     )
+    AND {$editorEmailClause['fragment']}
     AND l.course_id = ?
     AND l.status = 'active'
-    ORDER BY u.email ASC, l.sort_order ASC", [$selectedCourseId, $selectedCourseId]);
+    ORDER BY u.email ASC, l.sort_order ASC",
+    array_merge([$selectedCourseId], $editorEmailClause['params'], [$selectedCourseId]));
 }
 
 // Organisera data per användare

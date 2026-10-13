@@ -88,11 +88,10 @@ function courseStatsCountClause($alias, $courseId, array $activeDomains, array $
     if ($anyFilterActive) {
         return $clause;
     }
-    return [
-        'fragment' => "({$clause['fragment']}) OR EXISTS (SELECT 1 FROM " . DB_DATABASE . ".public_course_access pcac
-                                                     WHERE pcac.user_id = $alias.id AND pcac.course_id = ?)",
-        'params' => array_merge($clause['params'], [(int)$courseId]),
-    ];
+    // Ärende 781: förr räknades ALLA publika deltagare med – även andra organisationers
+    // användare, som då också listades med namn. Nu: scopet + publika deltagare utan
+    // organisation. Andra organisationers deltagare visas bara som antal.
+    return statsVisibleUserClause($alias, $activeDomains, (int)$courseId, false);
 }
 
 // Hämta kurser baserat på behörighet
@@ -120,27 +119,13 @@ if ($hasFullCourseView) {
 // Redaktören prövas mot ägarskap/redaktörskap. Läsbehörig äger inga kurser och
 // prövas i stället mot domänscopet — annars hade kurs-id i URL:en räckt för att
 // läsa statistik för en annan organisations kurs.
-if ($selectedCourseId && !$isAdmin) {
-    if ($isViewer) {
-        $hasAccess = queryOne(
-            "SELECT c.id FROM " . DB_DATABASE . ".courses c
-             WHERE c.id = ? AND {$courseScopeClause['fragment']}",
-            array_merge([$selectedCourseId], $courseScopeClause['params'])
-        );
-    } else {
-        $hasAccess = queryOne(
-            "SELECT c.id FROM " . DB_DATABASE . ".courses c
-             LEFT JOIN " . DB_DATABASE . ".course_editors ce ON c.id = ce.course_id
-             WHERE c.id = ? AND (c.author_id = ? OR ce.email = ?)",
-            [$selectedCourseId, $currentUser['id'], $userEmail]
-        );
-    }
-    if (!$hasAccess) {
-        $_SESSION['message'] = 'Du har inte behörighet att se statistik för denna kurs.';
-        $_SESSION['message_type'] = 'danger';
-        header('Location: course_stats.php');
-        exit;
-    }
+// Ärende 781: samma kontroll för alla roller (förr fick admin öppna vilket kurs-id som
+// helst och se en annan organisations publika deltagare med namn och e-post).
+if ($selectedCourseId && !statsCanViewCourse($selectedCourseId)) {
+    $_SESSION['message'] = 'Kursen hittades inte.';
+    $_SESSION['message_type'] = 'danger';
+    header('Location: course_stats.php');
+    exit;
 }
 
 $page_title = 'Kursstatistik';
@@ -366,14 +351,18 @@ require_once 'include/header.php';
     // eftersom en kurs kan ha avaktiverats med kvarvarande deltagare.
     // När ett domän- eller taggfilter är aktivt hoppas externa deltagare över —
     // de tillhör ingen av de valda domänerna och bär inga org-taggar.
+    $hiddenParticipants = ['total' => 0, 'completed' => 0];
     if (!$anyFilterActive) {
+        $publicVisible = statsVisibleUserClause('u', $activeDomains, (int)$selectedCourseId, false);
+        // Andra organisationers deltagare: bara antal (beslut 2026-10-13)
+        $hiddenParticipants = statsHiddenParticipantCounts((int)$selectedCourseId, $activeDomains);
         $publicParticipants = query(
             "SELECT u.id, u.name, u.email
              FROM " . DB_DATABASE . ".public_course_access pca
              JOIN " . DB_DATABASE . ".users u ON u.id = pca.user_id
-             WHERE pca.course_id = ?
+             WHERE pca.course_id = ? AND {$publicVisible['fragment']}
              ORDER BY u.name ASC, u.email ASC",
-            [$selectedCourseId]
+            array_merge([$selectedCourseId], $publicVisible['params'])
         );
         if (!empty($publicParticipants)) {
             // Filtrera bort ev. dubbletter som redan finns i org-grupper (interna
@@ -393,13 +382,17 @@ require_once 'include/header.php';
         }
     }
 
-    // Hämta all progress för denna kurs
+    // Hämta progress för denna kurs – bara för användare som får visas (ärende 781)
+    $progressVisible = $anyFilterActive
+        ? combineSqlClauses(buildEmailDomainInClause($activeDomains, 'u.email'), buildOrgTagFilterClause($selectedOrgTags, 'u.id'))
+        : statsVisibleUserClause('u', $activeDomains, (int)$selectedCourseId, false);
     $allProgress = query(
         "SELECT p.user_id, p.lesson_id, p.status
          FROM " . DB_DATABASE . ".progress p
          JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
-         WHERE l.course_id = ?",
-        [$selectedCourseId]
+         JOIN " . DB_DATABASE . ".users u ON u.id = p.user_id
+         WHERE l.course_id = ? AND {$progressVisible['fragment']}",
+        array_merge([$selectedCourseId], $progressVisible['params'])
     );
     $progressMap = [];
     foreach ($allProgress as $p) {
@@ -574,6 +567,14 @@ require_once 'include/header.php';
                     </div>
                 </div>
             </div>
+
+            <?php if (!empty($hiddenParticipants['total'])): ?>
+            <p class="text-muted small mb-4" data-hidden-participants>
+                <i class="bi bi-people me-1"></i>
+                Dessutom <?= (int)$hiddenParticipants['total'] ?> deltagare från andra organisationer,
+                varav <?= (int)$hiddenParticipants['completed'] ?> klara. De visas bara som antal och ingår inte i siffrorna ovan.
+            </p>
+            <?php endif; ?>
 
             <!-- Användargrupper -->
             <?php

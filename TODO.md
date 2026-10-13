@@ -21,9 +21,10 @@ Testmiljö
 - [ ] BESLUT Thomas: copy_course låter alla org kopiera ALLA aktiva kurser (även icke-publika, 41 kopior i prod). Behålls tills vidare
 - [ ] Tabell: sida → kontroll
 781 – statistik över org-gränsen
-- [ ] Inventera statistikvyer + exporter
-- [ ] Tester som visar felen
-- [ ] Rätta: org-filter, redaktör bara egna kurser, andra orgs deltagare bara som antal
+- [x] Inventera statistikvyer + exporter
+- [x] Tester som visar felen (tests/test_781.php): 14 fel före
+- [x] Rätta: statsCanViewCourse/statsVisibleUserClause/statsHiddenParticipantCounts i functions.php; course_stats, statistics (redaktörsgrenen), export_statistics, certificates (senaste diplom), public_participants. 74/74 ok
+- [x] Dashboard (admin/index.php) räknar andra orgs deltagare i kursernas antal – bara antal, inga identiteter → lämnad enligt beslutet
 782 – framsteg registreras inte
 - [ ] Kartlägg progress vs user_progress, var lektion/kurs blir klar
 - [ ] Tester som visar felen

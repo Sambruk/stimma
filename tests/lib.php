@@ -135,3 +135,18 @@ function done(): void {
     exit($t['fail'] > 0 ? 1 : 0);
 }
 function snippet(string $s, int $n = 160): string { return mb_substr(preg_replace('/\s+/', ' ', strip_tags($s)), 0, $n); }
+
+/** Text ur ett xlsx-svar (alla delar i paketet), så att exporter kan sökas i. */
+function xlsxText(string $body): string {
+    if (substr($body, 0, 2) !== 'PK') return $body;
+    $f = tempnam(sys_get_temp_dir(), 'x');
+    file_put_contents($f, $body);
+    $z = new ZipArchive();
+    $out = '';
+    if ($z->open($f) === true) {
+        for ($i = 0; $i < $z->numFiles; $i++) $out .= $z->getFromIndex($i) . "\n";
+        $z->close();
+    }
+    unlink($f);
+    return html_entity_decode($out, ENT_QUOTES | ENT_XML1, 'UTF-8');
+}
