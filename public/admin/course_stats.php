@@ -97,7 +97,7 @@ function courseStatsCountClause($alias, $courseId, array $activeDomains, array $
 // Hämta kurser baserat på behörighet
 if ($hasFullCourseView) {
     $courses = query(
-        "SELECT c.*, (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = c.id) AS lesson_count
+        "SELECT c.*, (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = c.id AND status = 'active' AND lesson_type = 'lesson') AS lesson_count
          FROM " . DB_DATABASE . ".courses c
          WHERE {$courseScopeClause['fragment']}
          ORDER BY c.id ASC",
@@ -105,7 +105,7 @@ if ($hasFullCourseView) {
     );
 } else {
     $courses = query(
-        "SELECT DISTINCT c.*, (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = c.id) AS lesson_count
+        "SELECT DISTINCT c.*, (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = c.id AND status = 'active' AND lesson_type = 'lesson') AS lesson_count
          FROM " . DB_DATABASE . ".courses c
          LEFT JOIN " . DB_DATABASE . ".course_editors ce ON c.id = ce.course_id
          WHERE {$courseDomClause['fragment']}
@@ -235,7 +235,8 @@ require_once 'include/header.php';
                                         FROM " . DB_DATABASE . ".progress p
                                         JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
                                         JOIN " . DB_DATABASE . ".users uu ON uu.id = p.user_id
-                                        WHERE l.course_id = ? AND p.status = 'completed' AND ({$countClause['fragment']})
+                                        WHERE l.course_id = ? AND p.status = 'completed' AND l.status = 'active' AND l.lesson_type = 'lesson'
+                                          AND ({$countClause['fragment']})
                                         GROUP BY p.user_id
                                         HAVING COUNT(DISTINCT p.lesson_id) >= ?
                                     ) AS completed_users",
@@ -293,7 +294,9 @@ require_once 'include/header.php';
     }
 
     $courseLessons = query(
-        "SELECT * FROM " . DB_DATABASE . ".lessons WHERE course_id = ? ORDER BY sort_order ASC",
+        // De lektioner som krävs för att kursen ska vara klar (ärende 782: förr räknades
+        // även inaktiva lektioner och infosidor, så för få visades som klara)
+        "SELECT * FROM " . DB_DATABASE . ".lessons WHERE course_id = ? AND status = 'active' AND lesson_type = 'lesson' ORDER BY sort_order ASC",
         [$selectedCourseId]
     );
 

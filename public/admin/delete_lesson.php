@@ -99,7 +99,10 @@ try {
     execute("START TRANSACTION");
 
     // Delete user_progress for this lesson (FK: user_progress.lesson_id -> lessons.id)
-    execute("DELETE FROM " . DB_DATABASE . ".user_progress WHERE lesson_id = ?", [$lessonId]);
+    // user_progress avvecklas av migrations/050 (ärende 782) – radera bara om den finns kvar
+    if (queryOne("SHOW TABLES LIKE 'user_progress'")) {
+        execute("DELETE FROM " . DB_DATABASE . ".user_progress WHERE lesson_id = ?", [$lessonId]);
+    }
 
     // Delete resources for this lesson (FK: resources.lesson_id -> lessons.id)
     execute("DELETE FROM " . DB_DATABASE . ".resources WHERE lesson_id = ?", [$lessonId]);

@@ -72,6 +72,5 @@ INSERT INTO public_course_access (user_id, course_id, organization_id) VALUES (2
 
 -- Framsteg: anv-a klar med lektion 1 i A1, anv-b klar med lektion 1 i A2 och B1
 INSERT INTO progress (user_id, lesson_id, status, score) VALUES (12, 1001, 'completed', 1), (22, 1011, 'completed', 1), (22, 2001, 'completed', 1);
-INSERT INTO user_progress (user_id, lesson_id, status) VALUES (12, 1001, 'completed'), (22, 1011, 'completed'), (22, 2001, 'completed');
 
 SET FOREIGN_KEY_CHECKS = 1;

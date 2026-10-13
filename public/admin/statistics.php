@@ -328,8 +328,8 @@ if (!empty($courseIds)) {
             SELECT COUNT(*) as total_completions
             FROM (
                 SELECT p.user_id, l.course_id,
-                       COUNT(DISTINCT CASE WHEN p.status = 'completed' THEN l.id END) as completed_lessons,
-                       (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l.course_id AND status = 'active') as total_lessons
+                       COUNT(DISTINCT CASE WHEN p.status = 'completed' AND l.status = 'active' AND l.lesson_type = 'lesson' THEN l.id END) as completed_lessons,
+                       (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l.course_id AND status = 'active' AND lesson_type = 'lesson') as total_lessons
                 FROM " . DB_DATABASE . ".progress p
                 JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
                 JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id
@@ -353,9 +353,9 @@ if (!empty($courseIds)) {
                     JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
                     WHERE l.course_id IN ($courseIdsPlaceholder)
                     GROUP BY p.user_id, l.course_id
-                    HAVING COUNT(DISTINCT CASE WHEN p.status = 'completed' THEN l.id END) =
-                           (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l.course_id AND status = 'active')
-                           AND (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l.course_id AND status = 'active') > 0
+                    HAVING COUNT(DISTINCT CASE WHEN p.status = 'completed' AND l.status = 'active' AND l.lesson_type = 'lesson' THEN l.id END) =
+                           (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l.course_id AND status = 'active' AND lesson_type = 'lesson')
+                           AND (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l.course_id AND status = 'active' AND lesson_type = 'lesson') > 0
                 ) as completed_courses ON u.id = completed_courses.user_id
                 WHERE {$userEmailClauseU['fragment']}
                 GROUP BY u.id
@@ -369,15 +369,17 @@ if (!empty($courseIds)) {
             SELECT COUNT(*) as total_completions
             FROM (
                 SELECT p.user_id, l.course_id,
-                       COUNT(DISTINCT CASE WHEN p.status = 'completed' THEN l.id END) as completed_lessons,
-                       (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l.course_id AND status = 'active') as total_lessons
+                       COUNT(DISTINCT CASE WHEN p.status = 'completed' AND l.status = 'active' AND l.lesson_type = 'lesson' THEN l.id END) as completed_lessons,
+                       (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l.course_id AND status = 'active' AND lesson_type = 'lesson') as total_lessons
                 FROM " . DB_DATABASE . ".progress p
                 JOIN " . DB_DATABASE . ".lessons l ON p.lesson_id = l.id
+                JOIN " . DB_DATABASE . ".users u ON p.user_id = u.id
                 WHERE l.course_id IN ($courseIdsPlaceholder)
+                AND {$userEmailClauseU['fragment']}
                 GROUP BY p.user_id, l.course_id
                 HAVING completed_lessons = total_lessons AND total_lessons > 0
             ) as completed_courses
-        ", $courseIds);
+        ", array_merge($courseIds, $userEmailClauseU['params']));
         $fullyCompletedCourses = $fullyCompletedResult['total_completions'] ?? 0;
 
         // Genomsnitt för redaktörer
@@ -393,9 +395,9 @@ if (!empty($courseIds)) {
                     JOIN " . DB_DATABASE . ".lessons l2 ON p2.lesson_id = l2.id
                     WHERE l2.course_id IN ($courseIdsPlaceholder)
                     GROUP BY p2.user_id, l2.course_id
-                    HAVING COUNT(DISTINCT CASE WHEN p2.status = 'completed' THEN l2.id END) =
-                           (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l2.course_id AND status = 'active')
-                           AND (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l2.course_id AND status = 'active') > 0
+                    HAVING COUNT(DISTINCT CASE WHEN p2.status = 'completed' AND l2.status = 'active' AND l2.lesson_type = 'lesson' THEN l2.id END) =
+                           (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l2.course_id AND status = 'active' AND lesson_type = 'lesson')
+                           AND (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = l2.course_id AND status = 'active' AND lesson_type = 'lesson') > 0
                 ) as completed_courses ON p.user_id = completed_courses.user_id
                 WHERE l.course_id IN ($courseIdsPlaceholder)
                 GROUP BY p.user_id

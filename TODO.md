@@ -26,11 +26,14 @@ Testmiljö
 - [x] Rätta: statsCanViewCourse/statsVisibleUserClause/statsHiddenParticipantCounts i functions.php; course_stats, statistics (redaktörsgrenen), export_statistics, certificates (senaste diplom), public_participants. 74/74 ok
 - [x] Dashboard (admin/index.php) räknar andra orgs deltagare i kursernas antal – bara antal, inga identiteter → lämnad enligt beslutet
 782 – framsteg registreras inte
-- [ ] Kartlägg progress vs user_progress, var lektion/kurs blir klar
-- [ ] Tester som visar felen
-- [ ] Central regel för lektion klar / kurs klar, ordning styr åtkomst inte sparande
-- [ ] Migrering: en tabell med unikt index + rätta kursstatus för de som gått klart
-- [ ] SQL för Thomas: antal användare med alla lektioner klara men kurs ej klar (inga personuppgifter)
+- [x] Kartlägg progress vs user_progress: user_progress skrevs aldrig; course_enrollments 'completed' sattes aldrig; lektion utan quiz kunde aldrig bli klar
+- [x] Tester som visar felen (tests/test_782.php): 14 fel före
+- [x] Central regel include/progress.php (markLessonCompleted, lessonQuizState ur quiz_answers, courseLessonCompletion); checkAndCompleteCourse sätter enrollment completed; ordningen styr bara åtkomst. Samma regel i course_stats, statistics, index, getCourseProgressForUsers, api. 25/25 ok före och efter migrering
+- [x] migrations/050_progress_single_table.php + migrations/backfill_course_completion.php (torrkörning som standard, kan köras om) – testade i testmiljön
+- [ ] KÖRA i prod – väntar på Thomas OK (prod-data: 0 dubbletter, user_progress tom; 311 klara utan status, 13 utan diplom)
+- [x] SQL för Thomas: docs/arenden-770-781-782/782_antal_berorda.sql (bara antal)
+- [ ] BESLUT Thomas: påminnelserna har aldrig skickats (send_reminders läser progress.created_at som inte finns; 15 domäner har påslaget). Färdig patch: docs/arenden-770-781-782/forslag_paminnelser.patch – kör backfill först
+- [ ] BESLUT Thomas: lektion utan quiz blir klar när den öppnas (alternativ: när sista sidan nåtts)
 Rapport
 - [ ] Rapport per ärende (orsak, ändring, test, migrering, övriga fynd, beslut)
 

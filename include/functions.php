@@ -2868,10 +2868,10 @@ function buildCourseVisibilityClause($userId, $alias = 'c') {
  * Batch-beräkna kursprogress för M användare × N kurser. Två queries totalt,
  * oavsett hur många användare och kurser som efterfrågas.
  *
- * Nämnaren är lessons.status='active' oavsett lesson_type — exakt samma
- * definition som checkAndCompleteCourse() i gamification.php använder. Därmed
- * gäller att 100 % ⇔ kursen är klar (och diplom utfärdat om kriterierna
- * uppfylls). Räknar man bort infosidor kan en kurs visa 100 % utan diplom.
+ * Räknar de lektioner som krävs för att kursen ska vara klar: aktiva lektioner av
+ * typen 'lesson' (infosidor krävs inte) — samma regel som checkAndCompleteCourse()
+ * och include/progress.php (ärende 782, 2026-10-13). Därmed gäller att 100 % ⇔
+ * kursen är klar (och diplom utfärdat om kriterierna uppfylls).
  *
  * @param int[] $userIds
  * @param int[] $courseIds
@@ -2894,7 +2894,7 @@ function getCourseProgressForUsers(array $userIds, array $courseIds) {
     $totalRows = query(
         "SELECT course_id, COUNT(*) AS n
          FROM " . DB_DATABASE . ".lessons
-         WHERE course_id IN ($coursePlaceholders) AND status = 'active'
+         WHERE course_id IN ($coursePlaceholders) AND status = 'active' AND lesson_type = 'lesson'
          GROUP BY course_id",
         $courseIds
     );
@@ -2909,7 +2909,7 @@ function getCourseProgressForUsers(array $userIds, array $courseIds) {
          FROM " . DB_DATABASE . ".progress p
          JOIN " . DB_DATABASE . ".lessons l ON l.id = p.lesson_id
          WHERE l.course_id IN ($coursePlaceholders)
-           AND l.status = 'active'
+           AND l.status = 'active' AND l.lesson_type = 'lesson'
            AND p.user_id IN ($userPlaceholders)
            AND p.status = 'completed'
          GROUP BY l.course_id, p.user_id",

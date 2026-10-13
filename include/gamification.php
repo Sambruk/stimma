@@ -247,26 +247,33 @@ function recordCourseCompletion($userId, $courseId) {
  *   - complete_url (string) — URL till kursavslutssidan (endast om is_complete)
  */
 function checkAndCompleteCourse($userId, $courseId) {
-    $total = (int)queryOne(
-        "SELECT COUNT(*) AS n FROM " . DB_DATABASE . ".lessons
-         WHERE course_id = ? AND status = 'active'",
-        [$courseId]
-    )['n'];
-
-    if ($total === 0) {
+    // Regeln (ärende 782): alla aktiva lektioner klara, infosidor krävs inte, varje
+    // lektion räknas en gång (COUNT DISTINCT – progress kunde ha dubbletter).
+    require_once __DIR__ . '/progress.php';
+    $completion = courseLessonCompletion((int)$userId, (int)$courseId);
+    if (!$completion['complete']) {
         return ['is_complete' => false];
     }
 
-    $done = (int)queryOne(
-        "SELECT COUNT(*) AS n FROM " . DB_DATABASE . ".lessons l
-         JOIN " . DB_DATABASE . ".progress p ON p.lesson_id = l.id
-         WHERE l.course_id = ? AND l.status = 'active'
-           AND p.user_id = ? AND p.status = 'completed'",
-        [$courseId, $userId]
-    )['n'];
-
-    if ($done < $total) {
-        return ['is_complete' => false];
+    // Kursen är klar: markera inskrivningen (påminnelserna läser den). Förr sattes
+    // status 'completed' aldrig någonstans.
+    $enrolled = queryOne(
+        "SELECT id, status FROM " . DB_DATABASE . ".course_enrollments WHERE user_id = ? AND course_id = ?",
+        [$userId, $courseId]
+    );
+    if (!$enrolled) {
+        execute(
+            "INSERT INTO " . DB_DATABASE . ".course_enrollments (user_id, course_id, status, started_at, completed_at)
+             VALUES (?, ?, 'completed', NOW(), NOW())",
+            [$userId, $courseId]
+        );
+    } elseif ($enrolled['status'] !== 'completed') {
+        execute(
+            "UPDATE " . DB_DATABASE . ".course_enrollments
+                SET status = 'completed', completed_at = COALESCE(completed_at, NOW())
+              WHERE id = ?",
+            [$enrolled['id']]
+        );
     }
 
     // Lektionerna är klara — utvärdera diplom-kriterier (% rätt etc.).
@@ -570,8 +577,8 @@ function getDashboardData($userId) {
                                 COUNT(DISTINCT l.id) as total_lessons,
                                 COUNT(DISTINCT CASE WHEN up.status = 'completed' THEN l.id END) as completed_lessons
                              FROM " . DB_DATABASE . ".courses c
-                             JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id AND l.status = 'active'
-                             LEFT JOIN " . DB_DATABASE . ".user_progress up ON l.id = up.lesson_id AND up.user_id = ?
+                             JOIN " . DB_DATABASE . ".lessons l ON c.id = l.course_id AND l.status = 'active' AND l.lesson_type = 'lesson'
+                             LEFT JOIN " . DB_DATABASE . ".progress up ON l.id = up.lesson_id AND up.user_id = ?
                              WHERE c.status = 'active'
                              GROUP BY c.id
                              HAVING completed_lessons > 0

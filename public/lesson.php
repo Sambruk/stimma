@@ -27,6 +27,7 @@ require_once 'include/database.php';
 require_once 'include/functions.php';
 require_once 'include/auth.php';
 require_once 'include/gamification.php';
+require_once 'include/progress.php';
 
 // Get system name from environment variable with fallback
 $systemName = trim(getenv('SYSTEM_NAME'), '"\'') ?: 'AI-kurser';
@@ -187,6 +188,15 @@ if (!$isPreviewMode) {
 
     // Check if lesson is completed
     $isCompleted = $progress && $progress['status'] === 'completed';
+
+    // Lektion utan quiz blir klar när den läses (ärende 782 – förr fanns ingen väg
+    // till "klar" för sådana lektioner, och de blockerade resten av kursen)
+    if (!$isCompleted && $_SERVER['REQUEST_METHOD'] === 'GET'
+        && ($lesson['lesson_type'] ?? 'lesson') === 'lesson' && !lessonHasQuiz((int)$lessonId)) {
+        markLessonCompleted((int)$userId, $lesson);
+        $isCompleted = true;
+        $progress = ['status' => 'completed'];
+    }
 }
 
 /**
@@ -216,21 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_info_page_comple
         exit;
     }
     if (!$isPreviewMode) {
-        $existing = queryOne(
-            "SELECT id FROM " . DB_DATABASE . ".progress WHERE user_id = ? AND lesson_id = ?",
-            [$userId, $lessonId]
-        );
-        if ($existing) {
-            execute(
-                "UPDATE " . DB_DATABASE . ".progress SET status = 'completed', score = 1 WHERE user_id = ? AND lesson_id = ?",
-                [$userId, $lessonId]
-            );
-        } else {
-            execute(
-                "INSERT INTO " . DB_DATABASE . ".progress (user_id, lesson_id, status, score) VALUES (?, ?, 'completed', 1)",
-                [$userId, $lessonId]
-            );
-        }
+        markLessonCompleted((int)$userId, $lesson);
     }
 
     $nextPage = findNextPageInCourse($lesson['course_id'], $lesson['sort_order']);
@@ -317,45 +313,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['answer_question_id'])
     // Lektionens pass-läge: 'require_all_correct' (default) eller 'any_result'
     $lessonPassMode = $lesson['quiz_pass_mode'] ?? 'require_all_correct';
 
-    // Håll reda på svars-state per fråga: 'answered' + 'correct'.
-    if (!isset($_SESSION['lesson_quiz_state'][$lessonId])) {
-        $_SESSION['lesson_quiz_state'][$lessonId] = ['correct' => [], 'wrong' => []];
-    }
-    // Migrera äldre state-struktur (innan migration 030) om den finns
-    if (!isset($_SESSION['lesson_quiz_state'][$lessonId]['correct'])) {
-        $old = $_SESSION['lesson_quiz_state'][$lessonId];
-        $_SESSION['lesson_quiz_state'][$lessonId] = ['correct' => is_array($old) ? $old : [], 'wrong' => []];
-    }
-
-    if ($g['correct']) {
-        $_SESSION['lesson_quiz_state'][$lessonId]['correct'][$qid] = true;
-        unset($_SESSION['lesson_quiz_state'][$lessonId]['wrong'][$qid]);
-    } else {
-        // I strikt läge är det ok att försöka igen: spåra bara att det var fel
-        // I any_result-läget låser vi frågan vid första svaret oavsett
-        $_SESSION['lesson_quiz_state'][$lessonId]['wrong'][$qid] = true;
-    }
-
-    $allQuestions = query(
-        "SELECT id FROM " . DB_DATABASE . ".quiz_questions WHERE lesson_id = ?",
-        [$lessonId]
-    );
-    $totalQ = count($allQuestions);
-    $correctCount = count($_SESSION['lesson_quiz_state'][$lessonId]['correct']);
-    $wrongCount = count(array_diff_key(
-        $_SESSION['lesson_quiz_state'][$lessonId]['wrong'],
-        $_SESSION['lesson_quiz_state'][$lessonId]['correct']
-    ));
-    $answeredCount = $correctCount + $wrongCount;
-
-    // All done-villkoret beror på pass-läget
-    if ($lessonPassMode === 'any_result') {
-        $allDone = $totalQ > 0 && $answeredCount >= $totalQ;
-        $lockQuestion = true; // lås frågan vid första svar, oavsett rätt/fel
-    } else {
-        $allDone = $totalQ > 0 && $correctCount >= $totalQ;
-        $lockQuestion = $g['correct']; // lås endast vid rätt svar
-    }
+    // Quizläget läses ur quiz_answers (senaste svaret per fråga), inte ur sessionen:
+    // förr kunde en lektion aldrig bli klar om frågorna besvarats i olika inloggningar
+    // (ärende 782).
+    $quizState = lessonQuizState((int)$userId, (int)$lessonId, $lessonPassMode);
+    $totalQ = $quizState['total'];
+    $correctCount = $quizState['correct'];
+    $answeredCount = $quizState['answered'];
+    $wrongCount = $answeredCount - $correctCount;
+    $allDone = $quizState['passed'];
+    // any_result låser frågan vid första svaret, annars bara vid rätt svar
+    $lockQuestion = $lessonPassMode === 'any_result' ? true : $g['correct'];
 
     $result = [
         'success' => true,
@@ -372,64 +340,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['answer_question_id'])
     // Behåll legacy-namn för eventuell gammal JS
     $result['answered_ok'] = $correctCount;
 
-    // Om alla frågor är klara: markera lektion som avklarad + lås upp nästa sekventiellt
+    // Alla frågor klara: registrera lektionen. Ordningen i kursen styr bara vad som går
+    // att öppna, inte om framsteget sparas (ärende 782 – förr nekades sparandet tyst om
+    // en tidigare sida, även inaktiv eller infosida, inte var klar).
     if ($allDone) {
-        $allPreviousCompleted = true;
-        $previousLessons = query(
-            "SELECT id FROM " . DB_DATABASE . ".lessons
-             WHERE course_id = ?
-               AND sort_order < (SELECT sort_order FROM " . DB_DATABASE . ".lessons WHERE id = ?)",
-            [$lesson['course_id'], $lessonId]
+        $completion = markLessonCompleted((int)$userId, $lesson);
+
+        // Nästa sida — kan vara en lektion eller en infosida
+        $nextRow = queryOne(
+            "SELECT id, title, lesson_type FROM " . DB_DATABASE . ".lessons
+             WHERE course_id = ? AND sort_order > ? AND status = 'active'
+             ORDER BY sort_order ASC LIMIT 1",
+            [$lesson['course_id'], $lesson['sort_order']]
         );
-        foreach ($previousLessons as $pl) {
-            $prev = queryOne("SELECT status FROM " . DB_DATABASE . ".progress WHERE user_id = ? AND lesson_id = ?", [$userId, $pl['id']]);
-            if (!$prev || $prev['status'] !== 'completed') { $allPreviousCompleted = false; break; }
-        }
-
-        if ($allPreviousCompleted) {
-            if (!$progress) {
-                execute(
-                    "INSERT INTO " . DB_DATABASE . ".progress (user_id, lesson_id, status, score) VALUES (?, ?, 'completed', 1)",
-                    [$userId, $lessonId]
-                );
-            } else {
-                execute(
-                    "UPDATE " . DB_DATABASE . ".progress SET status = 'completed', score = 1 WHERE user_id = ? AND lesson_id = ?",
-                    [$userId, $lessonId]
-                );
-            }
+        if ($nextRow) {
+            $available = true;
             if (!empty($lesson['sequential_mode'])) {
-                unlockNextSequentialLesson($userId, $lesson['course_id'], $lessonId);
+                $available = isLessonAvailableForUser($userId, $nextRow['id'], $lesson['course_id']);
             }
-
-            // Hitta nästa sida — kan vara en lektion eller en infosida.
-            // Användaren ska kunna stega genom infosidor som ligger mellan
-            // lektioner i sort_order (ex. outro-sida efter en lektion).
-            $nextRow = queryOne(
-                "SELECT id, title, lesson_type FROM " . DB_DATABASE . ".lessons
-                 WHERE course_id = ? AND sort_order > ? AND status = 'active'
-                 ORDER BY sort_order ASC LIMIT 1",
-                [$lesson['course_id'], $lesson['sort_order']]
-            );
-            if ($nextRow) {
-                $available = true;
-                if (!empty($lesson['sequential_mode'])) {
-                    $available = isLessonAvailableForUser($userId, $nextRow['id'], $lesson['course_id']);
-                }
-                $result['nextLesson'] = ['id' => (int)$nextRow['id'], 'title' => $nextRow['title'], 'available' => $available];
-            } else {
-                // Ingen nästa lektion — kolla om hela kursen nu är klar
-                $completion = checkAndCompleteCourse($userId, $lesson['course_id']);
-                if (!empty($completion['is_complete'])) {
-                    $result['courseComplete'] = true;
-                    $result['completeUrl'] = $completion['complete_url'];
-                }
-            }
-            // Nollställ session-state för lektionen så omgång kan göras om senare om admin återställer
-            unset($_SESSION['lesson_quiz_state'][$lessonId]);
-        } else {
-            $result['message'] = 'Du måste klara tidigare lektioner först.';
+            $result['nextLesson'] = ['id' => (int)$nextRow['id'], 'title' => $nextRow['title'], 'available' => $available];
         }
+        if (!empty($completion['is_complete'])) {
+            $result['courseComplete'] = true;
+            $result['completeUrl'] = $completion['complete_url'];
+        }
+        unset($_SESSION['lesson_quiz_state'][$lessonId]);
     }
 
     echo json_encode($result);
@@ -519,65 +454,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasQuizAnswer($_POST) && !$isPrevie
         );
     }
 
-    // Check if all previous lessons in the course are completed
-    $previousLessons = query("SELECT id FROM " . DB_DATABASE . ".lessons 
-                            WHERE course_id = ? 
-                            AND sort_order < (SELECT sort_order FROM " . DB_DATABASE . ".lessons WHERE id = ?)
-                            ORDER BY sort_order", 
-                            [$lesson['course_id'], $lessonId]);
-    
+    // Ordningen styr inte längre om framsteget sparas (ärende 782)
     $allPreviousCompleted = true;
-    foreach ($previousLessons as $prevLesson) {
-        $prevProgress = queryOne("SELECT status FROM " . DB_DATABASE . ".progress 
-                                WHERE user_id = ? AND lesson_id = ?", 
-                                [$userId, $prevLesson['id']]);
-        if (!$prevProgress || $prevProgress['status'] !== 'completed') {
-            $allPreviousCompleted = false;
-            break;
-        }
-    }
-    
+
     // Update user's progress if answer is correct and previous lessons are completed
     if ($isCorrect && $allPreviousCompleted) {
-        if (!$progress) {
-            // Create new progress record if it doesn't exist
-            execute("
-                INSERT INTO " . DB_DATABASE . ".progress 
-                (user_id, lesson_id, status, score)
-                VALUES (?, ?, 'completed', 1)
-            ", [$userId, $lessonId]);
-        } else {
-            // Update existing progress record
-            execute("
-                UPDATE " . DB_DATABASE . ".progress 
-                SET status = 'completed', 
-                    score = 1
-                WHERE user_id = ? AND lesson_id = ?
-            ", [$userId, $lessonId]);
-        }
-        
+        // Central registrering: framsteg, stegvis upplåsning och kursavslut (ärende 782)
+        $courseCompletion = markLessonCompleted((int)$userId, $lesson);
         $isCompleted = true;
 
-        // Unlock next sequential lesson if applicable
-        if (!empty($lesson['sequential_mode'])) {
-            unlockNextSequentialLesson($userId, $lesson['course_id'], $lessonId);
-        }
-
-        // Get next lesson in the course
+        // Get next active page in the course (förr räknades även inaktiva lektioner)
         $nextLesson = queryOne("
             SELECT l.*, c.title as course_title
             FROM " . DB_DATABASE . ".lessons l
             JOIN " . DB_DATABASE . ".courses c ON l.course_id = c.id
-            WHERE l.course_id = ? AND l.sort_order > ?
+            WHERE l.course_id = ? AND l.sort_order > ? AND l.status = 'active'
             ORDER BY l.sort_order ASC
             LIMIT 1
         ", [$lesson['course_id'], $lesson['sort_order']]);
-        
-        // Kolla kursavslutning om ingen nästa lektion
-        $courseCompletion = null;
-        if (!$nextLesson) {
-            $courseCompletion = checkAndCompleteCourse($userId, $lesson['course_id']);
-        }
 
         // Handle AJAX response
         if (isAjaxRequest()) {

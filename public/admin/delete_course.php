@@ -98,7 +98,10 @@ try {
 
     // Delete user_progress for all lessons in this course (FK: user_progress.lesson_id -> lessons.id)
     foreach ($lessonIds as $lid) {
-        execute("DELETE FROM " . DB_DATABASE . ".user_progress WHERE lesson_id = ?", [$lid['id']]);
+        // user_progress avvecklas av migrations/050 (ärende 782) – radera bara om den finns kvar
+        if (queryOne("SHOW TABLES LIKE 'user_progress'")) {
+            execute("DELETE FROM " . DB_DATABASE . ".user_progress WHERE lesson_id = ?", [$lid['id']]);
+        }
     }
 
     // Delete resources linked to lessons or course (FK: resources.lesson_id -> lessons.id, resources.course_id -> courses.id)

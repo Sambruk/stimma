@@ -530,9 +530,11 @@ else:
                         $currentCourseId = (int)$firstLessonInGroup['course_id'];
                         $isAbandoned = in_array($currentCourseId, $abandonedCourseIds, true);
                         $isEnrolled = in_array($currentCourseId, $activeEnrolledCourseIds, true);
-                        $cTotal = count($courseLessons);
+                        // Samma regel som kursavslutet: aktiva lektioner, inte infosidor (ärende 782)
+                        $requiredLessons = array_filter($courseLessons, fn($l) => ($l['status'] ?? 'active') === 'active' && ($l['lesson_type'] ?? 'lesson') === 'lesson');
+                        $cTotal = count($requiredLessons);
                         $cDone = 0;
-                        foreach ($courseLessons as $lesson) {
+                        foreach ($requiredLessons as $lesson) {
                             if (isset($userProgress[$lesson['id']]) && $userProgress[$lesson['id']]['status'] === 'completed') {
                                 $cDone++;
                             }
@@ -702,9 +704,11 @@ else:
                         $isAbandoned = in_array($cCourseId, $abandonedCourseIds, true);
                         $isEnrolled = in_array($cCourseId, $activeEnrolledCourseIds, true);
 
-                        $cTotal2 = count($cLessons);
+                        // Samma regel som kursavslutet: aktiva lektioner, inte infosidor (ärende 782)
+                        $requiredLessons2 = array_filter($cLessons, fn($l) => ($l['status'] ?? 'active') === 'active' && ($l['lesson_type'] ?? 'lesson') === 'lesson');
+                        $cTotal2 = count($requiredLessons2);
                         $cDone2 = 0;
-                        foreach ($cLessons as $lesson) {
+                        foreach ($requiredLessons2 as $lesson) {
                             if (isset($userProgress[$lesson['id']]) && $userProgress[$lesson['id']]['status'] === 'completed') {
                                 $cDone2++;
                             }

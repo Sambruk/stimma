@@ -102,21 +102,12 @@ if ($certificate) {
     ]);
 }
 
-// 9. Räkna progress: avklarade lektioner vs totalt antal aktiva lektioner
-$totalLessons = queryOne(
-    "SELECT COUNT(*) as cnt FROM " . DB_DATABASE . ".lessons WHERE course_id = ? AND status = 'active'",
-    [$courseId]
-);
-$totalCount = (int)($totalLessons['cnt'] ?? 0);
-
-$completedLessons = queryOne(
-    "SELECT COUNT(DISTINCT up.lesson_id) as cnt
-     FROM " . DB_DATABASE . ".user_progress up
-     JOIN " . DB_DATABASE . ".lessons l ON up.lesson_id = l.id
-     WHERE up.user_id = ? AND l.course_id = ? AND l.status = 'active' AND up.status = 'completed'",
-    [$userId, $courseId]
-);
-$completedCount = (int)($completedLessons['cnt'] ?? 0);
+// 9. Räkna progress med appens gemensamma regel (include/progress.php). Förr lästes
+//    tabellen user_progress, som aldrig skrevs – progress var alltid 0 (ärende 782).
+require_once __DIR__ . '/../include/progress.php';
+$completion = courseLessonCompletion($userId, (int)$courseId);
+$totalCount = $completion['total'];
+$completedCount = $completion['done'];
 
 apiResponse(200, [
     'success'      => true,

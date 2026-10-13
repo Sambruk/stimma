@@ -1,0 +1,32 @@
+diff --git a/cron/send_reminders.php b/cron/send_reminders.php
+index 6626280..19fa1f3 100755
+--- a/cron/send_reminders.php
++++ b/cron/send_reminders.php
+@@ -31,6 +31,7 @@ require_once 'include/config.php';
+ require_once 'include/database.php';
+ require_once 'include/functions.php';
+ require_once 'include/mail.php';
++require_once 'include/progress.php';
+ 
+ // Loggfunktion för CLI
+ function logMessage($message) {
+@@ -89,13 +90,15 @@ foreach ($activeSettings as $settings) {
+             c.id AS course_id,
+             c.title AS course_title,
+             c.deadline AS course_deadline,
+-            (SELECT MIN(p2.created_at) FROM " . DB_DATABASE . ".progress p2
++            -- progress saknar created_at: frågan föll tyst (query() returnerar []) och inga
++            -- påminnelser skickades någonsin (rättat 2026-10-13, ärende 782)
++            (SELECT MIN(COALESCE(p2.started_at, p2.updated_at)) FROM " . DB_DATABASE . ".progress p2
+              JOIN " . DB_DATABASE . ".lessons l2 ON p2.lesson_id = l2.id
+              WHERE p2.user_id = u.id AND l2.course_id = c.id) AS course_started_at,
+-            (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons WHERE course_id = c.id AND status = 'active') AS total_lessons,
+-            (SELECT COUNT(*) FROM " . DB_DATABASE . ".progress p3
++            (SELECT COUNT(*) FROM " . DB_DATABASE . ".lessons lt WHERE lt.course_id = c.id AND " . requiredLessonSql('lt') . ") AS total_lessons,
++            (SELECT COUNT(DISTINCT p3.lesson_id) FROM " . DB_DATABASE . ".progress p3
+              JOIN " . DB_DATABASE . ".lessons l3 ON p3.lesson_id = l3.id
+-             WHERE p3.user_id = u.id AND l3.course_id = c.id AND p3.status = 'completed') AS completed_lessons,
++             WHERE p3.user_id = u.id AND l3.course_id = c.id AND p3.status = 'completed' AND " . requiredLessonSql('l3') . ") AS completed_lessons,
+             COALESCE(
+                 (SELECT MAX(rl.sent_at) FROM " . DB_DATABASE . ".reminder_log rl
+                  WHERE rl.user_id = u.id AND rl.course_id = c.id),
