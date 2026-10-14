@@ -19,10 +19,10 @@ Läs-API /api/v1/insyn/ med systemnyckel (sts_). Dokumentation docs/API-INSYN.md
 - [x] tests/test_insyn.php 105/105, hela sviten 283/283. Provkört mot kopia av nattens backup (raderad efteråt)
 - [x] Fynd: users.last_login_at skrivs aldrig → inloggning läses ur loggen; original_organization_domain satt även på original → kopia = annan domän
 - [x] Driftsatt 457a3a8 – svarar 503 tills migreringen är körd
-- [ ] BESLUT Thomas: köra migrering 051 i prod
+- [x] Migrering 051 körd i prod 2026-10-14 (Thomas OK), backup backups/fore-051-20261014-083340.sql.gz
 - [ ] Thomas: skapa Magnus nyckel, STIMMA_API_URL/STIMMA_API_KEY i Magnus .env; sedan IP-låst nyckel
 - [ ] BESLUT Thomas: rymmer PUB-avtalet behandlingen (förvaltning/uppföljning)?
-- [ ] FRÅGA Thomas: Sambruks org omfattar gmail.com – avsiktligt?
+- [x] gmail.com borttagen ur Sambruks organisation av Thomas 2026-10-14
 - [ ] Förslag: låt inloggningen skriva users.last_login_at
 
 ### Förvaltningsärenden 770, 781, 782 (underlag Magnus Nilsson 2026-10-13)
