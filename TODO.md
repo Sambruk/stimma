@@ -6,8 +6,24 @@
 - [x] Redaktör för 161, 176, 177, 178, 198 (Thomas OK 2026-10-13) – nu 10 kurser
 - [x] Svarstext till Zammad: exports/aterkoppling_wockatz_baskurser_2026-10-13.txt
 - [x] Kurs 217 Kontinuitetshantering (6 sidor, 15 frågor) och 218 Cybersäkerhetskollen (6 sidor, 16 frågor) inlästa INAKTIVA i sambruk.se 2026-10-13. Källor: docs/kurspaket/*.json
-- [ ] Granska och aktivera 217 och 218 (ämnesgranskning, t.ex. Anders); ev. taggen Baskurs
+- [x] Anders redaktör för 217 och 218 (Thomas OK 2026-10-13)
+- [ ] Granska och aktivera 217 och 218 (Anders granskar); ev. taggen Baskurs
 - [ ] Thomas: möten med Emma Sjölund (Inköp och Upphandling, Göteborg) och Pierre Wettergren (CCG Europe)
+
+### Insyns-API för Magnus (underlag Magnus Nilsson 2026-10-14)
+Läs-API /api/v1/insyn/ med systemnyckel (sts_). Dokumentation docs/API-INSYN.md, rapport docs/API-INSYN-RAPPORT.md.
+- [x] Migrering 051: system_api_keys + system_api_log
+- [x] include/insyn_api.php: autentisering, logg, rate limit, IP-begränsning, spärr efter felaktiga nycklar, organisationsmodell (grupperad org eller ensam domän)
+- [x] 9 endpoints: health, organizations, admins, editors, pub-agreements, courses, courses/{id}/stats, usage, learning-paths
+- [x] Admin → Systemnycklar (bara superadmin): skapa, visa en gång, återkalla, anropslogg
+- [x] tests/test_insyn.php 105/105, hela sviten 283/283. Provkört mot kopia av nattens backup (raderad efteråt)
+- [x] Fynd: users.last_login_at skrivs aldrig → inloggning läses ur loggen; original_organization_domain satt även på original → kopia = annan domän
+- [x] Driftsatt 457a3a8 – svarar 503 tills migreringen är körd
+- [ ] BESLUT Thomas: köra migrering 051 i prod
+- [ ] Thomas: skapa Magnus nyckel, STIMMA_API_URL/STIMMA_API_KEY i Magnus .env; sedan IP-låst nyckel
+- [ ] BESLUT Thomas: rymmer PUB-avtalet behandlingen (förvaltning/uppföljning)?
+- [ ] FRÅGA Thomas: Sambruks org omfattar gmail.com – avsiktligt?
+- [ ] Förslag: låt inloggningen skriva users.last_login_at
 
 ### Förvaltningsärenden 770, 781, 782 (underlag Magnus Nilsson 2026-10-13)
 Beslut Thomas 2026-10-13: andra organisationers deltagare i egen publik kurs visas BARA som antal i statistiken.
