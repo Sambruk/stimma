@@ -272,9 +272,26 @@ function verifyLoginToken($email, $token) {
         }
     }
 
+    recordUserLogin($user['id']);
     logActivity($email, "Lyckad inloggning med token");
 
     return $user;
+}
+
+/**
+ * Registrera en lyckad inloggning i users.last_login_at (2026-10-14).
+ *
+ * 🔴 updated_at måste lämnas orörd: verifyLoginToken() räknar inloggningslänkens
+ * giltighet från users.updated_at, som har ON UPDATE CURRENT_TIMESTAMP. En vanlig
+ * UPDATE hade gjort en gammal länk giltig igen efter varje inloggning.
+ *
+ * @param int $userId
+ */
+function recordUserLogin($userId) {
+    execute(
+        "UPDATE " . DB_DATABASE . ".users SET last_login_at = NOW(), updated_at = updated_at WHERE id = ?",
+        [(int)$userId]
+    );
 }
 
 /**
@@ -424,6 +441,7 @@ function validateRememberToken() {
         // 2026-08-25 — vill man ha en bortre gräns krävs ett tak på token-ålder.
         createRememberToken($userId);
 
+        recordUserLogin($userId);
         logActivity($user['email'], "Automatisk inloggning via kom-ihåg-mig cookie");
 
         return $user;

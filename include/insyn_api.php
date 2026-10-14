@@ -352,10 +352,9 @@ function insynUnitIdForEmail(?string $email): ?string {
 /**
  * Senaste inloggning per e-postadress (gemener => 'ÅÅÅÅ-MM-DD hh:mm:ss').
  *
- * users.last_login_at skrivs inte av inloggningen (tom för alla användare
- * 2026-10-14), så inloggningarna läses ur aktivitetsloggen: inloggning med
- * e-postlänk och automatisk inloggning med kom-ihåg-mig. Skulle last_login_at
- * börja skrivas räknas det med.
+ * users.last_login_at skrevs inte av inloggningen före 2026-10-14 (recordUserLogin()
+ * i include/auth.php), så inloggningarna läses också ur aktivitetsloggen: inloggning
+ * med e-postlänk och automatisk inloggning med kom-ihåg-mig. Det senaste vinner.
  */
 function insynLastLogins(): array {
     static $map = null;
