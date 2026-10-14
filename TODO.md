@@ -21,9 +21,9 @@ Läs-API /api/v1/insyn/ med systemnyckel (sts_). Dokumentation docs/API-INSYN.md
 - [x] Driftsatt 457a3a8 – svarar 503 tills migreringen är körd
 - [x] Migrering 051 körd i prod 2026-10-14 (Thomas OK), backup backups/fore-051-20261014-083340.sql.gz
 - [ ] Thomas: skapa Magnus nyckel, STIMMA_API_URL/STIMMA_API_KEY i Magnus .env; sedan IP-låst nyckel
-- [ ] BESLUT Thomas: rymmer PUB-avtalet behandlingen (förvaltning/uppföljning)?
+- [x] PUB-avtalet rymmer behandlingen (Thomas 2026-10-14)
 - [x] gmail.com borttagen ur Sambruks organisation av Thomas 2026-10-14
-- [ ] Förslag: låt inloggningen skriva users.last_login_at
+- [x] Inloggningen skriver users.last_login_at (Thomas OK 2026-10-14), b6d42fe – updated_at orörd så att länkens giltighet inte förlängs. test_inloggning.php 5/5, sviten 288/288
 
 ### Förvaltningsärenden 770, 781, 782 (underlag Magnus Nilsson 2026-10-13)
 Beslut Thomas 2026-10-13: andra organisationers deltagare i egen publik kurs visas BARA som antal i statistiken.
