@@ -1,0 +1,55 @@
+{
+    "page": 1,
+    "per_page": 50,
+    "total": 2,
+    "total_pages": 1,
+    "data": [
+        {
+            "id": 100,
+            "title": "A1 Kurs i org A",
+            "organization": {
+                "id": "2",
+                "name": "Org A"
+            },
+            "organization_domain": "orga.test",
+            "status": "active",
+            "internal": true,
+            "public": false,
+            "global": false,
+            "sequential": false,
+            "copied_from": null,
+            "lessons": 3,
+            "info_pages": 0,
+            "ai_tutor": true,
+            "baskurs": true,
+            "tags": [
+                "Baskurs",
+                "Säkerhet"
+            ],
+            "created_at": "2026-10-14T08:20:52+00:00",
+            "updated_at": "2026-10-14T08:20:52+00:00"
+        },
+        {
+            "id": 101,
+            "title": "A2 Publik kurs i org A",
+            "organization": {
+                "id": "2",
+                "name": "Org A"
+            },
+            "organization_domain": "orga.test",
+            "status": "active",
+            "internal": false,
+            "public": true,
+            "global": false,
+            "sequential": false,
+            "copied_from": null,
+            "lessons": 3,
+            "info_pages": 0,
+            "ai_tutor": false,
+            "baskurs": false,
+            "tags": [],
+            "created_at": "2026-10-14T08:20:52+00:00",
+            "updated_at": "2026-10-14T08:20:52+00:00"
+        }
+    ]
+}

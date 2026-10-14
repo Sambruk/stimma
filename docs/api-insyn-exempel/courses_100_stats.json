@@ -1,0 +1,45 @@
+{
+    "course": {
+        "id": 100,
+        "title": "A1 Kurs i org A",
+        "status": "active",
+        "organization": {
+            "id": "2",
+            "name": "Org A"
+        },
+        "required_lessons": 3
+    },
+    "participants": {
+        "started": 7,
+        "completed": 5,
+        "certificates": "<5",
+        "abandoned": 0
+    },
+    "quiz": {
+        "participants_with_answers": 5,
+        "average_correct_pct": 66.7
+    },
+    "time": {
+        "completed_with_dates": 5,
+        "average_days_to_complete": 6.0,
+        "median_days_to_complete": 6.0
+    },
+    "by_organization": [
+        {
+            "organization": {
+                "id": "2",
+                "name": "Org A"
+            },
+            "started": 7,
+            "completed": 5,
+            "certificates": "<5",
+            "abandoned": 0
+        }
+    ],
+    "notes": [
+        "Grupper med färre än 5 personer redovisas som \"<5\". Medelvärden över färre personer redovisas inte (null).",
+        "Klar = alla aktiva lektioner klara (infosidor krävs inte), samma regel som i Stimma.",
+        "Andel rätt bygger på det senast sparade svaret per fråga. Stimma mäter inte tidsåtgång; tiden är kalenderdagar från första till sista avklarade lektion.",
+        "organization null = deltagare utan organisation (t.ex. publika konton)."
+    ]
+}

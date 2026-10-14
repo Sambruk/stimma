@@ -1,0 +1,38 @@
+{
+    "page": 1,
+    "per_page": 50,
+    "total": 3,
+    "total_pages": 1,
+    "data": [
+        {
+            "name": "Admin A",
+            "email": "admin-a@orga.test",
+            "role": "admin",
+            "organization": {
+                "id": "2",
+                "name": "Org A"
+            },
+            "last_login": "2026-10-12"
+        },
+        {
+            "name": "Admin B",
+            "email": "admin-b@orgb.test",
+            "role": "admin",
+            "organization": {
+                "id": "3",
+                "name": "Org B"
+            },
+            "last_login": null
+        },
+        {
+            "name": "Super Sambruk",
+            "email": "super@sambruk.se",
+            "role": "superadmin",
+            "organization": {
+                "id": "1",
+                "name": "Sambruk"
+            },
+            "last_login": "2026-10-12"
+        }
+    ]
+}

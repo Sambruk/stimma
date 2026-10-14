@@ -1,0 +1,88 @@
+{
+    "page": 1,
+    "per_page": 50,
+    "total": 3,
+    "total_pages": 1,
+    "data": [
+        {
+            "name": "Redaktör A",
+            "email": "red-a@orga.test",
+            "organization": {
+                "id": "2",
+                "name": "Org A"
+            },
+            "editor_role": true,
+            "courses": [
+                {
+                    "id": 100,
+                    "title": "A1 Kurs i org A",
+                    "organization": {
+                        "id": "2",
+                        "name": "Org A"
+                    }
+                },
+                {
+                    "id": 101,
+                    "title": "A2 Publik kurs i org A",
+                    "organization": {
+                        "id": "2",
+                        "name": "Org A"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Redaktör B",
+            "email": "red-b@orgb.test",
+            "organization": {
+                "id": "3",
+                "name": "Org B"
+            },
+            "editor_role": true,
+            "courses": [
+                {
+                    "id": 100,
+                    "title": "A1 Kurs i org A",
+                    "organization": {
+                        "id": "2",
+                        "name": "Org A"
+                    }
+                },
+                {
+                    "id": 200,
+                    "title": "B1 Kurs i org B",
+                    "organization": {
+                        "id": "3",
+                        "name": "Org B"
+                    }
+                },
+                {
+                    "id": 201,
+                    "title": "B2 Publik kurs i org B",
+                    "organization": {
+                        "id": "3",
+                        "name": "Org B"
+                    }
+                },
+                {
+                    "id": 202,
+                    "title": "B3 Kopia av A1 i org B",
+                    "organization": {
+                        "id": "3",
+                        "name": "Org B"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Super Sambruk",
+            "email": "super@sambruk.se",
+            "organization": {
+                "id": "1",
+                "name": "Sambruk"
+            },
+            "editor_role": true,
+            "courses": []
+        }
+    ]
+}

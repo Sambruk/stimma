@@ -269,6 +269,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
                         <i class="bi bi-gear me-2"></i> Cronjobb
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a href="system_api_keys.php" class="nav-link text-white px-3 py-2 d-flex align-items-center <?= $current_page === 'system_api_keys.php' ? 'active' : '' ?>">
+                        <i class="bi bi-shield-lock me-2"></i> Systemnycklar
+                    </a>
+                </li>
                 <?php endif; ?>
                 <?php if ($isSuperAdmin): ?>
                 <li class="nav-item">

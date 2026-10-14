@@ -1,0 +1,10 @@
+# Insyns-API:t (2026-10-14): alla anrop under /api/v1/insyn/ går till index.php,
+# som läser sökvägen ur REQUEST_URI. Se docs/API-INSYN.md.
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{HTTP:Authorization} .+
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+    RewriteRule ^(?!index\.php$) index.php [QSA,L]
+</IfModule>

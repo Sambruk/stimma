@@ -1,0 +1,17 @@
+{
+    "status": "ok",
+    "api": "stimma-insyn",
+    "version": "1.0",
+    "time": "2026-10-14T08:20:53+00:00",
+    "organizations": 3,
+    "key": {
+        "name": "Magnus (AIPL)",
+        "prefix": "sts_1a2b3c4d"
+    },
+    "limits": {
+        "per_minute": 60,
+        "per_hour": 1000,
+        "max_per_page": 200,
+        "min_group": 5
+    }
+}

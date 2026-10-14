@@ -1,0 +1,122 @@
+{
+    "last_30_days": {
+        "course_import": {
+            "events": 1,
+            "organizations": 1
+        },
+        "course_copy": {
+            "events": 1,
+            "organizations": 1
+        },
+        "learning_paths": {
+            "events": 0,
+            "organizations": 0
+        },
+        "audio": {
+            "events": 1,
+            "organizations": 1
+        },
+        "ai_generation": {
+            "events": 1,
+            "tokens": 900,
+            "organizations": 1
+        },
+        "ai_tutor": {
+            "events": 1,
+            "tokens": 100,
+            "organizations": 1
+        },
+        "user_sync": {
+            "events": 1,
+            "organizations": 1
+        },
+        "question_types": {
+            "single_choice": {
+                "questions": 5,
+                "organizations": 2
+            },
+            "multiple_choice": {
+                "questions": 5,
+                "organizations": 2
+            },
+            "true_false": {
+                "questions": 5,
+                "organizations": 2
+            }
+        }
+    },
+    "last_90_days": {
+        "course_import": {
+            "events": 2,
+            "organizations": 2
+        },
+        "course_copy": {
+            "events": 1,
+            "organizations": 1
+        },
+        "learning_paths": {
+            "events": 0,
+            "organizations": 0
+        },
+        "audio": {
+            "events": 1,
+            "organizations": 1
+        },
+        "ai_generation": {
+            "events": 2,
+            "tokens": 950,
+            "organizations": 2
+        },
+        "ai_tutor": {
+            "events": 1,
+            "tokens": 100,
+            "organizations": 1
+        },
+        "user_sync": {
+            "events": 1,
+            "organizations": 1
+        },
+        "question_types": {
+            "single_choice": {
+                "questions": 5,
+                "organizations": 2
+            },
+            "multiple_choice": {
+                "questions": 5,
+                "organizations": 2
+            },
+            "true_false": {
+                "questions": 5,
+                "organizations": 2
+            }
+        }
+    },
+    "current": {
+        "active_learning_paths": {
+            "count": 1,
+            "organizations": 1
+        },
+        "lessons_with_audio": {
+            "count": 0,
+            "organizations": 0
+        },
+        "active_courses_with_ai_tutor": {
+            "count": 1,
+            "organizations": 1
+        },
+        "user_sync_enabled": {
+            "count": 1,
+            "organizations": 1
+        },
+        "question_types_total": {
+            "single_choice": 5,
+            "multiple_choice": 5,
+            "true_false": 5
+        }
+    },
+    "notes": [
+        "events = antal händelser i perioden, organizations = antal organisationer med minst en händelse.",
+        "Kursimport = kurspaket, SCORM och PowerPoint. ai_generation = kurs-, lektions- och bildgenerering. ai_tutor = AI-chatten i lektioner.",
+        "Händelser från konton utan organisation (t.ex. gmail.com) räknas i events men inte i organizations."
+    ]
+}

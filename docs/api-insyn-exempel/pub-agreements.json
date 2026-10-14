@@ -1,0 +1,122 @@
+{
+    "active_document": {
+        "version": "5",
+        "published": "2026-10-14",
+        "checksum_sha256": "abc123"
+    },
+    "page": 1,
+    "per_page": 50,
+    "total": 3,
+    "total_pages": 1,
+    "data": [
+        {
+            "organization": {
+                "id": "2",
+                "name": "Org A",
+                "domains": [
+                    "orga.test"
+                ]
+            },
+            "status": "gällande",
+            "current_version_signed": true,
+            "pub_flag_in_stimma": true,
+            "current": {
+                "agreement_id": "uuid-a-ny",
+                "version": "5",
+                "date": "2026-09-01",
+                "signed_at": "2026-09-01T10:00:00+00:00",
+                "status": "gällande",
+                "domain": "orga.test",
+                "org_name": "Org A kommun",
+                "org_number": "212000-0001",
+                "signer": {
+                    "name": "Admin A",
+                    "title": "Kommundirektör",
+                    "email": "admin-a@orga.test"
+                },
+                "checksum_sha256": "h5"
+            },
+            "agreements": [
+                {
+                    "agreement_id": "uuid-a-ny",
+                    "version": "5",
+                    "date": "2026-09-01",
+                    "signed_at": "2026-09-01T10:00:00+00:00",
+                    "status": "gällande",
+                    "domain": "orga.test",
+                    "org_name": "Org A kommun",
+                    "org_number": "212000-0001",
+                    "signer": {
+                        "name": "Admin A",
+                        "title": "Kommundirektör",
+                        "email": "admin-a@orga.test"
+                    },
+                    "checksum_sha256": "h5"
+                },
+                {
+                    "agreement_id": "uuid-a-gammal",
+                    "version": "4",
+                    "date": "2026-03-01",
+                    "signed_at": "2026-03-01T10:00:00+00:00",
+                    "status": "ersatt",
+                    "domain": "orga.test",
+                    "org_name": "Org A kommun",
+                    "org_number": "212000-0001",
+                    "signer": {
+                        "name": "Admin A",
+                        "title": "Kommundirektör",
+                        "email": "admin-a@orga.test"
+                    },
+                    "checksum_sha256": "h4"
+                }
+            ]
+        },
+        {
+            "organization": {
+                "id": "3",
+                "name": "Org B",
+                "domains": [
+                    "orgb.test"
+                ]
+            },
+            "status": "saknas",
+            "current_version_signed": false,
+            "pub_flag_in_stimma": true,
+            "current": null,
+            "agreements": [
+                {
+                    "agreement_id": "uuid-b-ogiltig",
+                    "version": "4",
+                    "date": "2026-04-01",
+                    "signed_at": "2026-04-01T10:00:00+00:00",
+                    "status": "ogiltigförklarat",
+                    "domain": "orgb.test",
+                    "org_name": "Org B kommun",
+                    "org_number": "212000-0001",
+                    "signer": {
+                        "name": "Admin B",
+                        "title": "IT-chef",
+                        "email": "admin-b@orgb.test"
+                    },
+                    "checksum_sha256": "hb",
+                    "invalidated_at": "2026-05-01T10:00:00+00:00",
+                    "invalidation_comment": null
+                }
+            ]
+        },
+        {
+            "organization": {
+                "id": "1",
+                "name": "Sambruk",
+                "domains": [
+                    "sambruk.se"
+                ]
+            },
+            "status": "saknas",
+            "current_version_signed": false,
+            "pub_flag_in_stimma": true,
+            "current": null,
+            "agreements": []
+        }
+    ]
+}

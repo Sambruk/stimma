@@ -1,0 +1,115 @@
+{
+    "page": 1,
+    "per_page": 50,
+    "total": 3,
+    "total_pages": 1,
+    "data": [
+        {
+            "id": "2",
+            "type": "organization",
+            "name": "Org A",
+            "org_number": null,
+            "primary_domain": "orga.test",
+            "domains": [
+                "orga.test"
+            ],
+            "created_at": "2026-10-14T08:20:52+00:00",
+            "users": {
+                "total": 10,
+                "active_30_days": "<5",
+                "active_90_days": 7
+            },
+            "courses": {
+                "total": 2,
+                "active": 2
+            },
+            "ai": {
+                "monthly_token_quota": 50000,
+                "quota_is_default": true,
+                "tokens_used_this_month": 1000,
+                "cost_this_month_usd": 0.0,
+                "token_balance": 50000,
+                "behavior": "block"
+            },
+            "ai_tutor": {
+                "enabled": true,
+                "courses_with_tutor": 1
+            },
+            "pub_agreement": {
+                "status": "gällande",
+                "version": "5",
+                "date": "2026-09-01"
+            }
+        },
+        {
+            "id": "3",
+            "type": "organization",
+            "name": "Org B",
+            "org_number": null,
+            "primary_domain": "orgb.test",
+            "domains": [
+                "orgb.test"
+            ],
+            "created_at": "2026-10-14T08:20:52+00:00",
+            "users": {
+                "total": "<5",
+                "active_30_days": 0,
+                "active_90_days": 0
+            },
+            "courses": {
+                "total": 3,
+                "active": 2
+            },
+            "ai": {
+                "monthly_token_quota": 50000,
+                "quota_is_default": true,
+                "tokens_used_this_month": 0,
+                "cost_this_month_usd": 0.0,
+                "token_balance": null,
+                "behavior": "block"
+            },
+            "ai_tutor": {
+                "enabled": false,
+                "courses_with_tutor": 0
+            },
+            "pub_agreement": {
+                "status": "saknas"
+            }
+        },
+        {
+            "id": "1",
+            "type": "organization",
+            "name": "Sambruk",
+            "org_number": null,
+            "primary_domain": "sambruk.se",
+            "domains": [
+                "sambruk.se"
+            ],
+            "created_at": "2026-10-14T08:20:52+00:00",
+            "users": {
+                "total": "<5",
+                "active_30_days": "<5",
+                "active_90_days": "<5"
+            },
+            "courses": {
+                "total": 0,
+                "active": 0
+            },
+            "ai": {
+                "monthly_token_quota": 50000,
+                "quota_is_default": true,
+                "tokens_used_this_month": 0,
+                "cost_this_month_usd": 0.0,
+                "token_balance": 50000,
+                "behavior": "block"
+            },
+            "ai_tutor": {
+                "enabled": false,
+                "courses_with_tutor": 0
+            },
+            "pub_agreement": {
+                "status": "saknas"
+            }
+        }
+    ]
+}

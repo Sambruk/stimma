@@ -1,0 +1,18 @@
+{
+    "page": 1,
+    "per_page": 50,
+    "total": 1,
+    "total_pages": 1,
+    "data": [
+        {
+            "name": "Admin A",
+            "email": "admin-a@orga.test",
+            "role": "admin",
+            "organization": {
+                "id": "2",
+                "name": "Org A"
+            },
+            "last_login": "2026-10-12"
+        }
+    ]
+}

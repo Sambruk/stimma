@@ -1,0 +1,34 @@
+{
+    "page": 1,
+    "per_page": 50,
+    "total": 1,
+    "total_pages": 1,
+    "data": [
+        {
+            "id": 1,
+            "title": "Lärväg A",
+            "status": "active",
+            "organization": {
+                "id": "2",
+                "name": "Org A"
+            },
+            "organization_domain": "orga.test",
+            "global": false,
+            "shared_with_domains": [],
+            "courses": [
+                {
+                    "id": 100,
+                    "title": "A1 Kurs i org A",
+                    "status": "active"
+                },
+                {
+                    "id": 101,
+                    "title": "A2 Publik kurs i org A",
+                    "status": "active"
+                }
+            ],
+            "created_at": "2026-10-14T08:20:52+00:00",
+            "updated_at": "2026-10-14T08:20:52+00:00"
+        }
+    ]
+}
