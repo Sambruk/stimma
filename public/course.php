@@ -99,6 +99,15 @@ if ($loggedIn) {
     }
 }
 
+// Granskare (course_reviewers) läser kursen i förhandsgranskning – även när den
+// är inaktiv eller tillhör en annan organisation. Inga framsteg sparas.
+// Synpunkterna skickas till den som lade till granskaren.
+$reviewInfo = $loggedIn ? queryOne(
+    "SELECT created_by FROM " . DB_DATABASE . ".course_reviewers WHERE course_id = ? AND email = ?",
+    [$courseId, $userEmail]
+) : null;
+$isReviewer = (bool)$reviewInfo;
+
 // Hitta nästa sida baserat på progress (kan vara lektion eller infosida).
 // Räkna bara riktiga lektioner som "klara" i "X av Y"-mätaren.
 $nextLessonId = null;
@@ -237,6 +246,23 @@ if ($loggedIn) {
                                     <i class="bi bi-box-arrow-in-right me-1"></i>Logga in
                                 </a>
                             <?php endif; ?>
+                        <?php elseif ($isReviewer): ?>
+                            <h5 class="card-title"><i class="bi bi-eye me-1"></i>Du granskar kursen</h5>
+                            <p class="small text-muted">Du kan läsa hela kursen och prova quizen. Inga framsteg eller svar sparas.<?php
+                                if (($course['status'] ?? '') !== 'active'): ?> Kursen är inte publicerad ännu.<?php endif; ?></p>
+                            <?php if (!empty($lessons)): ?>
+                            <a href="lesson.php?id=<?= (int)$lessons[0]['id'] ?>&amp;preview=1" class="btn btn-primary w-100">
+                                <i class="bi bi-play-fill me-1"></i>Börja granska
+                            </a>
+                            <?php else: ?>
+                            <p class="text-muted small mb-0">Kursen har inga lektioner ännu.</p>
+                            <?php endif; ?>
+                            <?php if (filter_var($reviewInfo['created_by'] ?? '', FILTER_VALIDATE_EMAIL)): ?>
+                            <a href="mailto:<?= htmlspecialchars($reviewInfo['created_by']) ?>?subject=<?= rawurlencode('Synpunkter på kursen ' . $course['title']) ?>" class="btn btn-outline-secondary w-100 mt-2">
+                                <i class="bi bi-envelope me-1"></i>Skicka synpunkter
+                            </a>
+                            <p class="small text-muted mt-2 mb-0">Till <?= htmlspecialchars($reviewInfo['created_by']) ?></p>
+                            <?php endif; ?>
                         <?php elseif (!$canAccess): ?>
                             <h5 class="card-title text-danger">Du har inte tillgång</h5>
                             <p class="small text-muted">Den här kursen är begränsad till andra användare.</p>
@@ -321,10 +347,12 @@ if ($loggedIn) {
                     <div class="flex-grow-1">
                         <?php
                         // Kurser med quiz görs i ordning — se lessonOrderBlocker()
-                        $ordningsLast = $loggedIn && $canAccess && !$isDone
+                        $ordningsLast = $loggedIn && $canAccess && !$isDone && !$isReviewer
                             && lessonOrderBlocker($userId, (int)$l['id'], (int)$courseId);
                         ?>
-                        <?php if ($loggedIn && $canAccess && !$ordningsLast): ?>
+                        <?php if ($isReviewer): ?>
+                            <a href="lesson.php?id=<?= (int)$l['id'] ?>&amp;preview=1" class="text-decoration-none text-dark"><?= htmlspecialchars($l['title']) ?></a>
+                        <?php elseif ($loggedIn && $canAccess && !$ordningsLast): ?>
                             <a href="lesson.php?id=<?= (int)$l['id'] ?>" class="text-decoration-none text-dark"><?= htmlspecialchars($l['title']) ?></a>
                         <?php elseif ($ordningsLast): ?>
                             <span class="text-muted" title="Låst — öppnas när lektionerna före är klara"><i class="bi bi-lock-fill me-1" aria-hidden="true"></i><span class="visually-hidden">Låst: </span><?= htmlspecialchars($l['title']) ?></span>

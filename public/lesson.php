@@ -64,7 +64,8 @@ if ($isPreviewMode) {
     // Kursredaktörer utan egen roll (t.ex. från en annan organisation) får också
     // förhandsgranska; rätten till just den här kursen kontrolleras nedan.
     $harRoll = $currentUser && ($currentUser['is_admin'] || $currentUser['is_editor']);
-    if (!$harRoll && !hasCourseEditorAssignments($_SESSION['user_email'] ?? '')) {
+    if (!$harRoll && !hasCourseEditorAssignments($_SESSION['user_email'] ?? '')
+        && !getReviewCourses($_SESSION['user_email'] ?? '')) {
         // Not authorized for preview - redirect to normal lesson view
         redirect("lesson.php?id=$lessonId");
         exit;
@@ -92,8 +93,10 @@ if (!$lesson) {
 // admin-/redaktörsroll någonstans (2026-10-09). Annars nekas man som vanligt.
 if ($isPreviewMode && (
         !userCanViewCourseLessons((int)$lesson['course_id'], true)
-        // Utan egen roll får man bara förhandsgranska kurser man är redaktör för.
-        || (!$harRoll && !isAssignedCourseEditor((int)$lesson['course_id']))
+        // Utan egen roll får man bara förhandsgranska kurser man är redaktör
+        // eller granskare för.
+        || (!$harRoll && !isAssignedCourseEditor((int)$lesson['course_id'])
+            && !isCourseReviewer((int)$lesson['course_id']))
     )) {
     $_SESSION['flash_message'] = 'Du har inte tillgång till den här lektionen.';
     $_SESSION['flash_type'] = 'warning';
@@ -113,6 +116,14 @@ if (!$isPreviewMode) {
     $isAdminOrEditor = !empty($currentUserInfo['is_admin']) || !empty($currentUserInfo['is_editor']);
     // Samma regler som AI-läraren (ai_chat.php) – se userCanViewCourseLessons().
     $allowed = userCanViewCourseLessons((int)$lesson['course_id']);
+
+    // Granskare som inte får gå kursen som vanlig deltagare (annan organisation
+    // eller inaktiv kurs) läser den i förhandsgranskning – se isCourseReviewer().
+    if ((!$allowed || ($lesson['course_status'] !== 'active' && !$isAdminOrEditor))
+        && isCourseReviewer((int)$lesson['course_id'])) {
+        redirect('lesson.php?id=' . $lessonId . '&preview=1');
+        exit;
+    }
 
     if (!$allowed) {
         $_SESSION['flash_message'] = 'Du har inte tillgång till den här lektionen.';
@@ -665,13 +676,23 @@ function convertYoutubeUrl($url) {
 </style>
 
 <!-- Preview mode banner -->
+<?php
+// Granskare förhandsgranskar utan att få ändra – inga redigeringslänkar för dem.
+$kanRedigeraKursen = $isPreviewMode && canEditCourse((int)$lesson['course_id']);
+?>
 <?php if ($isPreviewMode): ?>
 <div class="alert alert-warning alert-dismissible mb-0 rounded-0 text-center" role="alert">
     <i class="bi bi-eye-fill me-2"></i>
     <strong>Förhandsgranskningsläge</strong> - Dina framsteg sparas inte.
+    <?php if ($kanRedigeraKursen): ?>
     <a href="admin/edit_lesson.php?id=<?= $lessonId ?>" class="alert-link ms-2">
         <i class="bi bi-pencil"></i> Redigera lektion
     </a>
+    <?php else: ?>
+    <a href="course.php?id=<?= (int)$lesson['course_id'] ?>" class="alert-link ms-2">
+        <i class="bi bi-list-ol"></i> Kursens innehåll
+    </a>
+    <?php endif; ?>
     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Stäng"></button>
 </div>
 <?php endif; ?>
@@ -1363,9 +1384,15 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <p class="text-warning mb-3">
                                     <i class="bi bi-eye-fill"></i> Förhandsgranskningsläge - framsteg sparas inte
                                 </p>
+                                <?php if ($kanRedigeraKursen): ?>
                                 <a href="admin/edit_lesson.php?id=<?= $lessonId ?>" class="btn btn-primary">
                                     <i class="bi bi-pencil me-1"></i> Tillbaka till redigering
                                 </a>
+                                <?php else: ?>
+                                <a href="course.php?id=<?= (int)$lesson['course_id'] ?>" class="btn btn-primary">
+                                    <i class="bi bi-list-ol me-1"></i> Kursens innehåll
+                                </a>
+                                <?php endif; ?>
                             </div>
                         `;
                     } else if (data.courseComplete && data.completeUrl) {

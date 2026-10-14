@@ -650,6 +650,28 @@ else:
                         [data-bs-theme="dark"] .navbar .text-dark { color: var(--bs-body-color) !important; }
                     </style>
 
+                    <?php
+                    // Kurser att granska (course_reviewers, 2026-10-14): öppnas i
+                    // förhandsgranskning, så de räknas inte bland Mina kurser.
+                    $rdReviewCourses = getReviewCourses($_SESSION['user_email'] ?? '');
+                    ?>
+                    <?php if (!empty($rdReviewCourses)): ?>
+                    <section class="mb-4" id="kurser-att-granska">
+                        <h2 class="h2 fs-5 fs-md-3 mb-2">Kurser att granska</h2>
+                        <p class="text-muted small mb-2">Du har bjudits in att läsa och lämna synpunkter. Inga framsteg sparas.</p>
+                        <div class="list-group">
+                            <?php foreach ($rdReviewCourses as $rc): ?>
+                            <a href="course.php?id=<?= (int)$rc['id'] ?>" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-eye me-2 text-primary" aria-hidden="true"></i><?= htmlspecialchars($rc['title']) ?></span>
+                                <?php if ($rc['status'] !== 'active'): ?>
+                                <span class="badge bg-secondary">Ej publicerad</span>
+                                <?php endif; ?>
+                            </a>
+                            <?php endforeach; ?>
+                        </div>
+                    </section>
+                    <?php endif; ?>
+
                     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                         <h2 class="h2 fs-5 fs-md-3 mb-0">Mina kurser</h2>
                         <div class="view-toggle btn-group btn-group-sm" role="group" aria-label="Visningsläge">

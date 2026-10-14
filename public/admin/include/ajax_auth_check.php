@@ -24,7 +24,7 @@ $isEditor = $user && $user['is_editor'] == 1;
 $isCourseEditorOnly = !$isAdmin && !$isEditor
     && hasCourseEditorAssignments($_SESSION['user_email']);
 if ($isCourseEditorOnly) {
-    $courseEditorAjax = ['upload_image.php', 'update_lesson_order.php', 'update_info_page_owner.php', 'ai_generate_lesson.php', 'add_course_editor.php'];
+    $courseEditorAjax = ['upload_image.php', 'update_lesson_order.php', 'update_info_page_owner.php', 'ai_generate_lesson.php', 'add_course_editor.php', 'add_course_reviewer.php', 'remove_course_reviewer.php'];
     if (!in_array(basename($_SERVER['SCRIPT_NAME']), $courseEditorAjax, true)) {
         echo json_encode(['success' => false, 'message' => 'Du har inte behörighet att utföra denna åtgärd.']);
         exit;

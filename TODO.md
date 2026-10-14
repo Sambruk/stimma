@@ -10,6 +10,17 @@
 - [ ] Granska och aktivera 217 och 218 (Anders granskar); ev. taggen Baskurs
 - [ ] Thomas: möten med Emma Sjölund (Inköp och Upphandling, Göteborg) och Pierre Wettergren (CCG Europe)
 
+### Granskare per kurs – läsrätt för externa på baskurser (Thomas 2026-10-14)
+- [x] Migrering 052: tabellen course_reviewers (som course_editors, ON DELETE CASCADE)
+- [x] isCourseReviewer()/getReviewCourses(); userCanViewCourseLessons släpper in granskare i förhandsgranskning
+- [x] lesson.php: granskare skickas till ?preview=1 (även inaktiv kurs, annan org) – inga framsteg, inskrivningar eller quizsvar; inga redigeringslänkar
+- [x] course.php: "Du granskar kursen", Börja granska, Skicka synpunkter (mailto till den som bjöd in)
+- [x] Startsidan: Kurser att granska
+- [x] Admin → Redigera kurs → Granskare: lägg till/ta bort (samma behörighet som redaktörer, inte extern redaktör), mejl med länk, konto skapas för ansluten domän
+- [x] tests/test_granskare.php 30/30, sviten 318/318
+- [ ] Thomas OK: kör migrering 052 i prod (ny tom tabell) – utan den svarar "Lägg till granskare" med fel, inget annat påverkas
+- [ ] Ev. senare: synpunkter i Stimma i stället för mejl; granskare med domän som inte är ansluten
+
 ### Insyns-API för Magnus (underlag Magnus Nilsson 2026-10-14)
 Läs-API /api/v1/insyn/ med systemnyckel (sts_). Dokumentation docs/API-INSYN.md, rapport docs/API-INSYN-RAPPORT.md.
 - [x] Migrering 051: system_api_keys + system_api_log

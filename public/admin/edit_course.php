@@ -1843,6 +1843,47 @@ require_once 'include/header.php';
     </div>
 </div>
 
+<!-- Granskare (migration 052): läser kursen i förhandsgranskning, ändrar inget -->
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow mb-4">
+            <div class="card-header">
+                <h6 class="m-0 font-weight-bold text-muted">Granskare</h6>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted">Granskare kan läsa hela kursen och prova quizen, även innan kursen är publicerad och
+                    om de hör till en annan organisation. De kan inte ändra något, och inga framsteg sparas.
+                    De får ett mejl med länk till kursen och skickar sina synpunkter till dig.</p>
+                <div class="mb-3">
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="reviewerSearch" placeholder="Sök användare eller skriv hel e-postadress..." aria-label="Sök granskare">
+                        <button class="btn btn-primary" type="button" id="addReviewerBtn" disabled>Lägg till granskare</button>
+                    </div>
+                    <div id="reviewerSearchResults" class="list-group mt-2" style="display: none;"></div>
+                </div>
+                <div id="reviewersList">
+                    <?php
+                    $reviewers = queryAll("SELECT cr.email, u.name
+                                         FROM " . DB_DATABASE . ".course_reviewers cr
+                                         LEFT JOIN " . DB_DATABASE . ".users u ON cr.email COLLATE utf8mb4_swedish_ci = u.email COLLATE utf8mb4_swedish_ci
+                                         WHERE cr.course_id = ? ORDER BY cr.created_at", [$course['id']]);
+                    foreach ($reviewers as $reviewer):
+                        $revExtern = !in_array($course['organization_domain'], getOrgScopeDomains($reviewer['email']), true);
+                    ?>
+                    <div class="d-flex justify-content-between align-items-center mb-2 reviewer-item" data-email="<?= htmlspecialchars($reviewer['email']) ?>">
+                        <span><?= htmlspecialchars((!$revExtern && !empty($reviewer['name'])) ? $reviewer['name'] . ' (' . $reviewer['email'] . ')' : $reviewer['email']) ?><?php
+                            if ($revExtern): ?>
+                            <span class="badge bg-info text-dark ms-2">annan organisation</span><?php
+                            endif; ?></span>
+                        <button class="btn btn-sm btn-outline-danger remove-reviewer" type="button">Ta bort</button>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Dynamisk statusindikator
@@ -2130,6 +2171,113 @@ document.addEventListener('DOMContentLoaded', function() {
         document.addEventListener('click', function(e) {
             if (!editorSearch.contains(e.target) && !userSearchResults.contains(e.target)) {
                 userSearchResults.style.display = 'none';
+            }
+        });
+    }
+
+    // Granskare – samma sökning som redaktörerna (lage=redaktor: en hel e-postadress
+    // hittar även personer i andra organisationer)
+    const reviewerSearch = document.getElementById('reviewerSearch');
+    const addReviewerBtn = document.getElementById('addReviewerBtn');
+    const reviewerResults = document.getElementById('reviewerSearchResults');
+    const reviewersList = document.getElementById('reviewersList');
+    const csrfToken = <?= json_encode($_SESSION['csrf_token'] ?? '') ?>;
+    let selectedReviewer = null;
+
+    function reviewerPost(url, email) {
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `course_id=${courseId}&email=${encodeURIComponent(email)}&csrf_token=${encodeURIComponent(csrfToken)}`
+        }).then(r => r.json());
+    }
+
+    if (reviewerSearch && addReviewerBtn && courseId) {
+        reviewerSearch.addEventListener('input', function() {
+            const search = this.value.trim();
+            selectedReviewer = null;
+            addReviewerBtn.disabled = true;
+            if (search.length < 2) { reviewerResults.style.display = 'none'; return; }
+            fetch(`ajax/search_users.php?lage=redaktor&search=${encodeURIComponent(search)}`)
+                .then(r => r.json())
+                .then(data => {
+                    reviewerResults.innerHTML = '';
+                    if (!data.success) return;
+                    if (!data.users.length) {
+                        const tom = document.createElement('div');
+                        tom.className = 'list-group-item text-muted';
+                        tom.textContent = data.message || 'Inga användare hittades';
+                        reviewerResults.appendChild(tom);
+                    }
+                    data.users.forEach(user => {
+                        const item = document.createElement('a');
+                        item.href = '#';
+                        item.className = 'list-group-item list-group-item-action';
+                        item.textContent = user.name ? `${user.name} (${user.email})` : user.email;
+                        const noter = [];
+                        if (user.extern) noter.push('annan organisation');
+                        if (user.nytt_konto) noter.push('har inget konto än – det skapas');
+                        if (noter.length) {
+                            const not = document.createElement('small');
+                            not.className = 'd-block text-muted';
+                            not.textContent = noter.join(' · ');
+                            item.appendChild(not);
+                        }
+                        item.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            reviewerSearch.value = user.name ? `${user.name} (${user.email})` : user.email;
+                            selectedReviewer = user;
+                            reviewerResults.style.display = 'none';
+                            addReviewerBtn.disabled = false;
+                        });
+                        reviewerResults.appendChild(item);
+                    });
+                    reviewerResults.style.display = 'block';
+                })
+                .catch(err => console.error('Error:', err));
+        });
+
+        addReviewerBtn.addEventListener('click', function() {
+            if (!selectedReviewer) return;
+            const valt = selectedReviewer;
+            reviewerPost('ajax/add_course_reviewer.php', valt.email)
+                .then(data => {
+                    if (!data.success) { alert(data.message || 'Ett fel uppstod'); return; }
+                    const rad = document.createElement('div');
+                    rad.className = 'd-flex justify-content-between align-items-center mb-2 reviewer-item';
+                    rad.setAttribute('data-email', valt.email);
+                    const namn = document.createElement('span');
+                    namn.textContent = valt.name ? `${valt.name} (${valt.email})` : valt.email;
+                    if (data.extern) {
+                        const etikett = document.createElement('span');
+                        etikett.className = 'badge bg-info text-dark ms-2';
+                        etikett.textContent = 'annan organisation';
+                        namn.appendChild(etikett);
+                    }
+                    const taBort = document.createElement('button');
+                    taBort.className = 'btn btn-sm btn-outline-danger remove-reviewer';
+                    taBort.type = 'button';
+                    taBort.textContent = 'Ta bort';
+                    rad.append(namn, taBort);
+                    reviewersList.appendChild(rad);
+                    reviewerSearch.value = '';
+                    selectedReviewer = null;
+                    addReviewerBtn.disabled = true;
+                })
+                .catch(() => alert('Ett fel uppstod'));
+        });
+
+        reviewersList.addEventListener('click', function(e) {
+            if (!e.target.classList.contains('remove-reviewer')) return;
+            const rad = e.target.closest('.reviewer-item');
+            reviewerPost('ajax/remove_course_reviewer.php', rad.getAttribute('data-email'))
+                .then(data => data.success ? rad.remove() : alert(data.message || 'Ett fel uppstod'))
+                .catch(() => alert('Ett fel uppstod'));
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!reviewerSearch.contains(e.target) && !reviewerResults.contains(e.target)) {
+                reviewerResults.style.display = 'none';
             }
         });
     }

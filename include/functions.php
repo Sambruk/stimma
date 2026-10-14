@@ -1343,6 +1343,10 @@ function userCanViewCourseLessons(int $courseId, bool $forhandsgranskning = fals
 
     if (userCanModifyCourse($course)) return true;
 
+    // Granskare (course_reviewers) läser kursen, men bara i förhandsgranskning –
+    // då sparas inga framsteg. Se isCourseReviewer().
+    if ($forhandsgranskning && isCourseReviewer($courseId, $email)) return true;
+
     $u = queryOne(
         "SELECT access_mode, is_admin, is_editor FROM " . DB_DATABASE . ".users WHERE id = ?",
         [$userId]
@@ -1359,6 +1363,34 @@ function userCanViewCourseLessons(int $courseId, bool $forhandsgranskning = fals
     // Kursen kan vara begränsad till utvalda domäner inom organisationen.
     $sharedDoms = getCourseSharedDomains($courseId);
     return empty($sharedDoms) || in_array(getUserDomain($email), $sharedDoms, true);
+}
+
+/**
+ * Granskare (migration 052, 2026-10-14): får läsa en enskild kurs för att lämna
+ * synpunkter, men inte ändra den. Granskaren går igenom kursen i
+ * förhandsgranskningsläge – även när kursen är inaktiv eller tillhör en annan
+ * organisation – och då sparas inga framsteg, inskrivningar eller quizsvar.
+ * Ger ingen åtkomst till adminytan.
+ */
+function isCourseReviewer(int $courseId, ?string $email = null): bool {
+    $email = $email ?? ($_SESSION['user_email'] ?? null);
+    if (!$email || $courseId <= 0) return false;
+    return (bool)queryOne(
+        "SELECT 1 FROM " . DB_DATABASE . ".course_reviewers WHERE course_id = ? AND email = ? LIMIT 1",
+        [$courseId, $email]
+    );
+}
+
+/** Kurser användaren är granskare för (startsidans "Kurser att granska"). */
+function getReviewCourses(string $email): array {
+    return query(
+        "SELECT c.id, c.title, c.status, c.organization_domain, cr.created_at
+         FROM " . DB_DATABASE . ".course_reviewers cr
+         JOIN " . DB_DATABASE . ".courses c ON c.id = cr.course_id
+         WHERE cr.email = ?
+         ORDER BY cr.created_at DESC",
+        [$email]
+    );
 }
 
 /**
