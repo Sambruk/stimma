@@ -18,7 +18,9 @@
 - [x] Startsidan: Kurser att granska
 - [x] Admin → Redigera kurs → Granskare: lägg till/ta bort (samma behörighet som redaktörer, inte extern redaktör), mejl med länk, konto skapas för ansluten domän
 - [x] tests/test_granskare.php 30/30, sviten 318/318
-- [ ] Thomas OK: kör migrering 052 i prod (ny tom tabell) – utan den svarar "Lägg till granskare" med fel, inget annat påverkas
+- [x] Migrering 052 körd i prod 2026-10-15 (Thomas uppdrag), backup backups/fore-052-20261015-122252.sql.gz
+- [x] Jenny Björkholm och Sanna Lindholm (atvidaberg.se) granskare på alla 42 baskurser (taggen Baskurs, sambruk.se) 2026-10-15, created_by = Thomas. Inget inbjudningsmejl skickat (direkt i databasen)
+- [ ] Thomas: meddela Jenny och Sanna (kurserna finns under Kurser att granska på startsidan)
 - [ ] Ev. senare: synpunkter i Stimma i stället för mejl; granskare med domän som inte är ansluten
 
 ### Insyns-API för Magnus (underlag Magnus Nilsson 2026-10-14)
