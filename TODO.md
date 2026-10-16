@@ -521,6 +521,9 @@ Beslut (Thomas): S3-lagring i EU, lagringstid 7 dagliga + 4 veckovisa + 3 månat
         first-changed-commit 382e2c4→0531818 ur .git/filter-repo/, ingen LFS, forks 0) samt bilaga med
         de 31 verifierat nåbara SHA:n. Ligger i `.git/github-support-arende.md` (kan inte committas).
         Återstår: sätt repot till private och skicka ärendet på support.github.com
+  - [x] Ärendet inskickat av Thomas till GitHub Support (före 2026-10-16). Inget svar per 2026-10-16.
+        Kontroll 2026-10-16: repot privat (anonymt 404), men 382e2c4/ae362aa och import_users.sql@382e2c4
+        ger fortfarande 200 med token → purge ej utförd. Kontrollera igen efter svar
   - [ ] **Gamla objekt går fortfarande att hämta anonymt på GitHub via commit-SHA** — verifierat HTTP 200 på
         raw.githubusercontent.com för PUB-avtalet (ae362aa) och för import_users.sql på 31 av 128 gamla
         commits (382e2c4 m.fl. — 689db8f ger däremot 404, den SHA:n var felnoterad).
