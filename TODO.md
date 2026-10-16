@@ -31,7 +31,8 @@ säkerhetsfilter som öppnar länkar blev inloggade.
 - [x] Gränser: 5 fel per kod, 5 koder/timme, 20 fel/dygn per adress
 - [x] Texter: användarhandboken, redaktörs-/granskarmejlen; insyns-API:t räknar 'Lyckad inloggning med kod'
 - [x] tests/test_inloggning.php 32/32 (SMTP-mottagare tests/smtp_sink.php), sviten 345/345; mutationsprov på bindning och engångs
-- [ ] Thomas OK: driftsätt (backup → 053 → kod). Ordningen är viktig: koden utan tabellen stoppar all inloggning
+- [x] Driftsatt 2026-10-16 12:01 (backup backups/fore-053-20261016-120134.sql.gz → 053 → ff 2ccdac6). Prov i prod: kod skickad via Scaleway, inga PHP-fel
+- [ ] Thomas provar inloggning med kod i sin egen webbläsare
 - [ ] Mätning: andel koder utan inloggning inom 3 h (loggraderna 'Inloggningskod skickad' / 'Lyckad inloggning med kod')
 
 ### Granskare per kurs – läsrätt för externa på baskurser (Thomas 2026-10-14)
