@@ -10,6 +10,15 @@
 - [ ] Granska och aktivera 217 och 218 (Anders granskar); ev. taggen Baskurs
 - [ ] Thomas: möten med Emma Sjölund (Inköp och Upphandling, Göteborg) och Pierre Wettergren (CCG Europe)
 
+### Inloggningsmejl i skräpposten → Scaleway TEM (2026-10-16)
+- [x] sambruk.se i Scaleway TEM; SPF (+include:_spf.tem.scaleway.com) och DKIM verifierade mot Loopia. MX (blackhole) och DMARC medvetet inte inlagda
+- [x] IAM-applikation för Stimma; nycklar på rad 6–7 i /opt/app/Credsecrets
+- [x] Stimmas .env → smtp.tem.scaleway.com:465 ssl (backup backups/env.fore-scaleway-20261016-102604). Testmejl via include/mail.php levererat (Thomas bekräftade)
+- [ ] Mät om 2–4 veckor: andel inloggningslänkar utan inloggning inom 3 h (Postal: 8 %, 24 av 290). Komplettera med headrar från kommuner
+- [ ] Om bättre: flytta Zammad, duellen m.fl. från Postal
+- [ ] Thomas: kontrollera DPA i Scaleway-konsolen
+- [ ] Återgång vid problem: kopiera tillbaka .env-backupen (läses per anrop, ingen omstart)
+
 ### Granskare per kurs – läsrätt för externa på baskurser (Thomas 2026-10-14)
 - [x] Migrering 052: tabellen course_reviewers (som course_editors, ON DELETE CASCADE)
 - [x] isCourseReviewer()/getReviewCourses(); userCanViewCourseLessons släpper in granskare i förhandsgranskning
