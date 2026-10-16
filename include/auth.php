@@ -58,23 +58,8 @@ function isLoggedIn() {
 }
 
 /**
- * Rensa utgångna tokens från databasen
- * Anropas automatiskt vid nya inloggningsförfrågningar
- */
-function cleanupExpiredTokens() {
-    $tokenExpiryMinutes = (int)getenv('AUTH_TOKEN_EXPIRY_MINUTES') ?: 15;
-
-    // Rensa tokens som har passerat giltighetstiden
-    execute("UPDATE " . DB_DATABASE . ".users
-             SET verification_token = NULL
-             WHERE verification_token IS NOT NULL
-             AND updated_at < DATE_SUB(NOW(), INTERVAL ? MINUTE)",
-             [$tokenExpiryMinutes]);
-}
-
-/**
- * Inloggningslänkens giltighetstid som läsbar text, t.ex. "3 timmar" eller "15 minuter".
- * Används i inloggningsmejlet och i användarhandboken så att de följer AUTH_TOKEN_EXPIRY_MINUTES.
+ * Inloggningskodens giltighetstid som läsbar text, t.ex. "3 timmar" eller "15 minuter".
+ * Används i inloggningsmejlet, på inloggningssidan och i användarhandboken så att de följer AUTH_TOKEN_EXPIRY_MINUTES.
  */
 function loginLinkValidityText(): string {
     $minuter = (int)getenv('AUTH_TOKEN_EXPIRY_MINUTES') ?: 15;
@@ -85,56 +70,103 @@ function loginLinkValidityText(): string {
     return "{$minuter} minuter";
 }
 
+// =============================================================================
+// Inloggning med engångskod (migration 053, 2026-10-16)
+//
+// Ersätter inloggningslänken. Länken gick att använda flera gånger under hela
+// giltighetstiden, så säkerhetsfilter som öppnar länkar i mejl blev inloggade.
+// Koden är sex siffror, gäller en gång, bara i webbläsaren som begärde den och
+// spärras efter LOGIN_CODE_MAX_ATTEMPTS felaktiga försök. Allt efter godkänd
+// kod (session, kom-ihåg-mig, last_login_at) är detsamma som förut.
+// =============================================================================
+
+const LOGIN_CODE_MAX_ATTEMPTS = 5;      // felaktiga försök per kod
+const LOGIN_CODE_MAX_PER_HOUR = 5;      // nya koder per adress och timme
+const LOGIN_CODE_MAX_FAILS_PER_DAY = 20; // felaktiga försök per adress och dygn
+
+/** Slumpvärdet som binder en kod till den här webbläsarens session. */
+function loginCodeBinding(): string {
+    if (empty($_SESSION['login_code_binding'])) {
+        $_SESSION['login_code_binding'] = bin2hex(random_bytes(32));
+    }
+    return hash('sha256', $_SESSION['login_code_binding']);
+}
+
+/** Har adressen gjort för många felaktiga försök det senaste dygnet? */
+function loginCodeLockedOut(string $email): bool {
+    $row = queryOne(
+        "SELECT COALESCE(SUM(attempts), 0) AS n FROM " . DB_DATABASE . ".login_codes
+         WHERE email = ? AND created_at > NOW() - INTERVAL 1 DAY",
+        [$email]
+    );
+    return (int)($row['n'] ?? 0) >= LOGIN_CODE_MAX_FAILS_PER_DAY;
+}
+
 /**
- * Skicka inloggningstoken till användarens e-post
+ * Skicka en inloggningskod till adressen.
  *
- * @param string $email Användarens e-post
- * @return bool True om det lyckades, false vid fel
+ * Tidigare koder för adressen upphör. Koden sparas bara som hash. Sätter
+ * $_SESSION['login_code_email'] så att inloggningssidan visar kodrutan.
+ *
+ * @return array ['ok' => bool, 'request_id' => ?string, 'error' => ?string]
+ *               error: 'rate' (för många koder), 'locked' (för många fel), 'mail'
  */
-function sendLoginToken($email) {
-    // Rensa gamla utgångna tokens
-    cleanupExpiredTokens();
+function sendLoginCode(string $email): array {
+    $email = strtolower(trim($email));
+    $expiryMinutes = (int)getenv('AUTH_TOKEN_EXPIRY_MINUTES') ?: 15;
 
-    // Generera en unik token
-    $token = bin2hex(random_bytes(32));
+    if (loginCodeLockedOut($email)) {
+        logActivity($email, "Inloggningskod nekad: för många felaktiga försök");
+        return ['ok' => false, 'request_id' => null, 'error' => 'locked'];
+    }
+    $senaste = queryOne(
+        "SELECT COUNT(*) AS n FROM " . DB_DATABASE . ".login_codes WHERE email = ? AND created_at > NOW() - INTERVAL 1 HOUR",
+        [$email]
+    );
+    if ((int)($senaste['n'] ?? 0) >= LOGIN_CODE_MAX_PER_HOUR) {
+        logActivity($email, "Inloggningskod nekad: för många koder senaste timmen");
+        return ['ok' => false, 'request_id' => null, 'error' => 'rate'];
+    }
 
-    // Hämta inloggningstokenexpirering från konfiguration eller använd standardvärde (15 minuter)
-    $tokenExpiryMinutes = (int)getenv('AUTH_TOKEN_EXPIRY_MINUTES') ?: 15;
+    // Städa bort gamla rader och låt tidigare koder för adressen upphöra
+    execute("DELETE FROM " . DB_DATABASE . ".login_codes WHERE created_at < NOW() - INTERVAL 2 DAY");
+    execute(
+        "UPDATE " . DB_DATABASE . ".login_codes SET expires_at = NOW() WHERE email = ? AND used_at IS NULL AND expires_at > NOW()",
+        [$email]
+    );
 
-    // Uppdatera användaren med ny token
-    $expires = date('Y-m-d H:i:s', strtotime("+{$tokenExpiryMinutes} minutes"));
-    execute("UPDATE " . DB_DATABASE . ".users
-             SET verification_token = ?, verified_at = NULL
-             WHERE email = ?",
-             [$token, $email]);
-    
-    // Skapa inloggningslänk med SYSTEM_URL från konfiguration
+    $code = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+    $requestId = bin2hex(random_bytes(32));
+    if (!execute(
+        "INSERT INTO " . DB_DATABASE . ".login_codes (email, request_id, code_hash, binding_hash, expires_at)
+         VALUES (?, ?, ?, ?, NOW() + INTERVAL ? MINUTE)",
+        [$email, $requestId, hash('sha256', $requestId . $code), loginCodeBinding(), $expiryMinutes]
+    )) {
+        logActivity($email, "Inloggningskod kunde inte sparas");
+        return ['ok' => false, 'request_id' => null, 'error' => 'mail'];
+    }
+
     $systemUrl = rtrim(getenv('SYSTEM_URL') ?: ('https://' . $_SERVER['HTTP_HOST']), '/');
-    $loginUrl = $systemUrl . '/verify.php?token=' . $token . '&email=' . urlencode($email);
-        
-    // Hämta systemnamn från .env
-    $systemName = trim(getenv('SYSTEM_NAME'), '"\'') ?: 'AI-kurser';
-    
-    // Förbered e-post med SMTP-funktionen.
-    // Ämne, logga och förklaring är valda för att mejlet inte ska likna nätfiske:
-    // Microsoft 365 hos Göteborgs Stad (Intraservice) satte det gamla mejlet
-    // ("Inloggningslänk till …" med hela token-länken synlig) i karantän, 2026-10.
-    // Token-länken finns därför bara bakom knappen i HTML-delen, inte som synlig text.
-    $subject = mb_encode_mimeheader("Din länk till " . $systemName, 'UTF-8', 'Q');
-    $logoUrl = $systemUrl . '/images/mail-logo.png';
+    $systemName = trim(getenv('SYSTEM_NAME'), '"\'') ?: 'Stimma';
     $systemHost = parse_url($systemUrl, PHP_URL_HOST) ?: $systemUrl;
+    $giltighetstid = loginLinkValidityText();
+
+    // Mejlet har ingen länk alls (2026-10-16): koden skrivs in på inloggningssidan.
+    // Adressen till Stimma står som text, så att den som stängt fliken hittar tillbaka.
+    $subject = mb_encode_mimeheader("Din kod till " . $systemName, 'UTF-8', 'Q');
+    $logoUrl = $systemUrl . '/images/mail-logo.png';
     $safeEmail = htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
     $safeName = htmlspecialchars($systemName, ENT_QUOTES, 'UTF-8');
-    $safeLoginUrl = htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8');
-    $giltighetstid = loginLinkValidityText();
+    $safeHost = htmlspecialchars($systemHost, ENT_QUOTES, 'UTF-8');
     $textStyle = "font-family: Arial, sans-serif; font-size: 15px; color: #1a1a1a; line-height: 1.6;";
+    $kodVisning = substr($code, 0, 3) . ' ' . substr($code, 3);
 
     $htmlMessage = "
     <!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">
     <html xmlns=\"http://www.w3.org/1999/xhtml\" lang=\"sv\">
     <head>
         <meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\" />
-        <title>Din länk till {$safeName}</title>
+        <title>Din kod till {$safeName}</title>
     </head>
     <body style=\"margin: 0; padding: 0; background-color: #ffffff;\">
         <table cellpadding=\"0\" cellspacing=\"0\" border=\"0\" width=\"100%\" style=\"margin: 0; padding: 0;\">
@@ -150,20 +182,10 @@ function sendLoginToken($email) {
                             <td>
                                 <h1 style=\"font-family: Arial, sans-serif; font-size: 22px; color: #1a1a1a; margin: 0 0 16px 0;\">Hej!</h1>
                                 <p style=\"{$textStyle} margin: 0 0 16px 0;\">Du har bett om att få logga in i {$safeName}, Sambruks lärplattform för korta utbildningar, med adressen {$safeEmail}.</p>
-                                <p style=\"{$textStyle} margin: 0 0 20px 0;\">{$safeName} använder inga lösenord. I stället loggar du in med knappen nedan.</p>
-
-                                <!--[if mso]>
-                                <v:roundrect xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:w=\"urn:schemas-microsoft-com:office:word\" href=\"{$safeLoginUrl}\" style=\"height:44px;v-text-anchor:middle;width:200px;\" arcsize=\"10%\" stroke=\"f\" fillcolor=\"#3F7A11\">
-                                <w:anchorlock/>
-                                <center style=\"color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;\">Logga in i {$safeName}</center>
-                                </v:roundrect>
-                                <![endif]-->
-                                <!--[if !mso]><!-->
-                                <a href=\"{$safeLoginUrl}\" style=\"background-color: #3F7A11; border-radius: 5px; color: #ffffff; display: inline-block; font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; line-height: 44px; text-align: center; text-decoration: none; width: 200px; -webkit-text-size-adjust: none;\">Logga in i {$safeName}</a>
-                                <!--<![endif]-->
-
-                                <p style=\"{$textStyle} margin: 20px 0 16px 0;\">Knappen fungerar i {$giltighetstid}. Har den slutat fungera kan du gå till <a href=\"{$systemUrl}/\" style=\"color: #3F7A11;\">{$systemHost}</a> och be om en ny.</p>
-                                <p style=\"{$textStyle} margin: 0 0 24px 0;\">Har du inte bett om att logga in kan du strunta i det här mejlet. Ingen kan logga in utan att öppna länken i din inkorg.</p>
+                                <p style=\"{$textStyle} margin: 0 0 12px 0;\">Skriv in den här koden på inloggningssidan:</p>
+                                <p style=\"font-family: 'Courier New', monospace; font-size: 32px; font-weight: bold; letter-spacing: 4px; color: #1a1a1a; background-color: #f2f5ef; border-radius: 6px; padding: 12px 20px; margin: 0 0 20px 0; display: inline-block;\">{$kodVisning}</p>
+                                <p style=\"{$textStyle} margin: 0 0 16px 0;\">Koden gäller i {$giltighetstid} och bara i webbläsaren där du bad om den. Har du stängt sidan kan du gå till {$safeHost} och be om en ny kod.</p>
+                                <p style=\"{$textStyle} margin: 0 0 24px 0;\">Har du inte bett om att logga in kan du strunta i det här mejlet. Ge aldrig koden till någon annan.</p>
                                 <p style=\"font-family: Arial, sans-serif; font-size: 13px; color: #555555; line-height: 1.5; margin: 0; border-top: 1px solid #dddddd; padding-top: 12px;\">{$safeName} är en tjänst från Sambruk, en medlemsförening för samverkan kring digitalisering i offentlig sektor.</p>
                             </td>
                         </tr>
@@ -175,82 +197,77 @@ function sendLoginToken($email) {
     </html>
     ";
 
-    // Använd SMTP-funktionen från mail.php
-    $mailFrom = getenv('MAIL_FROM_ADDRESS') ?: 'noreply@tropheus.se';
-    $mailFromName = trim(getenv('MAIL_FROM_NAME'), '"\'') ?: 'AI-kurser';
-    
-    // Använd sendSmtpMail från mail.php
-    // Handskriven textversion i stället för den automatiska — länken ska stå ensam
-    // på en rad och inte upprepas, som den hade gjort med både knapp och klartext.
-    // Textdelen måste ha länken utskriven, annars går det inte att logga in från den.
     $textMessage = "Hej!\n\n"
         . "Du har bett om att få logga in i {$systemName}, Sambruks lärplattform för korta utbildningar, med adressen {$email}.\n\n"
-        . "{$systemName} använder inga lösenord. Öppna länken nedan för att logga in:\n\n"
-        . "{$loginUrl}\n\n"
-        . "Länken fungerar i {$giltighetstid}. Har den slutat fungera kan du gå till {$systemHost} och be om en ny.\n\n"
-        . "Har du inte bett om att logga in kan du strunta i det här mejlet.\n\n"
+        . "Skriv in den här koden på inloggningssidan:\n\n"
+        . "    {$kodVisning}\n\n"
+        . "Koden gäller i {$giltighetstid} och bara i webbläsaren där du bad om den. Har du stängt sidan kan du gå till {$systemHost} och be om en ny kod.\n\n"
+        . "Har du inte bett om att logga in kan du strunta i det här mejlet. Ge aldrig koden till någon annan.\n\n"
         . "{$systemName} är en tjänst från Sambruk.\n";
 
+    $mailFrom = getenv('MAIL_FROM_ADDRESS') ?: 'noreply@sambruk.se';
+    $mailFromName = trim(getenv('MAIL_FROM_NAME'), '"\'') ?: $systemName;
     $mailSent = sendSmtpMail($email, $subject, $htmlMessage, $mailFrom, $mailFromName, $textMessage);
-    
-    // Logga specifikt för inloggningstoken
-    if ($mailSent) {
-        logActivity($email, "Inloggningstoken skickat framgångsrikt", [
-            'action' => 'login_token_sent',
-            'token_expiry_minutes' => $tokenExpiryMinutes,
-            'email' => $email
-        ]);
-    } else {
-        logActivity($email, "Inloggningstoken misslyckades att skickas", [
-            'action' => 'login_token_failed',
-            'email' => $email
-        ]);
+
+    if (!$mailSent) {
+        execute("DELETE FROM " . DB_DATABASE . ".login_codes WHERE request_id = ?", [$requestId]);
+        logActivity($email, "Inloggningskod misslyckades att skickas", ['action' => 'login_code_failed']);
+        return ['ok' => false, 'request_id' => null, 'error' => 'mail'];
     }
-    
-    return $mailSent;
+
+    $_SESSION['login_code_email'] = $email;
+    logActivity($email, "Inloggningskod skickad", ['action' => 'login_code_sent', 'expiry_minutes' => $expiryMinutes]);
+    return ['ok' => true, 'request_id' => $requestId, 'error' => null];
 }
 
 /**
- * Verifiera inloggningstoken
+ * Kontrollera en inloggningskod. Godkänd kod förbrukas och inloggningen
+ * registreras; sessionen skapas av completeLogin().
  *
- * SECURITY FIX: Added token format validation, expiry check, and single-use invalidation
- *
- * @param string $email Användarens e-post
- * @param string $token Autentiseringstoken
- * @return array|false Användaruppgifter om token är giltig, false annars
+ * @return array ['user' => ?array, 'request_id' => ?string, 'error' => ?string]
+ *               error: 'invalid' (fel kod), 'expired' (ingen giltig kod i den här
+ *               webbläsaren), 'locked' (för många fel)
  */
-function verifyLoginToken($email, $token) {
-    // SECURITY FIX: Validate token format (must be 64 hex characters)
-    if (strlen($token) !== 64 || !ctype_xdigit($token)) {
-        logActivity($email, "Misslyckad inloggning: ogiltigt token-format");
-        return false;
+function verifyLoginCode(string $email, string $code): array {
+    $email = strtolower(trim($email));
+    $code = preg_replace('/\D/', '', $code);
+    $nej = fn(string $e) => ['user' => null, 'request_id' => null, 'error' => $e];
+
+    if (loginCodeLockedOut($email)) {
+        logActivity($email, "Misslyckad inloggning: för många felaktiga koder");
+        return $nej('locked');
     }
 
-    // Hämta inloggningstokenexpirering från konfiguration eller använd standardvärde (15 minuter)
-    $tokenExpiryMinutes = (int)getenv('AUTH_TOKEN_EXPIRY_MINUTES') ?: 15;
-
-    // Väljer användare där:
-    // 1. E-posten matchar
-    // 2. Verifieringstoken matchar
-    // 3. Token skapades inom expireringstiden (tillåter flera klick under hela giltighetstiden)
-    $sql = "SELECT * FROM " . DB_DATABASE . ".users
-            WHERE email = ?
-            AND verification_token = ?
-            AND updated_at > DATE_SUB(NOW(), INTERVAL ? MINUTE)";
-
-    $user = queryOne($sql, [$email, $token, $tokenExpiryMinutes]);
-
-    if (!$user) {
-        // Logga misslyckad tokenverifiering
-        logActivity($email, "Misslyckad inloggning: ogiltig eller utgången token");
-        return false;
+    $row = queryOne(
+        "SELECT id, request_id, code_hash, attempts FROM " . DB_DATABASE . ".login_codes
+         WHERE email = ? AND binding_hash = ? AND used_at IS NULL AND expires_at > NOW()
+         ORDER BY id DESC LIMIT 1",
+        [$email, loginCodeBinding()]
+    );
+    if (!$row || (int)$row['attempts'] >= LOGIN_CODE_MAX_ATTEMPTS) {
+        logActivity($email, "Misslyckad inloggning: ingen giltig kod");
+        return $nej('expired');
     }
 
-    // Sätt verified_at om det inte redan är satt
+    if (strlen($code) !== 6 || !hash_equals($row['code_hash'], hash('sha256', $row['request_id'] . $code))) {
+        execute("UPDATE " . DB_DATABASE . ".login_codes SET attempts = attempts + 1 WHERE id = ?", [$row['id']]);
+        logActivity($email, "Misslyckad inloggning: fel kod");
+        return $nej((int)$row['attempts'] + 1 >= LOGIN_CODE_MAX_ATTEMPTS ? 'expired' : 'invalid');
+    }
+
+    // Engångs: förbruka koden innan något annat görs. Villkoret på used_at gör att
+    // två samtidiga försök med samma kod inte båda godtas.
+    $db = getDb();
+    $stmt = $db->prepare("UPDATE " . DB_DATABASE . ".login_codes SET used_at = NOW() WHERE id = ? AND used_at IS NULL");
+    $stmt->execute([$row['id']]);
+    if ($stmt->rowCount() !== 1) return $nej('expired');
+
+    $user = queryOne("SELECT * FROM " . DB_DATABASE . ".users WHERE email = ?", [$email]);
+    if (!$user) return $nej('expired');
+
+    // updated_at lämnas orörd (se recordUserLogin)
     if ($user['verified_at'] === null) {
-        execute("UPDATE " . DB_DATABASE . ".users
-                 SET verified_at = NOW()
-                 WHERE id = ?", [$user['id']]);
+        execute("UPDATE " . DB_DATABASE . ".users SET verified_at = NOW(), updated_at = updated_at WHERE id = ?", [$user['id']]);
     }
 
     // Auto-promotion: om en 'public_only'-användare loggar in från en domän som
@@ -263,7 +280,7 @@ function verifyLoginToken($email, $token) {
             $org = getOrganizationByDomain($domain);
             if ($org) {
                 execute(
-                    "UPDATE " . DB_DATABASE . ".users SET access_mode = 'domain' WHERE id = ?",
+                    "UPDATE " . DB_DATABASE . ".users SET access_mode = 'domain', updated_at = updated_at WHERE id = ?",
                     [$user['id']]
                 );
                 $user['access_mode'] = 'domain';
@@ -273,17 +290,65 @@ function verifyLoginToken($email, $token) {
     }
 
     recordUserLogin($user['id']);
-    logActivity($email, "Lyckad inloggning med token");
+    logActivity($email, "Lyckad inloggning med kod");
+    return ['user' => $user, 'request_id' => $row['request_id'], 'error' => null];
+}
 
-    return $user;
+/**
+ * Avsluta en godkänd inloggning: session, kom-ihåg-mig, publik kursregistrering
+ * och vart användaren ska skickas. Samma steg som verify.php gjorde för länken.
+ *
+ * @return string URL att omdirigera till
+ */
+function completeLogin(array $user, string $requestId): string {
+    createLoginSession($user);
+
+    if (!empty($_SESSION['pending_remember_me'])) {
+        createRememberToken($user['id']); // REMEMBER_TOKEN_HOURS, standard 720 h = 30 dagar
+    }
+    unset($_SESSION['pending_remember_me'], $_SESSION['login_code_email']);
+
+    // Publik kursregistrering: raden i public_registration_intents är kopplad
+    // till kodbegärans request_id (kolumnen heter verification_token).
+    $publicRedirectLesson = null;
+    $pendingIntent = queryOne(
+        "SELECT * FROM " . DB_DATABASE . ".public_registration_intents
+         WHERE verification_token = ? AND expires_at > NOW() LIMIT 1",
+        [$requestId]
+    );
+    if ($pendingIntent) {
+        grantPublicCourseAccess($user['id'], $pendingIntent['course_id']);
+        $course = queryOne("SELECT sequential_mode FROM " . DB_DATABASE . ".courses WHERE id = ?", [$pendingIntent['course_id']]);
+        if ($course && !empty($course['sequential_mode'])) {
+            $firstLesson = queryOne(
+                "SELECT id FROM " . DB_DATABASE . ".lessons WHERE course_id = ? ORDER BY sort_order ASC LIMIT 1",
+                [$pendingIntent['course_id']]
+            );
+            if ($firstLesson) $publicRedirectLesson = (int)$firstLesson['id'];
+        }
+        execute("DELETE FROM " . DB_DATABASE . ".public_registration_intents WHERE verification_token = ?", [$requestId]);
+    }
+
+    if ($publicRedirectLesson) return 'lesson.php?id=' . $publicRedirectLesson;
+    if (!empty($_SESSION['redirect_after_login'])) {
+        // Same-origin-check: endast relativa URL:er eller samma host
+        $candidate = $_SESSION['redirect_after_login'];
+        unset($_SESSION['redirect_after_login']);
+        $parsed = parse_url($candidate);
+        if (empty($parsed['host']) || $parsed['host'] === ($_SERVER['HTTP_HOST'] ?? '')) {
+            return $candidate;
+        }
+    }
+    return 'index.php';
 }
 
 /**
  * Registrera en lyckad inloggning i users.last_login_at (2026-10-14).
  *
- * 🔴 updated_at måste lämnas orörd: verifyLoginToken() räknar inloggningslänkens
- * giltighet från users.updated_at, som har ON UPDATE CURRENT_TIMESTAMP. En vanlig
- * UPDATE hade gjort en gammal länk giltig igen efter varje inloggning.
+ * updated_at lämnas orörd. Fram till 2026-10-16 räknades inloggningslänkens
+ * giltighet från users.updated_at (ON UPDATE CURRENT_TIMESTAMP); inloggningskoden
+ * har egen giltighetstid i login_codes, men updated_at ska ändå spegla verkliga
+ * ändringar av kontot.
  *
  * @param int $userId
  */

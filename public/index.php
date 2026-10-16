@@ -64,61 +64,72 @@ function checkLoginRateLimit($email) {
     return null;
 }
 
-// Handle form submission for login/registration
+// Inloggning med engångskod (2026-10-16): steg 1 e-post → kod skickas,
+// steg 2 koden skrivs in i samma webbläsare. Se sendLoginCode()/verifyLoginCode().
+$kodFel = [
+    'rate'   => 'Du har bett om många koder på kort tid. Vänta en stund och försök igen.',
+    'locked' => 'För många felaktiga koder. Vänta en stund och försök igen.',
+    'mail'   => 'Något gick fel när koden skulle skickas. Försök igen.',
+];
+$giltighet = loginLinkValidityText();
+
+// "Använd en annan adress" / "Skicka ny kod" från kodrutan
+if (isset($_GET['ny'])) {
+    unset($_SESSION['login_code_email']);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Validate CSRF token for security
     if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
         $error = 'Ogiltig förfrågan. Vänligen försök igen.';
+    } elseif (isset($_POST['login_code'])) {
+        // Steg 2: kontrollera koden
+        $kodEpost = $_SESSION['login_code_email'] ?? '';
+        $resultat = $kodEpost !== '' ? verifyLoginCode($kodEpost, (string)$_POST['login_code']) : ['error' => 'expired'];
+        if (!empty($resultat['user'])) {
+            redirect(completeLogin($resultat['user'], $resultat['request_id']));
+            exit;
+        }
+        $error = [
+            'invalid' => 'Koden stämmer inte. Kontrollera siffrorna och försök igen.',
+            'expired' => 'Koden gäller inte längre i den här webbläsaren. Be om en ny kod.',
+            'locked'  => $kodFel['locked'],
+        ][$resultat['error']] ?? 'Koden kunde inte kontrolleras.';
+        if ($resultat['error'] !== 'invalid') unset($_SESSION['login_code_email']);
     } else {
-        $email = trim($_POST['email'] ?? '');
+        // Steg 1: skicka en kod
+        $email = strtolower(trim($_POST['email'] ?? ''));
         $rememberMe = isset($_POST['remember_me']) && $_POST['remember_me'] === '1';
 
-        // Spara remember_me valet i sessionen för användning i verify.php
+        // Kom-ihåg-mig-valet används när koden godkänns (completeLogin)
         $_SESSION['pending_remember_me'] = $rememberMe;
 
         // SECURITY FIX: Check rate limit before processing
         $rateLimitError = checkLoginRateLimit($email);
         if ($rateLimitError) {
             $error = $rateLimitError;
-            // Log the rate limit hit
             logActivity($email, "Rate limit exceeded for login attempt", ['ip' => $_SERVER['REMOTE_ADDR']]);
         } elseif (filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            // Check if user already exists
-            $user = queryOne("SELECT * FROM " . DB_DATABASE . ".users WHERE email = ?", [$email]);
-            
-            if ($user) {
-                // Existing user - send login link
-                if (sendLoginToken($email)) {
-                    $success = '<i class="bi bi-envelope-paper-fill me-2"></i>
-                               <h4 class="mt-3">Inloggningslänk på väg!</h4>
-                               <p class="mb-0">Vi har skickat en inloggningslänk till din e-postadress. 
-                               Länken är giltig i ' . ((int)getenv('AUTH_TOKEN_EXPIRY_MINUTES') ?: 15) . ' minuter.
-                               Om du inte ser e-postmeddelandet, kolla gärna i din skräppost.</p>';
-                } else {
-                    $error = 'Något gick fel vid utskick av inloggningslänk. Försök igen.';
-                }
-            } else {
-                // New user - check domain
+            $user = queryOne("SELECT id FROM " . DB_DATABASE . ".users WHERE email = ?", [$email]);
+            $nyttKonto = false;
+            if (!$user) {
+                // Ny användare – bara från anslutna domäner
                 $domain = substr(strrchr($email, "@"), 1);
-                
                 if (isDomainAllowed($domain)) {
-                    // Create new user with only existing table columns
-                    execute("INSERT INTO " . DB_DATABASE . ".users (email, created_at) 
-                             VALUES (?, NOW())", 
-                             [$email]);
-                    
-                    // Send login link
-                    if (sendLoginToken($email)) {
-                        $success = '<i class="bi bi-envelope-paper-fill me-2"></i>
-                                   <h4 class="mt-3">Konto skapat och inloggningslänk på väg!</h4>
-                                   <p class="mb-0">Vi har skapat ett konto för dig och skickat en inloggningslänk till din e-postadress. 
-                                   Länken är giltig i ' . ((int)getenv('AUTH_TOKEN_EXPIRY_MINUTES') ?: 15) . ' minuter.
-                                   Om du inte ser e-postmeddelandet, kolla gärna i din skräppost.</p>';
-                    } else {
-                        $error = 'Något gick fel vid utskick av inloggningslänk. Försök igen.';
-                    }
+                    execute("INSERT INTO " . DB_DATABASE . ".users (email, created_at) VALUES (?, NOW())", [$email]);
+                    $nyttKonto = true;
                 } else {
                     $error = 'Endast e-postadresser från godkända domäner är tillåtna för nya användare.';
+                }
+            }
+            if ($error === '') {
+                $skickad = sendLoginCode($email);
+                if ($skickad['ok']) {
+                    $success = $nyttKonto
+                        ? 'Vi har skapat ett konto för dig och skickat en kod till din e-postadress.'
+                        : 'Vi har skickat en kod till din e-postadress.';
+                } else {
+                    $error = $kodFel[$skickad['error']] ?? $kodFel['mail'];
                 }
             }
         } else {
@@ -158,25 +169,53 @@ if (!$isLoggedIn):
                             <p class="lead text-muted mb-4"><?= htmlspecialchars($systemDescription) ?></p>
                         <?php endif; ?>
                         
-                        <!-- Success message display -->
-                        <?php if ($success): ?>
-                            <div class="alert alert-success">
-                                <?= $success ?>
+                        <?php $kodEpost = $_SESSION['login_code_email'] ?? ''; ?>
+                        <?php if ($kodEpost !== ''): ?>
+                            <!-- Steg 2: skriv in koden -->
+                            <?php if ($success): ?>
+                                <div class="alert alert-success text-start">
+                                    <i class="bi bi-envelope-paper-fill me-2" aria-hidden="true"></i><?= htmlspecialchars($success) ?>
+                                    Om du inte ser mejlet, titta i skräpposten.
+                                </div>
+                            <?php elseif ($error): ?>
+                                <div class="alert alert-danger text-start" role="alert">
+                                    <i class="bi bi-exclamation-triangle-fill me-2" aria-hidden="true"></i><?= htmlspecialchars($error) ?>
+                                </div>
+                            <?php endif; ?>
+                            <form action="index.php" method="post" class="form" id="kodform">
+                                <input type="hidden" name="csrf_token" value="<?= generateCsrfToken() ?>">
+                                <p class="text-start mb-2">Skriv in koden vi skickade till <strong><?= htmlspecialchars($kodEpost) ?></strong>.</p>
+                                <div class="form-floating mb-2">
+                                    <input type="text" class="form-control text-center fs-3" id="login_code" name="login_code"
+                                           inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7"
+                                           placeholder="123456" required autofocus aria-describedby="kodhjalp">
+                                    <label for="login_code">Kod (6 siffror)</label>
+                                </div>
+                                <div id="kodhjalp" class="form-text small text-start mb-3">Koden gäller i <?= htmlspecialchars($giltighet) ?> och bara i den här webbläsaren.</div>
+                                <button type="submit" class="btn btn-primary w-100">Logga in</button>
+                            </form>
+                            <div class="d-flex justify-content-between mt-3 small">
+                                <a href="index.php?ny=1">Använd en annan adress</a>
+                                <form action="index.php" method="post" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="<?= generateCsrfToken() ?>">
+                                    <input type="hidden" name="email" value="<?= htmlspecialchars($kodEpost) ?>">
+                                    <input type="hidden" name="remember_me" value="<?= !empty($_SESSION['pending_remember_me']) ? '1' : '0' ?>">
+                                    <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">Skicka ny kod</button>
+                                </form>
                             </div>
                         <?php else: ?>
-                            <!-- Error message display -->
+                            <!-- Steg 1: e-postadress -->
                             <?php if ($error): ?>
-                                <div class="alert alert-danger">
-                                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                                    <p class="mb-0"><?= $error ?></p>
+                                <div class="alert alert-danger" role="alert">
+                                    <i class="bi bi-exclamation-triangle-fill me-2" aria-hidden="true"></i>
+                                    <p class="mb-0"><?= htmlspecialchars($error) ?></p>
                                 </div>
                             <?php endif; ?>
                             
-                            <!-- Email input form -->
                             <form action="index.php" method="post" class="form">
                                 <input type="hidden" name="csrf_token" value="<?= generateCsrfToken() ?>">
                                 <div class="form-floating mb-3">
-                                    <input type="email" class="form-control" id="email" name="email" placeholder="namn@alingsas.se" required>
+                                    <input type="email" class="form-control" id="email" name="email" placeholder="namn@alingsas.se" autocomplete="email" required>
                                     <label for="email">E-postadress</label>
                                 </div>
                                 <div class="form-check mb-3 text-start">
@@ -189,7 +228,8 @@ if (!$isLoggedIn):
                                         Utan detta loggas du ut efter en arbetsdag.
                                     </div>
                                 </div>
-                                <button type="submit" class="btn btn-primary w-100">Skicka inloggningslänk</button>
+                                <button type="submit" class="btn btn-primary w-100">Skicka kod</button>
+                                <p class="form-text small mt-2 mb-0">Stimma använder inga lösenord. Du får en kod med e-post som du skriver in här.</p>
                             </form>
                         <?php endif; ?>
                     </div>

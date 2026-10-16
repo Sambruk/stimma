@@ -297,15 +297,15 @@ require_once 'include/header.php';
                             <div class="login-step">
                                 <div class="step-number">2</div>
                                 <div class="step-content">
-                                    <strong>Klicka på "Skicka inloggningslänk"</strong>
-                                    <p class="mb-0 small text-muted">Ett e-postmeddelande skickas till dig</p>
+                                    <strong>Klicka på "Skicka kod"</strong>
+                                    <p class="mb-0 small text-muted">Ett e-postmeddelande med en sexsiffrig kod skickas till dig</p>
                                 </div>
                             </div>
                             <div class="login-step">
                                 <div class="step-number">3</div>
                                 <div class="step-content">
-                                    <strong>Öppna länken i mailet</strong>
-                                    <p class="mb-0 small text-muted">Klicka på länken så loggas du in automatiskt</p>
+                                    <strong>Skriv in koden</strong>
+                                    <p class="mb-0 small text-muted">Skriv koden från mejlet i rutan på inloggningssidan</p>
                                 </div>
                             </div>
                         </div>
@@ -316,8 +316,8 @@ require_once 'include/header.php';
                             <div class="tip-content">
                                 <strong>Tips!</strong>
                                 <ul class="mb-0 mt-2">
-                                    <li>Inloggningslänken är giltig i <?= loginLinkValidityText() ?></li>
-                                    <li>Länken går att använda flera gånger tills den slutar gälla</li>
+                                    <li>Koden är giltig i <?= loginLinkValidityText() ?> och fungerar en gång</li>
+                                    <li>Koden fungerar bara i webbläsaren där du bad om den – mejlet kan du läsa på mobilen</li>
                                     <li>Kolla skräpposten om du inte hittar mailet</li>
                                     <li>Välj "Kom ihåg mig" för att slippa logga in varje gång</li>
                                 </ul>
@@ -340,7 +340,7 @@ require_once 'include/header.php';
                                             </span>
                                             <div>
                                                 <strong>Utan "Kom ihåg mig"</strong>
-                                                <p class="text-muted small mb-0">Du förblir inloggad i <strong>8 timmar</strong> — en arbetsdag. Efter det behöver du logga in igen med en ny e-postlänk.</p>
+                                                <p class="text-muted small mb-0">Du förblir inloggad i <strong>8 timmar</strong> — en arbetsdag. Efter det behöver du logga in igen med en ny kod.</p>
                                             </div>
                                         </div>
                                     </div>
@@ -396,13 +396,13 @@ require_once 'include/header.php';
                                         <!-- Step 2: generera token + skriv till DB -->
                                         <text x="30" y="125" font-size="11" fill="#6c757d">2</text>
                                         <rect x="290" y="110" width="180" height="40" rx="4" fill="#d1e7dd" stroke="#198754"/>
-                                        <text x="380" y="128" text-anchor="middle" font-size="11" fill="#0f5132">Genererar token</text>
-                                        <text x="380" y="143" text-anchor="middle" font-size="10" fill="#0f5132">Sparar i databasen (15 min)</text>
+                                        <text x="380" y="128" text-anchor="middle" font-size="11" fill="#0f5132">Genererar engångskod</text>
+                                        <text x="380" y="143" text-anchor="middle" font-size="10" fill="#0f5132">Sparar hash i databasen</text>
                                         <!-- Step 3: server → mail -->
                                         <text x="30" y="175" font-size="11" fill="#6c757d">3</text>
                                         <path d="M 380 180 L 620 180" stroke="#198754" stroke-width="2" marker-end="url(#arr)"/>
                                         <text x="500" y="172" text-anchor="middle" font-size="12" fill="#198754">Skickar mail via SMTP</text>
-                                        <text x="500" y="195" text-anchor="middle" font-size="10" fill="#6c757d" font-style="italic">Länk: /verify.php?token=…</text>
+                                        <text x="500" y="195" text-anchor="middle" font-size="10" fill="#6c757d" font-style="italic">Kod: 6 siffror, ingen länk</text>
                                         <!-- Step 4: mail → inkorg -->
                                         <text x="30" y="225" font-size="11" fill="#6c757d">4</text>
                                         <path d="M 620 230 L 820 230" stroke="#6f42c1" stroke-width="2" marker-end="url(#arr)"/>
@@ -410,12 +410,12 @@ require_once 'include/header.php';
                                         <!-- Step 5: klick → server -->
                                         <text x="30" y="275" font-size="11" fill="#6c757d">5</text>
                                         <path d="M 820 280 Q 600 260 380 280" stroke="#fd7e14" stroke-width="2" fill="none" marker-end="url(#arr)"/>
-                                        <text x="600" y="255" text-anchor="middle" font-size="12" fill="#fd7e14">Klicka på länken i mailet</text>
-                                        <text x="600" y="295" text-anchor="middle" font-size="10" fill="#6c757d" font-style="italic">GET /verify.php?token=…</text>
+                                        <text x="600" y="255" text-anchor="middle" font-size="12" fill="#fd7e14">Skriver in koden</text>
+                                        <text x="600" y="295" text-anchor="middle" font-size="10" fill="#6c757d" font-style="italic">POST /index.php (samma webbläsare)</text>
                                         <!-- Step 6: validera + skapa session -->
                                         <text x="30" y="325" font-size="11" fill="#6c757d">6</text>
                                         <rect x="290" y="310" width="180" height="40" rx="4" fill="#d1e7dd" stroke="#198754"/>
-                                        <text x="380" y="328" text-anchor="middle" font-size="11" fill="#0f5132">Validerar token (ej utgången)</text>
+                                        <text x="380" y="328" text-anchor="middle" font-size="11" fill="#0f5132">Validerar kod (engångs, max 5 försök)</text>
                                         <text x="380" y="343" text-anchor="middle" font-size="10" fill="#0f5132">Skapar session</text>
                                         <!-- Step 7: redirect → dashboard -->
                                         <text x="30" y="375" font-size="11" fill="#6c757d">7</text>
@@ -432,7 +432,7 @@ require_once 'include/header.php';
                                 </div>
                                 <div class="small text-muted mt-2">
                                     <i class="bi bi-info-circle me-1"></i>
-                                    Samma flöde används för publik kursregistrering — då bär magic-länken även med sig en kurs-koppling så att du automatiskt skrivs in i kursen efter inloggning.
+                                    Samma flöde används för publik kursregistrering — då är kodbegäran kopplad till kursen så att du automatiskt skrivs in i kursen efter inloggning.
                                 </div>
                             </div>
                         </div>
@@ -1171,8 +1171,8 @@ require_once 'include/header.php';
                         <ol class="small">
                             <li>Deltagaren öppnar den länk du delat</li>
                             <li>Formulär: <strong>e-postadress</strong> + <strong>namn</strong> (obligatoriska)</li>
-                            <li>En inloggningslänk skickas till e-posten (giltig <?= loginLinkValidityText() ?>)</li>
-                            <li>Vid klick på länken skapas deltagarkontot automatiskt och kopplas till just denna kurs</li>
+                            <li>En kod skickas till e-posten (giltig <?= loginLinkValidityText() ?>)</li>
+                            <li>När koden skrivs in skapas deltagarkontot automatiskt och kopplas till just denna kurs</li>
                             <li>För stegvisa kurser: första lektionen är direkt upplåst</li>
                         </ol>
                     </div>
@@ -2014,7 +2014,7 @@ Content-Type: application/json
                     <div class="tip-icon"><i class="bi bi-info-circle-fill"></i></div>
                     <div class="tip-content">
                         <strong>Inloggning påverkas aldrig</strong>
-                        <p class="mb-0 mt-1">Även en inaktiverad användare kan fortfarande logga in med magic link — <code>sync_status</code> styr bara synkstatusen, inte åtkomsten. Superadmins roll ändras aldrig av en synk.</p>
+                        <p class="mb-0 mt-1">Även en inaktiverad användare kan fortfarande logga in med kod — <code>sync_status</code> styr bara synkstatusen, inte åtkomsten. Superadmins roll ändras aldrig av en synk.</p>
                     </div>
                 </div>
             </div>
@@ -2090,11 +2090,12 @@ Authorization: Bearer stm_din_nyckel_här</code></pre>
         <div class="row g-4">
             <div class="col-md-6">
                 <div class="troubleshoot-card">
-                    <h6><i class="bi bi-link-45deg text-danger me-2"></i>Inloggningslänken fungerar inte</h6>
+                    <h6><i class="bi bi-key text-danger me-2"></i>Koden fungerar inte</h6>
                     <ul class="mb-0">
-                        <li>Länken är giltig i max <?= loginLinkValidityText() ?></li>
-                        <li>Har du begärt flera länkar fungerar bara den senaste</li>
-                        <li>Begär en ny länk</li>
+                        <li>Koden är giltig i max <?= loginLinkValidityText() ?> och fungerar en gång</li>
+                        <li>Har du begärt flera koder fungerar bara den senaste</li>
+                        <li>Koden fungerar bara i webbläsaren där du bad om den</li>
+                        <li>Efter 5 felaktiga försök måste du be om en ny kod</li>
                     </ul>
                 </div>
             </div>

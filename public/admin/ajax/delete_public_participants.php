@@ -95,7 +95,7 @@ foreach ($userIds as $uid) {
               . '<p>' . $greeting . '</p>'
               . '<p>Din registrering för kursen <strong>' . htmlspecialchars($course['title']) . '</strong> har tagits bort, och all din data för kursen har raderats.</p>'
               . '<p>Åtgärden utfördes av kursens administratör.</p>'
-              . '<p>Om du vill delta i kursen igen, kontakta administratören för en ny inloggningslänk.</p>'
+              . '<p>Om du vill delta i kursen igen, kontakta kursens administratör.</p>'
               . '<p>Hälsningar,<br>' . htmlspecialchars($systemName) . '</p>'
               . '</body></html>';
         @sendSmtpMail($target['email'], $subject, $body, $mailFrom, $mailFromName);

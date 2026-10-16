@@ -125,7 +125,7 @@ try {
                     <strong style='font-size: 1.1em;'>$courseTitle</strong>
                 </div>
                 <p>Som redaktör kan du redigera kursens innehåll och lektioner.</p>
-                <p>Logga in med din e-postadress på $siteUrl – du får en inloggningslänk till den här adressen.
+                <p>Logga in med din e-postadress på $siteUrl – du får en kod till den här adressen.
                    Kursen finns sedan under Administration → Kurser.</p>
                 <p style='text-align: center; margin-top: 25px;'>
                     <a href='$siteUrl/admin/courses.php' style='background: #0F3B5F; color: #fff; padding: 12px 30px; text-decoration: none; border-radius: 5px;'>Gå till kurser</a>

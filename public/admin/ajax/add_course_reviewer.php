@@ -102,7 +102,7 @@ $emailBody = "
         $inaktiv
         <p>Du kan läsa hela kursen och prova quizen. Inga framsteg eller svar sparas, och du kan inte ändra något.
            Synpunkter skickar du till $avsandare.</p>
-        <p>Logga in med din e-postadress på $siteUrl – du får en inloggningslänk till den här adressen.
+        <p>Logga in med din e-postadress på $siteUrl – du får en kod till den här adressen.
            Kursen finns sedan under Kurser att granska på startsidan.</p>
         <p style='text-align: center; margin-top: 25px;'>
             <a href='$kursLank' style='background: #0F3B5F; color: #fff; padding: 12px 30px; text-decoration: none; border-radius: 5px;'>Öppna kursen</a>

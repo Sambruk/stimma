@@ -363,7 +363,7 @@ function insynLastLogins(): array {
     $db = DB_DATABASE;
     foreach (insynAll(
         "SELECT LOWER(email) AS email, MAX(created_at) AS last FROM $db.logs
-          WHERE message LIKE 'Lyckad inloggning med token%' OR message LIKE 'Automatisk inloggning via kom-ihåg-mig%'
+          WHERE message LIKE 'Lyckad inloggning med token%' OR message LIKE 'Lyckad inloggning med kod%' OR message LIKE 'Automatisk inloggning via kom-ihåg-mig%'
           GROUP BY LOWER(email)"
     ) as $r) {
         $map[$r['email']] = $r['last'];

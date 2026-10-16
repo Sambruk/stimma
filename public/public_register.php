@@ -4,8 +4,8 @@
  *
  * Anonym landningssida för externa deltagare. Admin genererar en unik länk per
  * publik kurs och delar den. Användaren registrerar sig med e-post + namn, får
- * en magic-link i sin inkorg, och när länken verifieras skapas public_course_access
- * automatiskt via verify.php. Användaren får access_mode='public_only' om de
+ * en inloggningskod i sin inkorg, och när koden godkänns skapas public_course_access
+ * automatiskt (completeLogin i auth.php). Användaren får access_mode='public_only' om de
  * inte redan finns i users-tabellen.
  *
  * URL-mönster: /public_register.php?course_id=X&token=HEX
@@ -51,7 +51,7 @@ $error = null;
 $success = null;
 
 // Hastighetsbegränsning per IP + e-post (enkel sessionsbaserad — räcker mot
-// snabb abuse, bot-trafik får magic-link som gatekeeper ändå).
+// snabb abuse, bot-trafik får inloggningskoden som gatekeeper ändå).
 function publicRegisterRateLimit($email) {
     $key = 'pub_reg_' . md5(strtolower($email) . '|' . ($_SERVER['REMOTE_ADDR'] ?? ''));
     $now = time();
@@ -102,27 +102,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 execute("UPDATE " . DB_DATABASE . ".users SET name = ? WHERE id = ? AND (name IS NULL OR name = '')", [$name, $existing['id']]);
             }
 
-            // Skicka magic-link. sendLoginToken skriver en ny verification_token
-            // på users-raden — vi läser den direkt efteråt.
-            $sent = sendLoginToken($email);
-            if ($sent) {
-                $row = queryOne(
-                    "SELECT verification_token FROM " . DB_DATABASE . ".users WHERE email = ?",
-                    [$email]
+            // Skicka inloggningskod (2026-10-16). Registreringen kopplas till
+            // kodbegärans request_id och fullföljs när koden godkänns
+            // (completeLogin i auth.php). Koden skrivs in på inloggningssidan.
+            $skickad = sendLoginCode($email);
+            if ($skickad['ok']) {
+                $expiryMin = (int)getenv('AUTH_TOKEN_EXPIRY_MINUTES') ?: 15;
+                execute(
+                    "INSERT INTO " . DB_DATABASE . ".public_registration_intents
+                     (verification_token, email, course_id, name, expires_at)
+                     VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE))
+                     ON DUPLICATE KEY UPDATE email = VALUES(email), course_id = VALUES(course_id), name = VALUES(name), expires_at = VALUES(expires_at)",
+                    [$skickad['request_id'], $email, $course['id'], $name, $expiryMin]
                 );
-                if ($row && !empty($row['verification_token'])) {
-                    $expiryMin = (int)getenv('AUTH_TOKEN_EXPIRY_MINUTES') ?: 15;
-                    execute(
-                        "INSERT INTO " . DB_DATABASE . ".public_registration_intents
-                         (verification_token, email, course_id, name, expires_at)
-                         VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE))
-                         ON DUPLICATE KEY UPDATE email = VALUES(email), course_id = VALUES(course_id), name = VALUES(name), expires_at = VALUES(expires_at)",
-                        [$row['verification_token'], $email, $course['id'], $name, $expiryMin]
-                    );
-                }
-                // Samma meddelande oavsett om e-posten redan fanns — undviker
-                // e-post-enumeration.
-                $success = 'Vi har skickat en inloggningslänk till din e-post. Länken är giltig i ' . ((int)getenv('AUTH_TOKEN_EXPIRY_MINUTES') ?: 15) . ' minuter. Kolla även skräpposten om du inte ser den.';
+                // Samma svar oavsett om e-posten redan fanns — undviker e-post-enumeration.
+                redirect('index.php');
+                exit;
             } else {
                 $error = 'Det gick inte att skicka e-postmeddelandet just nu. Försök igen.';
             }
@@ -162,7 +157,7 @@ $page_title = 'Registrera dig för ' . $course['title'];
                     <?php if ($success): ?>
                         <div class="alert alert-success">
                             <i class="bi bi-envelope-paper-fill me-2"></i>
-                            <strong>Inloggningslänk på väg!</strong>
+                            <strong>Kod på väg!</strong>
                             <p class="mb-0 mt-2"><?= htmlspecialchars($success) ?></p>
                         </div>
                     <?php else: ?>
@@ -174,7 +169,7 @@ $page_title = 'Registrera dig för ' . $course['title'];
                         <?php endif; ?>
 
                         <p class="small text-muted">
-                            Fyll i dina uppgifter så skickar vi en inloggningslänk till din e-post.
+                            Fyll i dina uppgifter så skickar vi en kod till din e-post.
                             När du klickar på länken kopplas du till kursen och kan börja studera direkt.
                             Du får endast tillgång till den här kursen.
                         </p>
@@ -192,7 +187,7 @@ $page_title = 'Registrera dig för ' . $course['title'];
                                 <label for="name">Ditt namn</label>
                             </div>
                             <button type="submit" class="btn btn-primary w-100">
-                                <i class="bi bi-envelope me-1"></i>Skicka inloggningslänk
+                                <i class="bi bi-envelope me-1"></i>Skicka kod
                             </button>
                         </form>
                     <?php endif; ?>

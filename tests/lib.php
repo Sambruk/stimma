@@ -150,3 +150,32 @@ function xlsxText(string $body): string {
     unlink($f);
     return html_entity_decode($out, ENT_QUOTES | ENT_XML1, 'UTF-8');
 }
+
+// ---------------------------------------------------------------- utgående post
+
+/** Starta SMTP-mottagaren (tests/smtp_sink.php) om den inte redan körs, och töm postlådan. */
+function mailSinkStart(): void {
+    if (!@fsockopen('127.0.0.1', 2525, $e, $s, 0.2)) {
+        exec('php ' . escapeshellarg(__DIR__ . '/smtp_sink.php') . ' > /dev/null 2>&1 &');
+        for ($i = 0; $i < 50 && !@fsockopen('127.0.0.1', 2525, $e, $s, 0.1); $i++) usleep(100000);
+    }
+    foreach (glob('/tmp/stimma-mail/*.eml') ?: [] as $f) unlink($f);
+}
+
+/** Textinnehållet (avkodat) i alla mejl till adressen, äldst först. */
+function mailsTo(string $email): array {
+    $ut = [];
+    foreach (glob('/tmp/stimma-mail/*.eml') ?: [] as $f) {
+        $raw = file_get_contents($f);
+        if (!preg_match('/^X-Sink-To: (.*)$/m', $raw, $m) || !in_array(strtolower($email), explode(',', trim($m[1])), true)) continue;
+        $ut[] = quoted_printable_decode($raw);
+    }
+    return $ut;
+}
+
+/** Senaste inloggningskoden i mejl till adressen (sex siffror, visas "123 456"). */
+function lastLoginCode(string $email): ?string {
+    $mejl = mailsTo($email);
+    if (!$mejl) return null;
+    return preg_match('/\b(\d{3}) (\d{3})\b/', end($mejl), $m) ? $m[1] . $m[2] : null;
+}

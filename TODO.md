@@ -19,6 +19,21 @@
 - [ ] Thomas: kontrollera DPA i Scaleway-konsolen
 - [ ] Återgång vid problem: kopiera tillbaka .env-backupen (läses per anrop, ingen omstart)
 
+### Inloggning med engångskod i stället för länk (Thomas 2026-10-16)
+Fynd: länken gick att använda flera gånger i giltighetstiden (327 länkar → 444 inloggningar på 60 dagar);
+säkerhetsfilter som öppnar länkar blev inloggade.
+- [x] Migrering 053: login_codes (hash, request_id, webbläsarbindning, försök, engångs). Utestående länkar nollas
+- [x] auth.php: sendLoginCode / verifyLoginCode / completeLogin; session och kom-ihåg-mig oförändrade
+- [x] index.php: steg 1 e-post, steg 2 kod (one-time-code), Skicka ny kod, Använd en annan adress
+- [x] Mejlet utan länk; adressen till Stimma som text
+- [x] public_register.php: registreringen kopplad till request_id, fullföljs när koden godkänns
+- [x] verify.php: förklarar att länkar inte längre gäller
+- [x] Gränser: 5 fel per kod, 5 koder/timme, 20 fel/dygn per adress
+- [x] Texter: användarhandboken, redaktörs-/granskarmejlen; insyns-API:t räknar 'Lyckad inloggning med kod'
+- [x] tests/test_inloggning.php 32/32 (SMTP-mottagare tests/smtp_sink.php), sviten 345/345; mutationsprov på bindning och engångs
+- [ ] Thomas OK: driftsätt (backup → 053 → kod). Ordningen är viktig: koden utan tabellen stoppar all inloggning
+- [ ] Mätning: andel koder utan inloggning inom 3 h (loggraderna 'Inloggningskod skickad' / 'Lyckad inloggning med kod')
+
 ### Granskare per kurs – läsrätt för externa på baskurser (Thomas 2026-10-14)
 - [x] Migrering 052: tabellen course_reviewers (som course_editors, ON DELETE CASCADE)
 - [x] isCourseReviewer()/getReviewCourses(); userCanViewCourseLessons släpper in granskare i förhandsgranskning
