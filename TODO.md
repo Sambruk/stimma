@@ -2,6 +2,27 @@
 
 ## Pågående
 
+### AI-förbrukning över 100 % (Säter, Störningsjouren) 2026-10-19
+Störningsjouren visade 202 %: 5 stoppade bildanrop loggades som `blocked` med 10 000 tokens vardera
+och räknades som förbrukning. Säter visade 220 % av gratisbasen men hade sparat saldo (111 114 → 1 114).
+- [x] getMonthlyAiUsage räknar bara status='ok'; blocked/error loggas med 0 tokens
+- [x] ai_usage.php: summeringarna räknar bara 'ok'
+- [x] ai_usage.php: org-rader visar saldo i stället för % av gratisbasen
+- [x] Gemensam översikt för saldo (getAiBalanceOverview) med vem som kan beställa
+- [x] Startsidans AI-kort: saldo, hur gratisbasen fungerar, vad en bild kostar, var man beställer
+- [x] Bannern i headern: redaktör ser vilka administratörer som kan beställa
+- [x] Test i testmiljön (alla sviter gröna) + manuell kontroll mot prod-data: Säter 1 114 i saldo,
+  Störningsjouren 102 %, redaktör ser Säters två admins, Anders ser att domänen inte kan beställa
+- [ ] Beslut (Thomas): är 10 000 tokens per AI-bild rätt? Fem bilder tömmer en månads gratisbas
+- [ ] AVVAKTAR (Thomas osäker 2026-10-19): skapa organisation för alla vitlistade domäner så att alla kan
+  beställa tokens. Plan, konsekvenser och skript i docs/org-massinforande/README.md. SQL:en måste
+  genereras om före körning. Öppet: meddela Magnus (insyns-id byts), Göteborgs startsaldo 0 eller fullt
+
+### "Hoppa över frågan" syntes för redaktör (2026-10-19)
+- [x] Utrett: knappen visas bara i förhandsgranskning eller i en slutförd lektion (include/lesson_c2.php). Inget fel
+- [x] Knapptexten i förhandsgranskning är nu "Hoppa över frågan (bara i förhandsgranskning)"
+- [x] Svarsutkast till Zammad skrivet
+
 ### Anders Wockatz återkoppling 2026-10-13
 - [x] Redaktör för 161, 176, 177, 178, 198 (Thomas OK 2026-10-13) – nu 10 kurser
 - [x] Svarstext till Zammad: exports/aterkoppling_wockatz_baskurser_2026-10-13.txt

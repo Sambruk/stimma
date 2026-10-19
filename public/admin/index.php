@@ -379,67 +379,100 @@ require_once 'include/header.php';
     </div>
 </div>
 
-<!-- AI-kvotwidget — visar aktuell användning vs kvot för admins egen org -->
+<!-- AI-saldo — hur mycket som finns kvar, när det fylls på och var man beställer mer -->
 <?php
 require_once '../include/ai_quota.php';
-$aiWidgetScope = getAiScopeForEmail($_SESSION['user_email']);
-$aiWidgetUsage = getMonthlyAiUsage($aiWidgetScope['organization_id'], $aiWidgetScope['domain']);
-$aiWidgetQuota = getAiQuota($aiWidgetScope['organization_id'], $aiWidgetScope['domain']);
-$aiWidgetTokensQuota = max(1, (int)$aiWidgetQuota['monthly_token_quota']);
-$aiWidgetTokensUsed = (int)$aiWidgetUsage['total_tokens'];
-$aiWidgetPct = (int)floor(($aiWidgetTokensUsed / $aiWidgetTokensQuota) * 100);
-$aiWidgetColor = $aiWidgetPct >= 100 ? 'bg-danger' : ($aiWidgetPct >= (int)$aiWidgetQuota['alert_threshold_pct'] ? 'bg-warning' : 'bg-success');
-$aiWidgetLabel = $aiWidgetScope['label'] ?: ($_SESSION['user_email'] ?? 'din organisation');
+$aiSaldo = getAiBalanceOverview($_SESSION['user_email']);
+$aiBas = max(1, $aiSaldo['monthly_base']);
+// Stapeln visar saldot mot en månads gratisbas. Sparat saldo kan överstiga
+// basen; då är stapeln full och siffran visar hela saldot.
+$aiStapelPct = (int)min(100, floor($aiSaldo['remaining'] / $aiBas * 100));
+$aiFarg = $aiSaldo['level'] === 'block' || $aiSaldo['remaining'] <= 0 ? 'bg-danger'
+        : ($aiSaldo['level'] === 'warn' ? 'bg-warning' : 'bg-success');
+$aiPafyllning = date('j', strtotime($aiSaldo['next_refill'])) . ' '
+    . ['', 'januari', 'februari', 'mars', 'april', 'maj', 'juni', 'juli', 'augusti',
+       'september', 'oktober', 'november', 'december'][(int)date('n', strtotime($aiSaldo['next_refill']))];
+$aiFmt = fn($n) => number_format((int)$n, 0, ',', ' ');
+$aiAdminText = formatAiOrderAdmins($aiSaldo['admins']);
 ?>
 <div class="row mb-4">
     <div class="col-12">
         <div class="card border-0 shadow">
             <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start mb-3">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
                     <div>
-                        <h6 class="font-weight-bold text-primary mb-1">
-                            <i class="bi bi-robot me-1"></i>AI-användning denna månad
-                        </h6>
-                        <small class="text-muted"><?= htmlspecialchars($aiWidgetLabel) ?> · <?= date('Y-m') ?></small>
+                        <h2 class="h6 font-weight-bold text-primary mb-1">
+                            <i class="bi bi-robot me-1" aria-hidden="true"></i><?= $aiSaldo['mode'] === 'balance' ? 'AI-saldo' : 'AI-kvot denna månad' ?>
+                        </h2>
+                        <small class="text-muted"><?= htmlspecialchars($aiSaldo['label'] ?: 'din organisation') ?></small>
                     </div>
-                    <?php /* ai_usage.php kräver admin. Läsbehörig och redaktör fick
-                            knappen men kastades ut av behörighetskontrollen. */ ?>
-                    <?php if ($isAdmin): ?>
-                    <a href="ai_usage.php" class="btn btn-sm btn-outline-primary">
-                        <i class="bi bi-bar-chart me-1"></i>Se detaljer
-                    </a>
-                    <?php endif; ?>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <?php if ($isAdmin && $aiSaldo['can_order']): ?>
+                        <a href="order_tokens.php" class="btn btn-sm btn-primary">
+                            <i class="bi bi-cart-plus me-1" aria-hidden="true"></i>Beställ fler tokens
+                        </a>
+                        <?php endif; ?>
+                        <?php /* ai_usage.php kräver admin. Läsbehörig och redaktör fick
+                                knappen men kastades ut av behörighetskontrollen. */ ?>
+                        <?php if ($isAdmin): ?>
+                        <a href="ai_usage.php" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-bar-chart me-1" aria-hidden="true"></i>Se detaljer
+                        </a>
+                        <?php endif; ?>
+                    </div>
                 </div>
-                <div class="d-flex align-items-center gap-3 mb-2">
-                    <div class="flex-grow-1">
-                        <div class="progress" style="height: 14px;">
-                            <div class="progress-bar <?= $aiWidgetColor ?>" role="progressbar"
-                                 style="width: <?= min(100, $aiWidgetPct) ?>%;"
-                                 aria-valuenow="<?= $aiWidgetPct ?>" aria-valuemin="0" aria-valuemax="100">
-                                <?= $aiWidgetPct ?>%
-                            </div>
+
+                <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
+                    <div>
+                        <span class="h4 fw-bold mb-0"><?= $aiFmt($aiSaldo['remaining']) ?></span>
+                        <span class="text-muted">tokens kvar</span>
+                    </div>
+                    <div class="flex-grow-1" style="min-width: 160px;">
+                        <div class="progress" style="height: 10px;" role="progressbar"
+                             aria-label="Kvar av en månads gratisbas"
+                             aria-valuenow="<?= $aiStapelPct ?>" aria-valuemin="0" aria-valuemax="100">
+                            <div class="progress-bar <?= $aiFarg ?>" style="width: <?= $aiStapelPct ?>%;"></div>
                         </div>
                     </div>
-                    <div class="text-end" style="min-width: 200px;">
-                        <span class="font-weight-bold"><?= number_format($aiWidgetTokensUsed, 0, ',', ' ') ?></span>
-                        <span class="text-muted">/ <?= number_format($aiWidgetTokensQuota, 0, ',', ' ') ?> tokens</span>
-                    </div>
                 </div>
-                <div class="d-flex justify-content-between align-items-center text-muted small">
-                    <span><?= number_format($aiWidgetUsage['requests'], 0, ',', ' ') ?> AI-anrop</span>
-                    <?php if ($aiWidgetPct >= 100): ?>
-                        <span class="text-danger fw-semibold">
-                            <i class="bi bi-exclamation-octagon me-1"></i>Kvoten är förbrukad —
-                            <a href="mailto:hjalp@sambruksupport.se">hjalp@sambruksupport.se</a>
-                        </span>
-                    <?php elseif ($aiWidgetPct >= (int)$aiWidgetQuota['alert_threshold_pct']): ?>
-                        <span class="text-warning fw-semibold">
-                            <i class="bi bi-exclamation-triangle me-1"></i>Närmar sig gränsen
-                        </span>
+
+                <p class="small text-muted mb-2">
+                    <?php if ($aiSaldo['mode'] === 'balance'): ?>
+                        Den <?= $aiPafyllning ?> läggs månadens gratisbas på <?= $aiFmt($aiSaldo['monthly_base']) ?> tokens till.
+                        Det som inte används sparas till nästa månad.
                     <?php else: ?>
-                        <span><?= number_format(max(0, $aiWidgetTokensQuota - $aiWidgetTokensUsed), 0, ',', ' ') ?> tokens kvar</span>
+                        Kvoten är <?= $aiFmt($aiSaldo['monthly_base']) ?> tokens per månad och börjar om den <?= $aiPafyllning ?>.
+                        Det som inte används sparas inte.
                     <?php endif; ?>
-                </div>
+                    Denna månad: <?= $aiFmt($aiSaldo['used_this_month']) ?> tokens på <?= $aiFmt($aiSaldo['requests_this_month']) ?> AI-anrop.
+                    En AI-bild drar <?= $aiFmt(AI_IMAGE_TOKEN_EQUIVALENT) ?> tokens, en lektionstext ungefär 3 000 och en fråga till AI-handledaren under 1 000.
+                </p>
+
+                <?php if ($aiSaldo['level'] === 'block'): ?>
+                    <div class="alert alert-danger small mb-0 py-2">
+                        <i class="bi bi-exclamation-octagon me-1" aria-hidden="true"></i>
+                        <strong>AI-funktionerna är stoppade tills <?= $aiSaldo['mode'] === 'balance' ? 'saldot fylls på' : 'kvoten börjar om' ?>.</strong>
+                <?php elseif ($aiSaldo['level'] === 'warn'): ?>
+                    <div class="alert alert-warning small mb-0 py-2">
+                        <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+                        <strong>Saldot börjar ta slut.</strong>
+                <?php else: ?>
+                    <div class="small text-muted">
+                <?php endif; ?>
+                    <?php if (!$aiSaldo['can_order']): ?>
+                        Er e-postdomän är inte kopplad till en organisation i Stimma, så det går inte att beställa fler tokens.
+                        Kontakta <a href="mailto:hjalp@sambruksupport.se">hjalp@sambruksupport.se</a> om ni behöver mer.
+                    <?php elseif ($isAdmin): ?>
+                        Behöver ni mer? Klicka på <a href="order_tokens.php">Beställ fler tokens</a>
+                        (finns också i menyn till vänster). Saldot fylls på direkt.
+                    <?php elseif ($aiAdminText !== ''): ?>
+                        Behöver ni mer? Det är en administratör som beställer:
+                        <?= htmlspecialchars($aiAdminText) ?>.
+                    <?php else: ?>
+                        Behöver ni mer? Er organisation saknar administratör i Stimma.
+                        Kontakta <a href="mailto:hjalp@sambruksupport.se">hjalp@sambruksupport.se</a>.
+                    <?php endif; ?>
+                    </div>
             </div>
         </div>
     </div>

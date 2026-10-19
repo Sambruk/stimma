@@ -374,6 +374,12 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 $aiQuotaScope = getAiScopeForEmail($_SESSION['user_email']);
                 $aiQuotaCheck = checkAiQuota($aiQuotaScope['organization_id'], $aiQuotaScope['domain']);
                 $orderLink = $isAdmin ? 'order_tokens.php' : null;
+                // Redaktören kan inte beställa själv. Säg vem som kan, i stället
+                // för ett allmänt "be en administratör".
+                $aiAdminText = '';
+                if (!$orderLink && $aiQuotaCheck['level'] !== 'ok') {
+                    $aiAdminText = formatAiOrderAdmins(getAiBalanceOverview($_SESSION['user_email'])['admins']);
+                }
                 if ($aiQuotaCheck['level'] === 'block'):
             ?>
                 <div class="alert alert-danger d-flex align-items-start" role="alert">
@@ -388,14 +394,14 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                 eller kontakta
                                 <a href="mailto:hjalp@sambruksupport.se" class="alert-link">hjalp@sambruksupport.se</a>.
                             <?php else: ?>
-                                Be en administratör att beställa fler tokens.
+                                Be en administratör att beställa fler tokens<?= $aiAdminText !== '' ? ': ' . htmlspecialchars($aiAdminText) : '' ?>.
                             <?php endif; ?>
                         <?php else: ?>
                             <strong>AI-kvoten är förbrukad denna månad</strong>
                             — <?= number_format($aiQuotaCheck['tokens_used'], 0, ',', ' ') ?>
                             / <?= number_format($aiQuotaCheck['tokens_quota'], 0, ',', ' ') ?> tokens använda
                             (<?= $aiQuotaCheck['pct'] ?>%).
-                            Nya AI-anrop blockeras tills nästa kalendermånad.
+                            Nya AI-anrop blockeras tills kvoten börjar om den 1:a nästa månad.
                             Kontakta <a href="mailto:hjalp@sambruksupport.se" class="alert-link">hjalp@sambruksupport.se</a>.
                         <?php endif; ?>
                     </div>
@@ -411,7 +417,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                             <?php if ($orderLink): ?>
                                 <a href="<?= $orderLink ?>" class="alert-link">Beställ fler tokens</a>.
                             <?php else: ?>
-                                Be en administratör att beställa fler tokens.
+                                Be en administratör att beställa fler tokens<?= $aiAdminText !== '' ? ': ' . htmlspecialchars($aiAdminText) : '' ?>.
                             <?php endif; ?>
                         <?php else: ?>
                             <strong>AI-kvoten närmar sig sin gräns</strong>

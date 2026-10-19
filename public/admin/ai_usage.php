@@ -112,7 +112,7 @@ $scopeRows = query(
         COALESCE(CAST(organization_id AS CHAR), '') AS org_id,
         COALESCE(domain, '') AS domain,
         COUNT(*) AS requests,
-        SUM(total_tokens) AS tokens,
+        SUM(CASE WHEN status = 'ok' THEN total_tokens ELSE 0 END) AS tokens,
         SUM(CASE WHEN status='blocked' THEN 1 ELSE 0 END) AS blocked
        FROM " . DB_DATABASE . ".ai_usage_log
       WHERE created_at >= ? AND created_at < ? AND $adminScopeFragment
@@ -146,13 +146,17 @@ foreach ((array)$scopeRows as $r) {
         'tokens_quota' => $tokensQuota,
         'blocked' => (int)$r['blocked'],
         'pct' => $pct,
+        // Organisationer har saldo med sparade tokens, så % av gratisbasen
+        // säger inget om huruvida de har slut. Visa saldot i stället.
+        'balance' => $orgId ? getOrgTokenBalance($orgId) : null,
+        'threshold' => (int)$quota['alert_threshold_pct'],
         'quota_is_default' => $quota['is_default'],
     ];
 }
 
 // --- Per feature ---------------------------------------------------------
 $featureRows = query(
-    "SELECT feature, COUNT(*) AS requests, SUM(total_tokens) AS tokens
+    "SELECT feature, COUNT(*) AS requests, SUM(CASE WHEN status = 'ok' THEN total_tokens ELSE 0 END) AS tokens
        FROM " . DB_DATABASE . ".ai_usage_log
       WHERE created_at >= ? AND created_at < ? AND $adminScopeFragment
       GROUP BY feature
@@ -181,7 +185,7 @@ if ($drillOrgId || $drillDomain !== '') {
         "SELECT u.course_id,
                 c.title AS course_title,
                 COUNT(*) AS requests,
-                SUM(u.total_tokens) AS tokens
+                SUM(CASE WHEN u.status = 'ok' THEN u.total_tokens ELSE 0 END) AS tokens
            FROM " . DB_DATABASE . ".ai_usage_log u
            LEFT JOIN " . DB_DATABASE . ".courses c ON c.id = u.course_id
           WHERE $whereScope $featureFilter
@@ -193,7 +197,7 @@ if ($drillOrgId || $drillDomain !== '') {
     );
 
     $drillUsers = query(
-        "SELECT user_email, COUNT(*) AS requests, SUM(total_tokens) AS tokens
+        "SELECT user_email, COUNT(*) AS requests, SUM(CASE WHEN status = 'ok' THEN total_tokens ELSE 0 END) AS tokens
            FROM " . DB_DATABASE . ".ai_usage_log
           WHERE $whereScope $featureFilter
             AND created_at >= ? AND created_at < ?
@@ -393,15 +397,20 @@ require_once 'include/header.php';
 <div class="card">
     <div class="card-header">
         <strong><?= $isSuperAdmin ? 'Per organisation/domän' : 'Översikt' ?> — <?= sprintf('%04d-%02d', $year, $month) ?></strong>
+        <div class="small text-muted mt-1">
+            Organisationer har ett saldo. Gratisbasen läggs på den 1:a varje månad och det som inte används sparas,
+            så en månads förbrukning kan vara större än gratisbasen. Domäner utan organisation har en månadskvot som börjar om varje månad.
+            Stoppade och misslyckade anrop räknas inte som förbrukning. Kolumnen Kvar visar läget just nu, oavsett vilken månad du tittar på.
+        </div>
     </div>
     <div class="table-responsive">
         <table class="table table-sm align-middle mb-0">
             <thead><tr>
                 <th>Scope</th>
                 <th class="text-end">Anrop</th>
-                <th class="text-end">Tokens</th>
-                <th>Kvot</th>
-                <th>%</th>
+                <th class="text-end">Förbrukat</th>
+                <th>Gratisbas/kvot per månad</th>
+                <th>Kvar</th>
                 <th class="text-end">Blockerade</th>
                 <th></th>
             </tr></thead>
@@ -427,12 +436,23 @@ require_once 'include/header.php';
                             <?php endif; ?>
                         </td>
                         <td style="min-width:160px;">
-                            <div class="progress" style="height: 16px;">
-                                <div class="progress-bar <?= $color ?>" role="progressbar"
-                                     style="width: <?= min(100, $s['pct']) ?>%;">
-                                    <?= $s['pct'] ?>%
+                            <?php if ($s['balance'] !== null): ?>
+                                <?php
+                                    $bal = (int)$s['balance'];
+                                    $cls = $bal <= 0 ? 'text-danger fw-bold'
+                                         : ($bal < $s['tokens_quota'] * $s['threshold'] / 100 ? 'text-warning fw-semibold' : '');
+                                ?>
+                                <span class="<?= $cls ?>"><?= number_format($bal, 0, ',', ' ') ?></span>
+                                <span class="text-muted small">i saldo</span>
+                            <?php else: ?>
+                                <div class="progress" style="height: 16px;" role="progressbar"
+                                     aria-label="Använt av månadskvoten"
+                                     aria-valuenow="<?= min(100, $s['pct']) ?>" aria-valuemin="0" aria-valuemax="100">
+                                    <div class="progress-bar <?= $color ?>" style="width: <?= min(100, $s['pct']) ?>%;">
+                                        <?= $s['pct'] ?>% använt
+                                    </div>
                                 </div>
-                            </div>
+                            <?php endif; ?>
                         </td>
                         <td class="text-end">
                             <?= $s['blocked'] > 0 ? '<span class="badge bg-danger">' . $s['blocked'] . '</span>' : '0' ?>

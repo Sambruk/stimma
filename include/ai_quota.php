@@ -116,7 +116,7 @@ function getMonthlyAiUsage($organizationId, $domain, $year = null, $month = null
                     COUNT(*) AS requests
                FROM " . DB_DATABASE . ".ai_usage_log
               WHERE organization_id = ?
-                AND status IN ('ok','blocked')
+                AND status = 'ok'
                 AND created_at >= ? AND created_at < ?",
             [$organizationId, $start, $end]
         );
@@ -127,7 +127,7 @@ function getMonthlyAiUsage($organizationId, $domain, $year = null, $month = null
                     COUNT(*) AS requests
                FROM " . DB_DATABASE . ".ai_usage_log
               WHERE domain = ?
-                AND status IN ('ok','blocked')
+                AND status = 'ok'
                 AND created_at >= ? AND created_at < ?",
             [$domain, $start, $end]
         );
@@ -377,7 +377,12 @@ function logAiUsage(array $context, array $usage, $model, $status = 'ok') {
 
         $promptT = (int)($usage['prompt_tokens'] ?? 0);
         $completionT = (int)($usage['completion_tokens'] ?? 0);
-        if ($isImage) {
+        if ($status !== 'ok') {
+            // Stoppade och misslyckade anrop gick aldrig igenom hos OpenAI och
+            // ska inte synas som förbrukning. Förut fick en stoppad bild 10 000
+            // tokens, och Störningsjouren stod på 202 % av kvoten (2026-10-19).
+            $totalT = 0;
+        } elseif ($isImage) {
             // Bild: drar fast token-ekvivalent mot KVOTEN — en bild ska kosta
             // lika mycket av kvoten oavsett format. cost_cents räknas däremot på
             // de faktiska bildtokens som svaret rapporterar (se
@@ -551,4 +556,78 @@ function upsertAiQuota($organizationId, $domain, $tokenQuota, $thresholdPct, $be
         [$organizationId, $domain, $tokenQuota, $thresholdPct, $behavior, $notes, $updatedBy]
     );
     return (int)getDb()->lastInsertId();
+}
+
+/**
+ * Samlad bild av AI-saldot för en användare, för startsidans kort och
+ * bannern i headern. Ska svara på tre frågor: hur mycket finns kvar, när
+ * fylls det på, och vem kan beställa mer.
+ *
+ * Organisationer har ett saldo: gratisbasen läggs på den 1:a varje månad och
+ * oanvända tokens sparas. Därför kan månadens förbrukning vara större än
+ * gratisbasen utan att något är fel (Säter 2026-10: 110 000 av 50 000).
+ * Domäner utan organisation har bara en månadskvot och kan inte beställa.
+ *
+ * @return array {
+ *   mode: 'balance'|'monthly_quota', label, level, allowed,
+ *   remaining: int,        // saldo resp. kvar av månadskvoten (aldrig < 0)
+ *   monthly_base: int,     // gratisbas/månadskvot
+ *   used_this_month: int, requests_this_month: int,
+ *   next_refill: string,   // Y-m-d
+ *   can_order: bool,       // scopet är en organisation
+ *   admins: array          // [['name'=>..., 'email'=>...]] som kan beställa
+ * }
+ */
+function getAiBalanceOverview($email) {
+    $scope = getAiScopeForEmail($email);
+    $check = checkAiQuota($scope['organization_id'], $scope['domain']);
+    $usage = getMonthlyAiUsage($scope['organization_id'], $scope['domain']);
+
+    $remaining = $check['mode'] === 'balance'
+        ? max(0, (int)$check['tokens_balance'])
+        : max(0, (int)$check['tokens_quota'] - (int)$check['tokens_used']);
+
+    $admins = [];
+    if ($scope['organization_id']) {
+        $domains = function_exists('getOrganizationDomains')
+            ? getOrganizationDomains((int)$scope['organization_id'])
+            : [];
+        if (!empty($domains)) {
+            $ph = implode(',', array_fill(0, count($domains), '?'));
+            $admins = query(
+                "SELECT name, email FROM " . DB_DATABASE . ".users
+                  WHERE is_admin = 1
+                    AND LOWER(SUBSTRING_INDEX(email, '@', -1)) IN ($ph)
+                  ORDER BY name, email
+                  LIMIT 5",
+                array_map('strtolower', $domains)
+            ) ?: [];
+        }
+    }
+
+    return [
+        'mode' => $check['mode'],
+        'label' => $scope['label'],
+        'level' => $check['level'],
+        'allowed' => $check['allowed'],
+        'remaining' => $remaining,
+        'monthly_base' => (int)$check['tokens_quota'],
+        'used_this_month' => (int)$usage['total_tokens'],
+        'requests_this_month' => (int)$usage['requests'],
+        'next_refill' => date('Y-m-01', strtotime('first day of next month')),
+        'can_order' => (bool)$scope['organization_id'],
+        'admins' => $admins,
+    ];
+}
+
+/**
+ * "Anna Andersson, bo@x.se" som text för den som inte själv kan beställa.
+ */
+function formatAiOrderAdmins(array $admins) {
+    $delar = [];
+    foreach ($admins as $a) {
+        $namn = trim((string)($a['name'] ?? ''));
+        $delar[] = $namn !== '' ? $namn . ' (' . $a['email'] . ')' : $a['email'];
+    }
+    return implode(', ', $delar);
 }
