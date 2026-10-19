@@ -376,7 +376,7 @@ $c2Nav = function (int $i) use ($c2Knapptext, $c2KursUrl, $h): string {
             <?php endif; ?>
         </div>
         <?php if ($isCompleted || $isPreviewMode): ?>
-        <p class="sl-skip"><button type="button" class="sl-linkbtn" data-sl-skip>Hoppa över frågan</button></p>
+        <p class="sl-skip"><button type="button" class="sl-linkbtn" data-sl-skip>Hoppa över frågan<?= $isPreviewMode ? ' (bara i förhandsgranskning)' : '' ?></button></p>
         <?php endif; ?>
         <?= $c2Nav($i) ?>
     </div>
