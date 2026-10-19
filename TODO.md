@@ -18,6 +18,12 @@ och räknades som förbrukning. Säter visade 220 % av gratisbasen men hade spar
   beställa tokens. Plan, konsekvenser och skript i docs/org-massinforande/README.md. SQL:en måste
   genereras om före körning. Öppet: meddela Magnus (insyns-id byts), Göteborgs startsaldo 0 eller fullt
 
+### Shadow AI (kurs 177), lektion 1620 "När harmlös information blir känslig" (2026-10-19)
+- [x] "Dataklassning" → "Informationsklassning" på tre ställen (intro, rubrik + definition, sammanfattning).
+  Definitionen "Dataklassning, eller informationsklassning, innebär" blev "Informationsklassning innebär".
+  Ändrat direkt i databasen; inga andra kurser använde ordet
+- [ ] Kurspaketet i C:\projekt\stimmabatch har kvar "dataklassning" om kursen läses in på nytt
+
 ### "Hoppa över frågan" syntes för redaktör (2026-10-19)
 - [x] Utrett: knappen visas bara i förhandsgranskning eller i en slutförd lektion (include/lesson_c2.php). Inget fel
 - [x] Knapptexten i förhandsgranskning är nu "Hoppa över frågan (bara i förhandsgranskning)"
