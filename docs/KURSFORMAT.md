@@ -368,6 +368,13 @@ används och tilltala läsaren med "du".
 - **Antal lektioner:** 4–10 för en vanlig kurs. Färre om ämnet är smalt, upp till cirka 15 för
   breda ämnen. Dela hellre upp i två kurser än att göra en mycket lång.
 - **Tid:** 5–15 minuter per lektion, inklusive quiz.
+- **Tidsuppgift för deltagaren:** ange tid **per lektion**, aldrig total kurstid. Skriv inte att
+  man kan göra lektionerna i valfri takt eller "en lektion i taget" – kursen kan köras i stegvist
+  läge där lektionerna släpps en i taget. Använd samma formuleringar som baskurserna:
+  - I `description`: "Räkna med ungefär 5–10 minuter per lektion."
+  - I välkomstlektionen, eget stycke efter upplägget: "Hur lång tid en lektion tar beror på flera
+    saker, till exempel hur van du är vid ämnet, hur mycket du går tillbaka och läser om och om du
+    kan sitta ostört. En tumregel är 5–10 minuter per lektion."
 - **Textmängd:** 400–600 ord per lektion, fördelade på 4–7 sidor.
 
 **Struktur**
@@ -467,7 +474,7 @@ med `images/` (avsnitt 3 och 7A).
   "format": "stimma-kurspaket-1",
   "course": {
     "title": "Nätfiske — känn igen och stoppa bluffmejl",
-    "description": "En kort kurs för alla medarbetare om hur nätfiske går till, hur du känner igen ett bluffmejl eller sms och vad du gör om du har klickat. Kursen tar cirka 25 minuter.",
+    "description": "En kort kurs för alla medarbetare om hur nätfiske går till, hur du känner igen ett bluffmejl eller sms och vad du gör om du har klickat. Räkna med ungefär 5–10 minuter per lektion.",
     "difficulty_level": "beginner",
     "image_style": "illustration",
     "image_wish": "En kommunanställd vid sin dator som stannar upp och granskar ett mejl med en förstoringsglas-ikon bredvid skärmen",
@@ -479,7 +486,7 @@ med `images/` (avsnitt 3 och 7A).
       "lesson_type": "info_page",
       "title": "Välkommen till kursen",
       "estimated_duration": 2,
-      "content": "<div class=\"lesson-intro\"><p>Nätfiske är det vanligaste sättet för angripare att ta sig in i en organisation. I den här kursen lär du dig känna igen försöken och vad du gör om du har klickat.</p></div><h3>Så går kursen till</h3><ul><li>Två lektioner med quiz</li><li>Cirka 25 minuter totalt</li></ul>"
+      "content": "<div class=\"lesson-intro\"><p>Nätfiske är det vanligaste sättet för angripare att ta sig in i en organisation. I den här kursen lär du dig känna igen försöken och vad du gör om du har klickat.</p></div><h3>Så går kursen till</h3><p>Kursen har två lektioner med quiz.</p><p>Hur lång tid en lektion tar beror på flera saker, till exempel hur van du är vid ämnet, hur mycket du går tillbaka och läser om och om du kan sitta ostört. En tumregel är 5–10 minuter per lektion.</p>"
     },
     {
       "key": "kanna-igen",

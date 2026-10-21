@@ -24,6 +24,36 @@ och räknades som förbrukning. Säter visade 220 % av gratisbasen men hade spar
   Ändrat direkt i databasen; inga andra kurser använde ordet
 - [ ] Kurspaketet i C:\projekt\stimmabatch har kvar "dataklassning" om kursen läses in på nytt
 
+### Zammad #944806 Åtvidaberg: Gmail-deltagare syntes inte i statistiken (2026-10-21)
+- [x] Utrett: kurs 139 är publik. gmail.com står i allowed_domains.txt → räknades som "annan organisation"
+  i statsVisibleUserClause (ärende 781) och doldes. Hotmail/iCloud syntes. 6 Gmail-deltagare berördes
+- [x] functions.php: getOrganisationMemberDomains() utan privata e-posttjänster, används i
+  statsVisibleUserClause och certificates.php. Verifierat som Åtvidaberg-admin: båda syns som Klar
+- [x] Svar till Zammad: exports/aterkoppling_atvidaberg_944806_2026-10-21.txt
+- [x] Thomas tog bort gmail.com ur allowed_domains.txt 2026-10-21. Nya Gmail-konton via vanlig inloggning
+  stoppas; publika kurslänkar fungerar som förut (public_register.php kollar inte vitlistan). Insyns-API:t
+  visar inte längre gmail.com som enhet. Fixen i statsVisibleUserClause behålls som skydd
+- [x] Beslut Thomas 2026-10-21: de 13 befintliga Gmail-kontona (access_mode=domain) lämnas som de är
+- Fälla: tests/allowed_domains.test.txt är bindmonterad som fil – efter git checkout måste
+  testcontainern återskapas (ser annars gamla inoden)
+- Diyaris inskrivning står kvar som "active" (klar 2026-10-05, före 782-rättelsen). Statistiken visar
+  ändå Klar. Löses av backfill_course_completion.php (väntar fortfarande på OK, 313 berörda)
+
+### Uppladdad lektionsbild syntes inte i "Lektion" (2026-10-21)
+- [x] Utrett: inte uppladdning kontra AI. I C2-vyn visas bilden bara på textsidor, och lektioner med bara
+  quiz (tomt innehåll, t.ex. "… - Quiz" i kurs 147) har inga textsidor. Infosidor har alltid text
+- [x] include/lesson_c2.php: lektion utan textsidor får bilden på frågekorten. Kontrollerat på dator + mobil
+- [x] Svar till Zammad: exports/aterkoppling_lektionsbild_2026-10-21.txt
+
+### Tidsangivelser i baskurserna (2026-10-20)
+- [x] Utrett: beskrivningarna sa "Kursen tar cirka 55–80 minuter", välkomstlektionerna "N lektioner på cirka
+  tio minuter" (otydligt per lektion eller totalt). Ordräkning ger ~4 min/lektion, totalerna var ~2× för höga
+- [x] Alla 42 baskurser (161, 171–211): beskrivningen → "Räkna med ungefär 5–10 minuter per lektion.",
+  välkomstlektionen fick tumregelstycket, minuterna struket ur "Kursen har N lektioner". "En lektion i taget"
+  borttaget (kan krocka med stegvist läge). Backup + före/efter i sessionens scratchpad
+- [x] docs/KURSFORMAT.md: regel om tidsuppgift per lektion, aldrig total tid eller "en lektion i taget"
+- [ ] Kurspaketen i C:\projekt\stimmabatch har kvar de gamla tidsuppgifterna
+
 ### "Hoppa över frågan" syntes för redaktör (2026-10-19)
 - [x] Utrett: knappen visas bara i förhandsgranskning eller i en slutförd lektion (include/lesson_c2.php). Inget fel
 - [x] Knapptexten i förhandsgranskning är nu "Hoppa över frågan (bara i förhandsgranskning)"
