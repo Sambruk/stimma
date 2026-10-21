@@ -125,8 +125,12 @@ if (!$c2Sidor) $c2Sidor[] = ['typ' => 'text', 'rubrik' => $lesson['title'], 'htm
 $c2Antal = count($c2Sidor);
 // Samma kortbredd genom hela lektionen: finns det någon bred sida (bild, video,
 // AI-läraren) blir alla kort breda, annars smala. Annars hoppar kortet i storlek.
+// Lektionsbilden visas på textsidorna. En lektion med bara quiz (ingen text) får
+// bilden på frågekorten i stället, annars syns den inte alls.
+$c2BildPaQuiz = !empty($lesson['image_url']) && !$c2Textsidor;
 $c2Bred = (bool)array_filter($c2Sidor, fn($s) => in_array($s['typ'], ['video', 'ai'], true)
-    || ($s['typ'] === 'text' && (!empty($s['video']) || !empty($lesson['image_url']))));
+    || ($s['typ'] === 'text' && (!empty($s['video']) || !empty($lesson['image_url'])))
+    || ($s['typ'] === 'quiz' && $c2BildPaQuiz));
 
 /** Quizfråga: enkelval, flerval och sant/falskt ritas som hela klickbara rader. */
 $c2Svarsrader = function (array $q) use ($h): string {
@@ -316,7 +320,7 @@ $c2Nav = function (int $i) use ($c2Knapptext, $c2KursUrl, $h): string {
 
 <?php foreach ($c2Sidor as $i => $s):
     $typ = $s['typ'];
-    $medBild = $typ === 'text' && $c2Bild && empty($s['video']);
+    $medBild = ($typ === 'text' && $c2Bild && empty($s['video'])) || ($typ === 'quiz' && $c2Bild && $c2BildPaQuiz);
     $klass = 'sl-card sl-page sl-card--' . $typ . ($medBild ? ' sl-card--image' : '') . (($typ === 'text' && !$medBild && empty($s['video'])) ? ' sl-card--narrow' : '');
 ?>
 <section class="<?= $klass ?>" data-sl-page="<?= $i ?>" data-kind="<?= $typ ?>"<?= $i === 0 ? '' : ' hidden' ?>
