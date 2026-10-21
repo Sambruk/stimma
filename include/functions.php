@@ -1690,6 +1690,19 @@ function getMemberDomains(): array {
 }
 
 /**
+ * Privata e-posttjänster. gmail.com står i allowed_domains.txt (inloggning tillåten) men är
+ * ingen organisation: en publik deltagare med Gmail hör inte till "en annan organisation".
+ */
+const STIMMA_FREEMAIL_DOMAINS = ['gmail.com', 'googlemail.com', 'hotmail.com', 'hotmail.se', 'outlook.com',
+    'outlook.se', 'live.com', 'live.se', 'msn.com', 'icloud.com', 'me.com', 'yahoo.com', 'yahoo.se',
+    'protonmail.com', 'proton.me', 'telia.com'];
+
+/** Medlemsdomäner som tillhör en organisation – utan privata e-posttjänster. */
+function getOrganisationMemberDomains(): array {
+    return array_values(array_diff(getMemberDomains(), STIMMA_FREEMAIL_DOMAINS));
+}
+
+/**
  * SQL-villkor för användare vars IDENTITET (namn, e-post, enskilda rader) får visas
  * i statistik: e-postdomän i $activeDomains, eller – om $courseId anges och inget
  * filter är aktivt – publik deltagare i kursen vars domän inte tillhör någon organisation.
@@ -1702,7 +1715,7 @@ function statsVisibleUserClause(string $alias, array $activeDomains, ?int $cours
     }
     $own = buildEmailDomainInClause($activeDomains, "$alias.email");
     if ($courseId === null || $filterActive) return $own;
-    $members = getMemberDomains();
+    $members = getOrganisationMemberDomains();
     $notMember = empty($members)
         ? ['fragment' => '1=1', 'params' => []]
         : ['fragment' => "LOWER(SUBSTRING_INDEX($alias.email, '@', -1)) NOT IN (" . implode(',', array_fill(0, count($members), '?')) . ")",

@@ -372,7 +372,7 @@ require_once 'include/header.php';
                             // deltagare utan organisation – andra organisationers diplomtagare ingår
                             // bara i antalet ovan (beslut 2026-10-13)
                             $certUserClause = statsVisibleUserClause('u', getEffectiveOrgScopeDomains($_SESSION['user_email']));
-                            $certMembers = getMemberDomains();
+                            $certMembers = getOrganisationMemberDomains();
                             if (!isSuperAdminUser() && !empty($certMembers)) {
                                 $certUserClause = [
                                     'fragment' => "(({$certUserClause['fragment']}) OR LOWER(SUBSTRING_INDEX(u.email, '@', -1)) NOT IN (" . implode(',', array_fill(0, count($certMembers), '?')) . "))",
