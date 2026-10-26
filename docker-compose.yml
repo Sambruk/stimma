@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   web:
-    image: php:8.2-apache
+    image: php:8.2.35-apache  # låst efter CERT-EU 2026-018; höj medvetet
     restart: always
     ports:
       - "172.17.0.1:13050:80"
@@ -69,6 +69,12 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     labels:
       ofelia.enabled: "true"
+      # E-postlarm var 10:e minut (2026-10-23), se cron/mail_health_alert.php.
+      # Ligger här och inte på web så att den kunde läggas till utan att
+      # webbcontainern behövde startas om.
+      ofelia.job-exec.stimma-mail-larm.schedule: "@every 10m"
+      ofelia.job-exec.stimma-mail-larm.container: "stimma-web-1"
+      ofelia.job-exec.stimma-mail-larm.command: "php /var/www/html/cron/mail_health_alert.php"
 
   backup:
     # Nattlig backup (2026-10-06): databasdump + uppladdade filer, PUB-dokument
@@ -92,8 +98,14 @@ services:
       MAIL_PORT: ${MAIL_PORT:-25}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
-      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-}
+      MAIL_ENCRYPTION: ${MAIL_ENCRYPTION:-}
       MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
+      # Larmvägen (Postal) prövas först, se backup/larm.sh (2026-10-23)
+      LARM_MAIL_HOST: ${LARM_MAIL_HOST:-}
+      LARM_MAIL_PORT: ${LARM_MAIL_PORT:-25}
+      LARM_MAIL_USERNAME: ${LARM_MAIL_USERNAME:-}
+      LARM_MAIL_PASSWORD: ${LARM_MAIL_PASSWORD:-}
+      LARM_MAIL_ENCRYPTION: ${LARM_MAIL_ENCRYPTION:-}
     volumes:
       - /opt/app/stimma/backups:/backup/local
       - /opt/app/stimma/public/upload:/data/upload:ro
