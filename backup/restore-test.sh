@@ -7,6 +7,7 @@
 # testdatabasen igen. Kontrollerar också att uppladdade filer finns i S3.
 # Vid fel: samma e-postlarm som backup.sh.
 set -eu
+. /usr/local/bin/larm.sh
 set -o pipefail
 
 LOKAL=/backup/local
@@ -19,17 +20,8 @@ logga() { echo "$(date '+%F %T') [återställningstest] $*" | tee -a "$LOGG"; }
 
 larma() {
     logga "FEL: $1"
-    [ -n "${BACKUP_ALERT_EMAIL:-}" ] && [ -n "${MAIL_HOST:-}" ] || return 0
-    brev="$ARBETE/brev.txt"
-    printf 'From: %s\r\nTo: %s\r\nSubject: [Stimma] Återställningstestet misslyckades\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n%s\r\n\r\nSenaste loggraderna:\r\n%s\r\n' \
-        "${MAIL_FROM_ADDRESS:-noreply@sambruk.se}" "$BACKUP_ALERT_EMAIL" "$1" "$(tail -20 "$LOGG")" > "$brev"
-    set -- --url "smtp://$MAIL_HOST:${MAIL_PORT:-25}" --mail-from "${MAIL_FROM_ADDRESS:-noreply@sambruk.se}" \
-        --mail-rcpt "$BACKUP_ALERT_EMAIL" --upload-file "$brev" --max-time 60 -s -S
-    if [ "${MAIL_SMTP_AUTH:-}" = "true" ] && [ -n "${MAIL_USERNAME:-}" ]; then
-        # Postal erbjuder CRAM-MD5 först, men det nekas (535) — LOGIN fungerar.
-        set -- "$@" --user "$MAIL_USERNAME:$MAIL_PASSWORD" --login-options "AUTH=LOGIN"
-    fi
-    curl "$@" || logga "Kunde inte heller skicka larmmejlet"
+    skicka_larm "Återställningstestet misslyckades" "$(printf '%s\r\n\r\nSenaste loggraderna:\r\n%s' "$1" "$(tail -20 "$LOGG")")" \
+        || logga "Kunde inte heller skicka larmmejlet"
 }
 
 stada() {

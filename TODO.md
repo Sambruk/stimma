@@ -24,6 +24,33 @@ och räknades som förbrukning. Säter visade 220 % av gratisbasen men hade spar
   Ändrat direkt i databasen; inga andra kurser använde ordet
 - [ ] Kurspaketet i C:\projekt\stimmabatch har kvar "dataklassning" om kursen läses in på nytt
 
+### 🔴 Inloggning nere: Scaleway-nyckeln utgången (2026-10-23)
+- [x] Orsak: SMTP-AUTH mot smtp.tem.scaleway.com ger "535 5.7.8 ... token is expired" sedan 2026-10-22 05:24 (73 misslyckade mejl, 22 adresser). IAM-API bekräftar reason=expired
+- [x] Beslut Thomas: ingen tillfällig Postal-reserv, vänta på ny Scaleway-nyckel
+- [x] Thomas skapade ny API-nyckel utan utgångsdatum 2026-10-23 (rad 7 i Credsecrets)
+- [x] 06:38: MAIL_PASSWORD bytt (backup backups/env.fore-nyckelbyte-20261023-063817), testmejl skickat OK enligt logs
+- [x] 06:42: Thomas bytte igen (förra nyckeln gick ut 2026-10-31). Ettårsnyckel installerad, testmejl OK. Backup env.fore-nyckelbyte2-*
+- [ ] 🔔 FÖRNYA Scaleway-nyckeln före ca 2027-10-23 (ett år, exakt datum i Scaleway-konsolen) – annars stannar all inloggning igen
+- [ ] Ta bort nyckeln som går ut 2026-10-31 i Scaleway IAM om den inte redan är borttagen
+- [x] E-postlarm 2026-10-23: cron/mail_health_alert.php var 10:e min (Ofelia-label på scheduler). Larm vid ≥5 fel i följd till ≥2 adresser → hjalp@sambruksupport.se (MAIL_ALERT_EMAIL) via Postal (LARM_MAIL_*), reserv ordinarie väg. Påminnelse var 6:e h, "fungerar igen" vid återhämtning. Logiken testad i testmiljön (7 scenarier), testlarm via Postal skickat OK
+- [x] Backup- och återställningslarmet via backup/larm.sh: Postal först, sedan ordinarie väg (2026-10-26). Larmet var trasigt sedan 2026-10-16: curl smtp:// mot Scaleways port 465 (implicit TLS) – nu smtps. Båda vägarna testade OK
+
+### 🔴 CERT-EU 2026-018: PHP RCE CVE-2026-109618/109619, CVSS 9.2 (2026-10-21)
+- [x] Inventering: på app.sambruk.se kör bara Stimma PHP (stimma-web-1 + testmiljön), php:8.2-apache 8.2.34
+- [x] Bevakning av Docker Hub för 8.2.35-apache startad (PHP-släpp 2026-10-21 14:00 UTC)
+- [x] 15:37 UTC: taggen 8.2.35-apache skapad men utan amd64-build (pull ger "no matching manifest"); php:8.2-apache är fortfarande 8.2.34. Ny bevakning (pull av amd64 var 5:e min) startad 15:46 UTC.
+- [x] Vid patch: image låst till php:8.2.35-apache i docker-compose.yml och tests/Dockerfile (höj medvetet framöver)
+- [x] Gamla sårbara avbilden php:8.2-apache (8.2.34) borttagen från servern 2026-10-21 (Thomas OK)
+- [x] Beslut Thomas: underhållssida, ej förbigångbar. Thomas OK att patcha direkt när avbilden finns
+- [x] 11:59 UTC: nginx svarar 503 + underhållssida i access-fasen i alla tre Stimma-locations
+  (stimma.sambruk.se + app.sambruk.se/stimma/ ×2). Backup: exports/underhall/nginx_fore_underhall_2026-10-21.conf
+- [x] stimma-web-1 och stimma-test-web-1 stoppade, restart=no (ingen PHP-process). DB, backup, scheduler kör
+- [x] 16:36 UTC amd64-build fanns. 16:37 UTC: stimma-web-1 omskapad (PHP 8.2.35, restart: always), underhållssidan
+  borttagen (nginx-filen identisk med backupen), publika URL:er 200, testsviten 345 ok / 0 fel. STIMMA ÖPPEN.
+- [x] Ta bort underhållssidan: python3 exports/underhall/ta_bort_underhallssida.py; nginx -t; reload; testa
+- [x] Testmiljön: docker compose -f tests/docker-compose.yml build --pull && up -d --force-recreate; tests/run.sh
+- [ ] Andra PHP-servrar utanför denna maskin: Samverka (Nextcloud), WordPress Sambruk – egna ägare/Elestio
+
 ### Zammad #944806 Åtvidaberg: Gmail-deltagare syntes inte i statistiken (2026-10-21)
 - [x] Utrett: kurs 139 är publik. gmail.com står i allowed_domains.txt → räknades som "annan organisation"
   i statsVisibleUserClause (ärende 781) och doldes. Hotmail/iCloud syntes. 6 Gmail-deltagare berördes
