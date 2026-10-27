@@ -79,6 +79,7 @@ och räknades som förbrukning. Säter visade 220 % av gratisbasen men hade spar
   välkomstlektionen fick tumregelstycket, minuterna struket ur "Kursen har N lektioner". "En lektion i taget"
   borttaget (kan krocka med stegvist läge). Backup + före/efter i sessionens scratchpad
 - [x] docs/KURSFORMAT.md: regel om tidsuppgift per lektion, aldrig total tid eller "en lektion i taget"
+- [x] docs/STIMMA-FUNKTIONER.md (2026-10-27): funktionsöversikt som underlag för Claude att bygga en presentationskurs om Stimma. Uppdatera när funktioner tillkommer
 - [ ] Kurspaketen i C:\projekt\stimmabatch har kvar de gamla tidsuppgifterna
 
 ### "Hoppa över frågan" syntes för redaktör (2026-10-19)
