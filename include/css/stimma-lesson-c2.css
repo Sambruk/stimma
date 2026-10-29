@@ -130,6 +130,9 @@
 .stimma-lesson .sl-card {
   width: 100%; max-width: var(--sl-card-max); background: var(--sl-surface); border-radius: var(--sl-radius-card);
   box-shadow: var(--sl-shadow-card); overflow: hidden;
+  /* clip i stället för hidden: rundade hörn som förut, men kortet blir ingen
+     scrollbehållare — annars fungerar inte den fasta knappraden (sticky) */
+  overflow: clip;
 }
 .stimma-lesson .sl-card--narrow, .stimma-lesson .sl-card--quiz { max-width: var(--sl-card-narrow); }
 /* En lektion behåller samma kortbredd på alla sidor (sätts i lesson_c2.php) */
@@ -182,6 +185,18 @@
 .stimma-lesson .sl-content th, .stimma-lesson .sl-content td { border-bottom: 1px solid var(--sl-line); padding: 8px 10px; text-align: left; vertical-align: top; }
 .stimma-lesson .sl-content blockquote { margin: 0 0 16px; padding: 4px 0 4px 16px; border-left: 3px solid var(--sl-border); color: var(--sl-text); }
 .stimma-lesson .sl-content img { max-width: 100%; height: auto; border-radius: 12px; }
+/* Bildklasserna från redigerarens bilddialog, samma som .content img.* i style.css */
+.stimma-lesson .sl-content img.img-sm { width: 25%; }
+.stimma-lesson .sl-content img.img-md { width: 50%; }
+.stimma-lesson .sl-content img.img-lg { width: 75%; }
+.stimma-lesson .sl-content img.img-full { width: 100%; }
+.stimma-lesson .sl-content img.img-left { float: left; margin: 0 16px 12px 0; }
+.stimma-lesson .sl-content img.img-center { display: block; margin: 12px auto; float: none; }
+.stimma-lesson .sl-content img.img-right { float: right; margin: 0 0 12px 16px; }
+@media (max-width: 576px) {
+  .stimma-lesson .sl-content img.img-sm,
+  .stimma-lesson .sl-content img.img-md { width: 100%; float: none; margin: 12px 0; }
+}
 
 /* Begreppslista: numrerade brickor */
 .stimma-lesson .sl-terms { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 18px; counter-reset: sl-term; }
@@ -219,6 +234,18 @@
 
 /* ---------- Navigering i kortets fot ---------- */
 .stimma-lesson .sl-nav { margin-top: auto; display: flex; gap: 12px; align-items: center; }
+/* Är kortet högre än fönstret står knapparna kvar längst ned i fönstret (2026-10-27).
+   Toningen ovanför syns bara när raden ligger över text; annars ligger den över
+   kortets tomma luft ovanför knapparna. */
+@media (min-width: 768px) {
+  .stimma-lesson .sl-nav { position: sticky; bottom: 0; z-index: 5; background: var(--sl-surface); padding: 12px 0 16px; margin-bottom: -16px; }
+  .stimma-lesson .sl-nav::before {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 24px; pointer-events: none;
+    background: linear-gradient(to bottom, transparent, var(--sl-surface));
+  }
+  .stimma-lesson .sl-ai-side .sl-nav { background: var(--sl-surface-muted); }
+  .stimma-lesson .sl-ai-side .sl-nav::before { background: linear-gradient(to bottom, transparent, var(--sl-surface-muted)); }
+}
 .stimma-lesson .sl-btn-back {
   width: var(--sl-touch); height: var(--sl-touch); flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
   border: 1px solid var(--sl-border); border-radius: var(--sl-radius-ctrl); background: var(--sl-surface); color: var(--sl-ink); cursor: pointer;

@@ -82,6 +82,11 @@ Skriv några rader om varje kurs:
 - **Målgrupp:** till exempel "alla medarbetare", "chefer" eller "handläggare inom socialtjänsten".
 - **Omfattning:** ungefär hur lång kursen ska vara, till exempel "15–20 minuter".
 - **Underlag**, om du har något: egna riktlinjer, faktatexter eller länkar som kursen ska bygga på.
+  Bygger kursen på en befintlig kurs, en presentation eller en manual med **skärmbilder eller
+  diagram**, så lägger Claude in dem på rätt plats i lektionstexten. Lektionsbilden bredvid texten
+  är kvar som vanligt. Bifoga gärna bildfilerna separat (till exempel en ZIP-fil med alla
+  skärmbilder) om de är svåra att få ut ur underlaget. Använd bara bilder som ni har rätt att
+  använda.
 
 ### Steg 2 — Ge uppdraget till Claude
 
@@ -95,6 +100,10 @@ Kursbeskrivning: [ämne och syfte]
 Målgrupp: [målgrupp]
 Omfattning: [ungefärlig längd]
 Underlag: [bifogade filer eller "inget särskilt"]
+
+Om underlaget innehåller skärmbilder, diagram eller andra illustrationer som förklarar innehållet:
+lägg in dem i lektionstexten på motsvarande plats enligt avsnitt 5.6, oförändrade och med alt-text.
+Lektionsbilderna skapas som vanligt. Leverera då alltid en ZIP-fil, med illustrationerna i images/.
 
 Om du har ett bildverktyg: skapa bilderna och leverera en ZIP-fil med course.json i roten
 och bilderna i mappen images/ (avsnitt 3 och 7A).
@@ -130,6 +139,8 @@ Du ansvarar för innehållet. Öppna kursen och gå igenom den som deltagare (f�
 - **Ton och språk:** passar texten målgruppen?
 - **Länkar och källor:** fungerar länkarna och är källorna trovärdiga?
 - **Bilder:** inga bilder med text, förvrängda händer eller motiv som kan missförstås.
+- **Skärmbilder och diagram i texten:** står de på rätt plats, syns detaljerna, och saknas någon
+  som rapporten tar upp? En bild som saknas lägger du in med bildknappen i lektionsredigeraren.
 
 Ändra direkt i redigeraren, eller be Claude om en ny version och importera den (radera då den
 första kursen).

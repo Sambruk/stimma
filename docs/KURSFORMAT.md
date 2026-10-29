@@ -4,7 +4,8 @@ Det här dokumentet beskriver hur en kurs i Stimma är uppbyggd och hur en ny ku
 systemet. Det är skrivet för att Claude ska kunna skapa kompletta kurser **på egen hand** utifrån en
 kort beskrivning, och själv besluta om struktur, innehåll, bilder och quiz.
 
-Allt här är kontrollerat mot koden och databasen 2026-10-01. Inläsningen i avsnitt 9 är testad
+Allt här är kontrollerat mot koden och databasen 2026-10-01, bilderna i lektionstexten (avsnitt 5.6)
+2026-10-29. Inläsningen i avsnitt 9 är testad
 skarpt, och alla frågetyper i avsnitt 6 rättas korrekt av Stimmas egen rättningsfunktion.
 
 ---
@@ -14,11 +15,13 @@ skarpt, och alla frågetyper i avsnitt 6 rättas korrekt av Stimmas egen rättni
 För varje kursbeskrivning:
 
 1. **Planera kursen:** målgrupp, lärandemål, antal lektioner och vad varje lektion ska lära ut
-   (avsnitt 8).
+   (avsnitt 8). Finns det ett underlag: gå igenom dess illustrationer och bestäm vilka som ska in i
+   lektionstexten (avsnitt 5.6).
 2. **Skriv ett kurspaket:** `course.json` i formatet `stimma-kurspaket-1` (avsnitt 3–7, fullständigt
    exempel i avsnitt 10).
 3. **Skapa bilderna:** gör det med det bildverktyg du har tillgång till, och lägg dem i mappen
-   `images/` (avsnitt 7). Packa sedan `course.json` och `images/` i en ZIP-fil.
+   `images/` (avsnitt 7). Lägg också dit illustrationerna från underlaget (avsnitt 5.6). Packa sedan
+   `course.json` och `images/` i en ZIP-fil.
 4. **Läs in:** via **Admin → Importera kurs** (avsnitt 9A).<!-- intern --> Arbetar du på servern
    finns också kommandoradsverktyget (avsnitt 9B).<!-- /intern --> Allt kontrolleras först. Vid fel sparas ingenting, och du får
    alla fel i en lista. Rätta och försök igen. Kursen skapas **alltid som inaktiv**.
@@ -137,13 +140,14 @@ att det deltagaren ser blir exakt det du skrev.
 - **Taggar:** `p`, `h3`, `h4`, `h5`, `h2`, `ul`, `ol`, `li`, `strong`, `em`, `b`, `i`, `u`, `s`,
   `sub`, `sup`, `br`, `hr`, `blockquote`, `span`, `a`, `table`, `thead`, `tbody`, `tr`, `th`, `td`
   och `div` (bara med klasserna nedan).
-- **Använd inte** `h1` (lektionstiteln är redan sidans rubrik), `img`, `script`, `style`,
-  `iframe`, händelseattribut eller andra HTML-kommentarer än sidbrytningen.
+- **`img`** bara i lektionens `content`, och bara enligt avsnitt 5.6.
+- **Använd inte** `h1` (lektionstiteln är redan sidans rubrik), `script`, `style`, `iframe`,
+  händelseattribut eller andra HTML-kommentarer än sidbrytningen.
 - **Rubriker:** `h3` för avsnitt och `h4` för underrubriker. Hoppa inte över nivåer.
 - **Länkar:** bara fullständiga `https://`-adresser. De öppnas automatiskt i ny flik. Länka bara
   till sidor du vet finns (myndigheter, lagtext på riksdagen.se och liknande). Hitta aldrig på
   adresser.
-- **Bilder i löptexten stöds inte** i kurspaket. Använd lektionsbilden (`image_file`).
+- **Bilder i löptexten** (skärmbilder, diagram) beskrivs i avsnitt 5.6.
 
 ### 5.2 Innehållsblock
 
@@ -203,6 +207,79 @@ Använd AI-chatten där deltagare rimligen har egna följdfrågor, till exempel 
 tillämpning, regelverk eller den egna verksamheten. Varje fråga i chatten kostar AI-tokens, så slå
 inte på den i varje lektion.
 
+### 5.6 Bilder i lektionstexten (skärmbilder, diagram)
+
+En lektion kan ha två sorters bilder, och de är oberoende av varandra:
+
+| | Lektionsbild | Bild i lektionstexten |
+|---|---|---|
+| **Fält** | `image_file` på lektionen | `<img>` i `content` |
+| **Visas** | I spalten bredvid texten, på alla sidor | På den plats i texten där den står |
+| **Syfte** | Stämning och igenkänning | Bär information: skärmbild, diagram, schema, blankett |
+| **Källa** | Skapas med bildverktyg (avsnitt 7) | Tas från underlaget, oförändrad |
+
+En bild i texten ersätter **aldrig** lektionsbilden. Lektionen får sin lektionsbild som vanligt.
+
+#### När du läser underlaget
+
+Om underlaget är en befintlig kurs, en presentation, en manual eller ett dokument med bilder: gå
+igenom **varje illustration** innan du skriver lektionerna och avgör vad den är.
+
+- **Innehållsbild:** skärmbilder av ett system, diagram, flödesscheman, tabeller som bild,
+  exempel på blanketter eller mejl. Den förklarar något som texten hänvisar till ("klicka på knappen
+  längst upp till höger", "så här ser rutan ut"). **Den ska med** i lektionstexten.
+- **Dekorativ bild:** stämningsbilder, ikoner, logotyper, bakgrunder och illustrationer som inte
+  tillför något utöver texten. **Den tas inte med.** Lektionsbilden fyller den rollen.
+
+För varje innehållsbild:
+
+1. **Ta bilden som den är.** Spara originalet från underlaget i `images/`. Beskär bara bort tomma
+   kanter eller sådant som inte hör till bilden (sidhuvud, sidnummer). Skapa **aldrig** en ny eller
+   "förbättrad" version med ett bildverktyg, eftersom en AI-tolkad skärmbild visar ett system som inte
+   finns. Regeln "ingen text i bilden" gäller bara bilder du skapar själv. Skärmbilder innehåller text.
+2. **Placera den där underlaget har den:** direkt efter stycket som hänvisar till den, på samma sida
+   (`<!-- pagebreak -->`) som texten den hör till. Behåll underlagets ordning.
+3. **Skriv en alt-text** som säger vad bilden visar och vad deltagaren ska lägga märke till, t.ex.
+   *"Inloggningsrutan med fälten Användarnamn och Lösenord och knappen Logga in nere till höger"*.
+   Skriv inte "Bild" eller "Skärmbild 3".
+4. **Kontrollera personuppgifter.** Syns namn, personnummer, e-postadresser eller ärendeuppgifter
+   för verkliga personer i en skärmbild: ta inte med bilden, utan ta upp den i rapporten.
+
+Om en bild inte går att få ut ur underlaget, till exempel för att du bara har texten, så skriver du
+**ingen** platshållare i kursen. Ta i stället upp den i rapporten (avsnitt 11) med lektion, sida,
+texten den står efter och vad den visar, så att redaktören kan lägga in den i lektionsredigeraren.
+
+#### Så skrivs bilden
+
+```html
+<h3>Logga in</h3>
+<p>Öppna systemet och fyll i dina uppgifter i inloggningsrutan.</p>
+<p><img src="images/inloggning.png" alt="Inloggningsrutan med fälten Användarnamn och Lösenord och knappen Logga in nere till höger" class="img-lg img-center"></p>
+<p>Klicka på <strong>Logga in</strong>.</p>
+```
+
+- **`src`** är `images/` följt av filnamnet, och filen ska ligga i ZIP-filens `images/`. Bilder
+  på andra adresser stoppas. Stimma byter namn och sökväg vid inläsningen.
+- **`alt`** krävs.
+- **`class`** styr storlek och placering. Det är samma val som i lektionsredigerarens bilddialog:
+
+  | `class` | Används till |
+  |---|---|
+  | `img-lg img-center` | **Skärmbilder, standard.** 75 % av bredden, centrerad. |
+  | `img-full` | Breda skärmbilder och diagram där detaljerna måste synas. |
+  | `img-md img-center` | Mindre bilder, t.ex. en dialogruta. |
+  | `img-sm img-center` | Små detaljer, t.ex. en enskild knapp eller ikon. |
+  | `img-md img-left`, `img-md img-right`, `img-sm img-left`, `img-sm img-right` | Bild bredvid texten. Använd sparsamt, eftersom bilden hamnar under texten i mobilen. |
+
+- **`width` och `height`** (heltal i pixlar) får anges men behövs inte. Andra attribut stoppas.
+- **Lägg `<img>` i ett eget `<p>`**, inte inuti ett `lesson-*`-block.
+- **Format och storlek:** samma som i avsnitt 7A (JPG, PNG eller WebP, högst 5 MB). PNG passar
+  skärmbilder bäst. En bild kan användas på flera ställen.
+- **Bildtext** behövs sällan. Behövs den skriver du den som ett vanligt stycke under bilden.
+- **Omfång:** en sida med en skärmbild ska ha mindre text, ungefär 40–100 ord, så att bilden och
+  texten ryms utan att man behöver scrolla. Högst två bilder per sida. Hellre en sidbrytning till.
+- **Quizfrågor** kan inte ha bilder. Bildfrågetyperna kräver uppladdning (avsnitt 6.1).
+
 ---
 
 ## 6. Quizfrågor (`questions[]`)
@@ -254,6 +331,9 @@ kurspaket.
 
 Claude bestämmer bildstil och motiv för kursomslaget och varje lektion. Bilderna kan komma in på två
 sätt. Det första är att föredra.
+
+Avsnittet gäller kursomslaget och lektionsbilderna. Skärmbilder och andra illustrationer från
+underlaget hamnar i lektionstexten och följer avsnitt 5.6.
 
 ### 7A. Färdiga bilder i paketet (`image_file`)
 
@@ -532,6 +612,10 @@ Avsluta varje kurs med en kort rapport till uppdragsgivaren:
 - **Omfång:** antal lektioner och infosidor, antal frågor och vilka typer.
 - **Bilder:** vilka som följde med i paketet, och vilka som saknas tillsammans med önskemålet, så att
   redaktören kan skapa dem.
+- **Illustrationer från underlaget:** hur många som finns i lektionstexten och var. Lista också dem
+  som **inte** kom med: lektion, sida, texten de står efter, vad de visar och varför (gick inte att
+  få ut, personuppgifter, bedömd som dekorativ). Redaktören lägger in dem med bildknappen i
+  lektionsredigeraren.
 - **Videor:** varje länk, så att granskaren kan provspela den.
 - **Antaganden:** de val du gjorde som beskrivningen inte styrde, t.ex. målgrupp, nivå och avgränsningar.
 - **Osäkerheter:** påståenden och källor som en ämnesexpert bör granska. Lista dem konkret.
@@ -549,6 +633,9 @@ Avsluta varje kurs med en kort rapport till uppdragsgivaren:
 - [ ] Inga påhittade länkar, videor, siffror eller paragrafer.
 - [ ] Kursen och varje lektion har en bild i `images/` (`image_file`) i rätt format: omslaget liggande 3:2, lektionsbilderna kvadratiska. Ingen text i bilderna.
 - [ ] Varje `image_file` är ett filnamn utan sökväg, och filen finns i `images/` i ZIP-filen.
+- [ ] Varje innehållsbild i underlaget (skärmbild, diagram) finns i lektionstexten på rätt plats,
+      med `src="images/…"`, en beskrivande `alt` och en klass från avsnitt 5.6, eller står i
+      rapporten. Lektionsbilden är kvar.
 - [ ] `course.json` ligger i ZIP-filens rot eller i en enda undermapp tillsammans med `images/`. Det är en kurs per ZIP-fil.
 - [ ] Inläsningen går igenom utan fel. Annars rättar du och försöker igen.
 
@@ -569,6 +656,7 @@ behöver inte läsa det här.
 | Innehållsblock och pedagogiska riktmärken | `aiLessonGenerateContent()` i `include/ai_lesson_helper.php` och `getCourseGenerationPrompt()` i `public/admin/cron/process_ai_jobs.php` |
 | Bildprompter, storlekar och stilar | `include/ai_image_helper.php` |
 | Validering och inläsning | `include/kurspaket.php`, som både `public/admin/import.php` och `tools/las_in_kurspaket.php` använder |
+| Bilder i lektionstexten | `kpLopbilder()` i `include/kurspaket.php`; klasserna i `KP_IMG_KLASSER` = `image_class_list` i `public/admin/include/editor.php`, CSS i `include/css/style.css`. Test: `tests/test_kurspaket_bilder.php` |
 
 Om Stimma får en ny frågetyp, nya innehållsblock eller nya lektionsfält måste både det här
 dokumentet och valideringen i `include/kurspaket.php` uppdateras. Annars stoppar verktyget

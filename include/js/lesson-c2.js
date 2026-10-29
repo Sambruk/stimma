@@ -437,8 +437,12 @@
     pages.forEach(function (p, i) { p.hidden = !visible[i]; });
     if (doneCard) doneCard.hidden = !doneVisible;
     // Tak på 900 px: en enstaka mycket lång sida ska inte göra alla kort jättehöga.
-    // Är kortet högre än fönstret scrollar sidan som vanligt (enligt specen).
-    var h = Math.min(tallest, 900);
+    // Taket är också fönstrets höjd (2026-10-27): sidor som får plats ska ha knappen
+    // synlig utan att man scrollar. Högre sidor scrollar, och knapparna står då
+    // kvar längst ned i fönstret (sticky i CSS:en).
+    var top = pages[0].getBoundingClientRect().top + window.scrollY;
+    var fonster = Math.max(window.innerHeight - top - 24, 480);
+    var h = Math.min(tallest, 900, fonster);
     pages.forEach(function (p) { p.style.minHeight = h + 'px'; });
     alignSide();
   }

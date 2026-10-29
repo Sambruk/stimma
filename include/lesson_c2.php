@@ -214,7 +214,7 @@ $c2Nav = function (int $i) use ($c2Knapptext, $c2KursUrl, $h): string {
     <link rel="icon" href="favicon.ico">
     <link href="fonts/fonts.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
-    <link href="include/css/stimma-lesson-c2.css?v=20261012a" rel="stylesheet">
+    <link href="include/css/stimma-lesson-c2.css?v=20261029a" rel="stylesheet">
 </head>
 <body class="stimma-lesson">
 
@@ -441,6 +441,6 @@ window.STIMMA_LESSON = <?= json_encode([
 ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>;
 </script>
 <script src="include/js/quiz-client.js?v=20261001c" defer></script>
-<script src="include/js/lesson-c2.js?v=20261012a" defer></script>
+<script src="include/js/lesson-c2.js?v=20261027a" defer></script>
 </body>
 </html>

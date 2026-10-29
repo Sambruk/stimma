@@ -80,7 +80,16 @@ och räknades som förbrukning. Säter visade 220 % av gratisbasen men hade spar
   borttaget (kan krocka med stegvist läge). Backup + före/efter i sessionens scratchpad
 - [x] docs/KURSFORMAT.md: regel om tidsuppgift per lektion, aldrig total tid eller "en lektion i taget"
 - [x] docs/STIMMA-FUNKTIONER.md (2026-10-27): funktionsöversikt som underlag för Claude att bygga en presentationskurs om Stimma. Uppdatera när funktioner tillkommer
+- [x] C2-vyn: Fortsätt-knappen hamnade under fönsterkanten (2026-10-27, upptäckt i presentationskursen id 232). Kortets höjd begränsas nu till fönstret och knappraden står fast längst ned (sticky, overflow: clip på kortet). Mätt i 5 skärmstorlekar × kursens 9 sidor: knappen synlig överallt
+- [x] sebastian.ringstrom@itsam.se granskare på alla 42 baskurser (161, 171–211) 2026-10-27 — inga fanns sedan tidigare
 - [ ] Kurspaketen i C:\projekt\stimmabatch har kvar de gamla tidsuppgifterna
+
+### Underlag för redaktörskurs (2026-10-28, Thomas)
+- [x] docs/REDAKTOR-UNDERLAG.md: hur en redaktör arbetar i Stimma, som underlag för Claude att bygga kursen (samma upplägg som STIMMA-FUNKTIONER.md)
+  - [x] Kartlägga redaktörens vyer och funktioner i koden (handboken är delvis inaktuell)
+  - [x] Skriva underlaget med kursupplägg och bildidéer
+- [ ] Fynd: panelen "Publik kurs" visas för redaktör i edit_course.php men servern kräver admin ("Otillräcklig behörighet") — dölj panelen för icke-admin eller ge redaktören rätten (beslut Thomas)
+- [ ] Fynd: user_guide.php inaktuell för redaktörer (quiz "upp till 5 svarsalternativ, enkelval/flerval", SCORM beskrivs trots att importen är avstängd, svårighetsgrad i kursformuläret, export bara admin)
 
 ### "Hoppa över frågan" syntes för redaktör (2026-10-19)
 - [x] Utrett: knappen visas bara i förhandsgranskning eller i en slutförd lektion (include/lesson_c2.php). Inget fel
@@ -1342,3 +1351,19 @@ bort. Det verkliga felet är att inget i systemet berättar att fältet uteblivi
   i api_keys.php och i kodkommentarerna. Ta inte upp det igen utan nytt verksamhetsbehov.
 - [ ] `ensureAiQuotaRow()` skapar fortfarande separat AI-kvot per e-postdomän
       (kvarstående punkt sedan domänomfånget).
+
+### Bilder i lektionstexten i kurspaket (2026-10-29, Thomas)
+Behov: kursen som kopieras från Junglemap har skärmbilder som ska in i lektionstexten, medan
+lektionsbilden (image_file) är kvar. Tidigare stoppade importen allt <img>.
+- [x] include/kurspaket.php: kpLopbilder() godkänner <img src="images/…" alt="…" class="…"> i
+      lektioners content (bara där). Kräver ZIP, fil i images/, alt-text, klass ur KP_IMG_KLASSER
+      (= editorns image_class_list), bara src/alt/class/width/height
+- [x] Inläsningen skriver om src till ../upload/kp_… (samma form som redigerarens uppladdning);
+      varningen om oanvända bilder räknar med bilder i texten
+- [x] docs/KURSFORMAT.md: nytt avsnitt 5.6 (inventera underlagets illustrationer, innehåll vs
+      dekor, ta oförändrat, placera där underlaget har dem, alt-text, personuppgifter, rapportera
+      det som inte kom med), plus 1, 5.1, 7, 11, 12 och bilagan
+- [x] kursinstruktion.php Del A: underlag med skärmbilder, rad i promptmallen (alltid ZIP), granskningspunkt
+- [x] C2-vyn: bildklasserna img-sm/md/lg/full/left/right/center saknades i stimma-lesson-c2.css (v=20261029a)
+- [x] tests/test_kurspaket_bilder.php (16 ok), hela sviten grön
+- [ ] Prova med den riktiga Junglemap-kursen

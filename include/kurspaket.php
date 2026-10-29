@@ -23,6 +23,9 @@ define('KP_TAGGAR', ['br','hr','strong','b','em','i','u','s','sub','sup','span',
 define('KP_BILDTILLAGG', ['jpg', 'jpeg', 'png', 'webp']);
 define('KP_BILDTYPER', ['image/jpeg', 'image/png', 'image/webp']);
 define('KP_MAX_BILD', 5 * 1024 * 1024);
+// Bildklasserna i lektionsredigerarens bilddialog (image_class_list i admin/include/editor.php)
+define('KP_IMG_KLASSER', ['img-sm img-center', 'img-md img-center', 'img-lg img-center', 'img-full',
+                          'img-md img-left', 'img-md img-right', 'img-sm img-left', 'img-sm img-right']);
 
 /** Är det här ett kurspaket (och inte en gammal export från "Exportera kurs")? */
 function kurspaketAr($data): bool {
@@ -148,6 +151,7 @@ function kurspaketValidera($p, ?array $bilder = null): array {
 
     $nycklar = [];
     $vanliga = 0;
+    $lopbilder = [];
     foreach ($lektioner as $i => $l) {
         $var = "lessons[$i]";
         if (!is_array($l)) { $fel[] = "$var är inte ett objekt"; continue; }
@@ -164,7 +168,10 @@ function kurspaketValidera($p, ?array $bilder = null): array {
         if (isset($l['estimated_duration']) && (!is_int($l['estimated_duration']) || $l['estimated_duration'] < 1 || $l['estimated_duration'] > 120))
             $fel[] = "$var.estimated_duration ska vara ett heltal 1–120 (minuter)";
         if (!isset($l['content']) || !is_string($l['content']) || trim(strip_tags($l['content'])) === '') $fel[] = "$var.content saknas";
-        else kpInnehall($l['content'], "$var.content", $fel);
+        else {
+            kpInnehall($l['content'], "$var.content", $fel, true);
+            $lopbilder = array_merge($lopbilder, kpLopbilder($l['content'], "$var.content", $bilder, $fel));
+        }
 
         if (!empty($l['belongs_to'])) {
             if ($typ !== 'info_page') $fel[] = "$var.belongs_to får bara anges på info_page";
@@ -191,10 +198,10 @@ function kurspaketValidera($p, ?array $bilder = null): array {
     }
     if ($vanliga === 0) $fel[] = 'kursen måste ha minst en lektion av typen lesson';
 
-    // Bilder i ZIP:en som inget pekar på — sannolikt ett stavfel i image_file
+    // Bilder i ZIP:en som inget pekar på — sannolikt ett stavfel i image_file eller <img src>
     if ($bilder) {
-        $anvanda = array_filter(array_merge([$c['image_file'] ?? null], array_map(fn($l) => is_array($l) ? ($l['image_file'] ?? null) : null, $lektioner)));
-        foreach (array_diff(array_keys($bilder), $anvanda) as $oanvand) $varn[] = "images/$oanvand används inte av någon image_file";
+        $anvanda = array_filter(array_merge([$c['image_file'] ?? null], array_map(fn($l) => is_array($l) ? ($l['image_file'] ?? null) : null, $lektioner), $lopbilder));
+        foreach (array_diff(array_keys($bilder), $anvanda) as $oanvand) $varn[] = "images/$oanvand används varken som image_file eller i någon lektionstext";
     }
     return ['fel' => $fel, 'varningar' => $varn];
 }
@@ -260,6 +267,9 @@ function kurspaketLasIn(array $p, array $forfattare, array $bilder = []): array 
             $video = !empty($l['video_url']) ? $l['video_url'] : null;
             $bild = $bildFor($l);
             if (!$bild && !empty($l['image_wish'])) $saknarBild[$l['key']] = $l['image_wish'];
+            // Bilder i lektionstexten får samma form som när de laddas upp i redigeraren
+            $innehall = preg_replace_callback('/(<img\b[^>]*\bsrc\s*=\s*)(["\'])images\/([^"\']+)\2/i',
+                fn($m) => $m[1] . '"../upload/' . $bildFor(['image_file' => $m[3]]) . '"', $l['content']);
 
             execute(
                 "INSERT INTO " . DB_DATABASE . ".lessons
@@ -270,7 +280,7 @@ function kurspaketLasIn(array $p, array $forfattare, array $bilder = []): array 
                 [
                     $kursId, $typ,
                     ($typ === 'info_page' && !empty($l['belongs_to'])) ? $idFor[$l['belongs_to']] : null,
-                    $l['title'], (int)($l['estimated_duration'] ?? 5), $bild, $l['content'],
+                    $l['title'], (int)($l['estimated_duration'] ?? 5), $bild, $innehall,
                     $video, $video ? 'youtube' : null,
                     ($l['video_position'] ?? 'bottom') === 'top' ? 'top' : 'bottom',
                     $i,   // paketets ordning = deltagarens ordning
@@ -325,19 +335,54 @@ function kpBildfil(array $o, string $var, ?array $bilder, array &$fel): void {
     if (!isset($o['image_file'])) return;
     $f = $o['image_file'];
     if (!is_string($f) || $f === '' || $f !== basename($f)) { $fel[] = "$var.image_file ska vara ett filnamn i images/, utan sökväg"; return; }
-    if ($bilder === null) { $fel[] = "$var.image_file kräver att paketet är en ZIP-fil med bilden i images/"; return; }
-    if (!isset($bilder[$f])) { $fel[] = "$var.image_file: images/$f finns inte i ZIP-filen"; return; }
+    kpBildKontroll($f, "$var.image_file", $bilder, $fel);
+}
+
+/** Filen måste finnas i ZIP:ens images/ och vara en riktig bild i tillåtet format. */
+function kpBildKontroll(string $f, string $etikett, ?array $bilder, array &$fel): void {
+    if ($bilder === null) { $fel[] = "$etikett kräver att paketet är en ZIP-fil med bilden i images/"; return; }
+    if (!isset($bilder[$f])) { $fel[] = "$etikett: images/$f finns inte i ZIP-filen"; return; }
     $sok = $bilder[$f];
-    if (!in_array(strtolower(pathinfo($f, PATHINFO_EXTENSION)), KP_BILDTILLAGG, true)) $fel[] = "$var.image_file: bara JPG, PNG och WebP";
-    elseif (filesize($sok) > KP_MAX_BILD) $fel[] = "$var.image_file: images/$f är större än 5 MB";
-    elseif (!in_array(mime_content_type($sok), KP_BILDTYPER, true) || @getimagesize($sok) === false) $fel[] = "$var.image_file: images/$f är ingen giltig bild";
+    if (!in_array(strtolower(pathinfo($f, PATHINFO_EXTENSION)), KP_BILDTILLAGG, true)) $fel[] = "$etikett: bara JPG, PNG och WebP";
+    elseif (filesize($sok) > KP_MAX_BILD) $fel[] = "$etikett: images/$f är större än 5 MB";
+    elseif (!in_array(mime_content_type($sok), KP_BILDTYPER, true) || @getimagesize($sok) === false) $fel[] = "$etikett: images/$f är ingen giltig bild";
+}
+
+/**
+ * Bilder i lektionstexten (skärmbilder, diagram): <img src="images/fil.png" alt="…" class="…">.
+ * Samma attribut som lektionsredigeraren sätter. Returnerar filnamnen som används.
+ */
+function kpLopbilder(string $html, string $var, ?array $bilder, array &$fel): array {
+    preg_match_all('/<img\b([^>]*)>/i', $html, $m);
+    $filer = [];
+    foreach ($m[1] as $attr) {
+        preg_match_all('/([a-z-]+)\s*=\s*(["\'])(.*?)\2/is', $attr, $a, PREG_SET_ORDER);
+        $at = [];
+        foreach ($a as $x) $at[strtolower($x[1])] = $x[3];
+        $src = $at['src'] ?? '';
+        $etikett = "$var, <img src=\"$src\">";
+        if (!preg_match('#^images/([^/]+)$#', $src, $f)) { $fel[] = "$etikett: src ska vara images/<filnamn> — bilden ska ligga i ZIP-filens images/"; continue; }
+        $filer[] = $f[1];
+        kpBildKontroll($f[1], $etikett, $bilder, $fel);
+        if (trim($at['alt'] ?? '') === '') $fel[] = "$etikett saknar alt-text — beskriv vad bilden visar";
+        if (isset($at['class']) && !in_array($at['class'], KP_IMG_KLASSER, true))
+            $fel[] = "$etikett har class=\"{$at['class']}\" — tillåtna: " . implode(', ', KP_IMG_KLASSER);
+        foreach (['width', 'height'] as $d) {
+            if (isset($at[$d]) && !preg_match('/^\d+$/', $at[$d])) $fel[] = "$etikett: $d ska vara ett heltal (pixlar)";
+        }
+        if ($ovriga = array_diff(array_keys($at), ['src', 'alt', 'class', 'width', 'height']))
+            $fel[] = "$etikett har attribut som inte stöds: " . implode(', ', $ovriga);
+    }
+    return $filer;
 }
 
 /** HTML som cleanHtml() skulle ändra eller ta bort räknas som fel — då blir resultatet inte det som skrevs. */
-function kpInnehall(string $html, string $var, array &$fel): void {
+function kpInnehall(string $html, string $var, array &$fel, bool $bilderTillatna = false): void {
     preg_match_all('/<\s*([a-z][a-z0-9]*)\b/i', $html, $m);
     foreach (array_unique(array_map('strtolower', $m[1])) as $tagg) {
-        if ($tagg === 'img') $fel[] = "$var innehåller <img> — bilder i löptext stöds inte (använd image_file eller image_wish)";
+        if ($tagg === 'img') {
+            if (!$bilderTillatna) $fel[] = "$var innehåller <img> — bilder går bara att lägga in i lektionernas content";
+        }
         elseif ($tagg === 'h1') $fel[] = "$var använder <h1> — använd h3 för huvudrubriker i lektionen";
         elseif (!in_array($tagg, KP_TAGGAR, true)) $fel[] = "$var innehåller <$tagg>, som Stimma tar bort vid visning";
     }
