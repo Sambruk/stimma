@@ -1367,3 +1367,7 @@ lektionsbilden (image_file) är kvar. Tidigare stoppade importen allt <img>.
 - [x] C2-vyn: bildklasserna img-sm/md/lg/full/left/right/center saknades i stimma-lesson-c2.css (v=20261029a)
 - [x] tests/test_kurspaket_bilder.php (16 ok), hela sviten grön
 - [ ] Prova med den riktiga Junglemap-kursen
+
+### Tydligare väg tillbaka till Mina kurser (2026-10-30, Thomas)
+- [x] course.php: knappen "Mina kurser" i sidhuvudet (inloggad), "Tillbaka till Mina kurser" som huvudknapp i "Kursen är klar", och längst ner i stället för "Till Stimma"
+- [x] course_complete.php: "Tillbaka till Mina kurser" först och primär, "Till kursens innehåll" sekundär

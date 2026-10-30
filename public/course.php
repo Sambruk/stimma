@@ -191,9 +191,14 @@ if ($loggedIn) {
 
 <nav class="navbar navbar-light bg-white shadow-sm py-2">
     <div class="container-fluid">
-        <a href="/" class="navbar-brand d-flex align-items-center">
-            <img src="images/stimma-logo-transparent.png" height="48" alt="Stimma">
-        </a>
+        <div class="d-flex align-items-center gap-3">
+            <a href="/" class="navbar-brand d-flex align-items-center me-0">
+                <img src="images/stimma-logo-transparent.png" height="48" alt="Stimma">
+            </a>
+            <?php if ($loggedIn): ?>
+            <a href="index.php" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Mina kurser</a>
+            <?php endif; ?>
+        </div>
         <span class="d-none d-md-inline text-muted" style="font-size: 0.95rem;"><?= $headerText ?></span>
         <?php if ($headerOrgIcon): ?>
         <span class="d-inline-flex align-items-center" title="<?= htmlspecialchars($headerOrgIcon['name']) ?>">
@@ -285,7 +290,10 @@ if ($loggedIn) {
                         <?php elseif ($completedCount >= $totalLessons && $totalLessons > 0): ?>
                             <h5 class="card-title text-success"><i class="bi bi-trophy-fill me-1"></i>Kursen är klar!</h5>
                             <p class="small text-muted">Du har slutfört alla lektioner.</p>
-                            <a href="certificate.php" class="btn btn-outline-success w-100">
+                            <a href="index.php" class="btn btn-success w-100">
+                                <i class="bi bi-house-door me-1"></i>Tillbaka till Mina kurser
+                            </a>
+                            <a href="certificate.php" class="btn btn-outline-success w-100 mt-2">
                                 <i class="bi bi-award me-1"></i>Se dina diplom
                             </a>
                             <a href="lesson.php?id=<?= $nextLessonId ?>" class="btn btn-outline-secondary w-100 mt-2">
@@ -370,7 +378,11 @@ if ($loggedIn) {
     </div>
 
     <div class="text-center mt-4 mb-5">
+        <?php if ($loggedIn): ?>
+        <a href="index.php" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Tillbaka till Mina kurser</a>
+        <?php else: ?>
         <a href="/" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Till Stimma</a>
+        <?php endif; ?>
     </div>
 </main>
 

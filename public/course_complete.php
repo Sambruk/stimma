@@ -208,11 +208,11 @@ $headerText = getHeaderText($userId);
                 <?php endif; ?>
             </div>
             <?php endif; ?>
-            <a href="course.php?id=<?= (int)$course['id'] ?>" class="btn btn-outline-secondary w-100 mb-2">
-                <i class="bi bi-arrow-left me-1"></i>Tillbaka till kursen
+            <a href="index.php" class="btn btn-primary w-100 mb-2">
+                <i class="bi bi-house-door me-1"></i>Tillbaka till Mina kurser
             </a>
-            <a href="index.php" class="btn btn-outline-primary w-100">
-                <i class="bi bi-house-door me-1"></i>Till startsidan
+            <a href="course.php?id=<?= (int)$course['id'] ?>" class="btn btn-outline-secondary w-100">
+                <i class="bi bi-arrow-left me-1"></i>Till kursens innehåll
             </a>
         </div>
     </div>
