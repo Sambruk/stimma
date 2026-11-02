@@ -118,6 +118,27 @@ for ($i = 0; $i < 5; $i++) $w3->angeKod($fel);
 $w3->angeKod($kodR);
 check(!$w3->inloggad(), 'rätt kod efter 5 fel nekas');
 
+section('Dubbel postning ger en kod (2026-11-02)');
+$w9 = new Anon();
+check(strpos($w9->body, 'data-en-gang') !== false, 'formuläret postas bara en gång i webbläsaren');
+$w9->begarKod('anv-a@orga.test');
+$antal = count(mailsTo('anv-a@orga.test'));
+$w9->begarKod('anv-a@orga.test');
+check(count(mailsTo('anv-a@orga.test')) === $antal, 'andra begäran inom 30 s skickar inget nytt mejl');
+check(strpos($w9->body, 'redan skickat en kod') !== false && strpos($w9->body, 'one-time-code') !== false, 'besked och kodrutan visas', snippet($w9->body, 300));
+$w9->angeKod(lastLoginCode('anv-a@orga.test'));
+check($w9->inloggad(), 'koden i det enda mejlet loggar in');
+$w9->get('/logout.php');
+$w10 = new Anon();
+$w10->begarKod('anv-a@orga.test');
+$antal = count(mailsTo('anv-a@orga.test'));
+dbExec("UPDATE login_codes SET created_at = NOW() - INTERVAL 31 SECOND WHERE email = 'anv-a@orga.test'");
+$w10->begarKod('anv-a@orga.test');
+check(count(mailsTo('anv-a@orga.test')) === $antal + 1, 'efter 30 s går det att få en ny kod');
+$w11 = new Anon();
+$w11->begarKod('anv-a@orga.test');
+check(count(mailsTo('anv-a@orga.test')) === $antal + 2, 'en annan webbläsare får alltid sin egen kod');
+
 section('Gränser');
 $w4 = new Anon();
 $w4->begarKod('ny@inte-ansluten.test');

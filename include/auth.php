@@ -83,6 +83,7 @@ function loginLinkValidityText(): string {
 const LOGIN_CODE_MAX_ATTEMPTS = 5;      // felaktiga försök per kod
 const LOGIN_CODE_MAX_PER_HOUR = 5;      // nya koder per adress och timme
 const LOGIN_CODE_MAX_FAILS_PER_DAY = 20; // felaktiga försök per adress och dygn
+const LOGIN_CODE_DUPLICATE_SECONDS = 30; // samma webbläsare får ingen ny kod inom denna tid (dubbelklick)
 
 /** Slumpvärdet som binder en kod till den här webbläsarens session. */
 function loginCodeBinding(): string {
@@ -108,8 +109,9 @@ function loginCodeLockedOut(string $email): bool {
  * Tidigare koder för adressen upphör. Koden sparas bara som hash. Sätter
  * $_SESSION['login_code_email'] så att inloggningssidan visar kodrutan.
  *
- * @return array ['ok' => bool, 'request_id' => ?string, 'error' => ?string]
+ * @return array ['ok' => bool, 'request_id' => ?string, 'error' => ?string, 'duplicate' => ?bool]
  *               error: 'rate' (för många koder), 'locked' (för många fel), 'mail'
+ *               duplicate: samma webbläsare fick en kod nyss, ingen ny skickades
  */
 function sendLoginCode(string $email): array {
     $email = strtolower(trim($email));
@@ -119,6 +121,23 @@ function sendLoginCode(string $email): array {
         logActivity($email, "Inloggningskod nekad: för många felaktiga försök");
         return ['ok' => false, 'request_id' => null, 'error' => 'locked'];
     }
+
+    // Dubbel postning (dubbelklick, klick + Enter): har samma webbläsare nyss fått
+    // en kod skickas ingen ny, annars gör den andra koden den första ogiltig och
+    // mejlen kan komma i omvänd ordning (2026-11-02, två koder på en sekund).
+    $nyss = queryOne(
+        "SELECT request_id FROM " . DB_DATABASE . ".login_codes
+         WHERE email = ? AND binding_hash = ? AND used_at IS NULL AND expires_at > NOW()
+           AND created_at > NOW() - INTERVAL " . LOGIN_CODE_DUPLICATE_SECONDS . " SECOND
+         ORDER BY id DESC LIMIT 1",
+        [$email, loginCodeBinding()]
+    );
+    if ($nyss) {
+        $_SESSION['login_code_email'] = $email;
+        logActivity($email, "Inloggningskod inte skickad igen: dubbel begäran", ['action' => 'login_code_duplicate']);
+        return ['ok' => true, 'request_id' => $nyss['request_id'], 'error' => null, 'duplicate' => true];
+    }
+
     $senaste = queryOne(
         "SELECT COUNT(*) AS n FROM " . DB_DATABASE . ".login_codes WHERE email = ? AND created_at > NOW() - INTERVAL 1 HOUR",
         [$email]

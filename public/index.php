@@ -124,7 +124,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             if ($error === '') {
                 $skickad = sendLoginCode($email);
-                if ($skickad['ok']) {
+                if ($skickad['ok'] && !empty($skickad['duplicate'])) {
+                    $success = 'Vi har redan skickat en kod till din e-postadress. Använd den senaste koden i mejlet.';
+                } elseif ($skickad['ok']) {
                     $success = $nyttKonto
                         ? 'Vi har skapat ett konto för dig och skickat en kod till din e-postadress.'
                         : 'Vi har skickat en kod till din e-postadress.';
@@ -182,7 +184,7 @@ if (!$isLoggedIn):
                                     <i class="bi bi-exclamation-triangle-fill me-2" aria-hidden="true"></i><?= htmlspecialchars($error) ?>
                                 </div>
                             <?php endif; ?>
-                            <form action="index.php" method="post" class="form" id="kodform">
+                            <form action="index.php" method="post" class="form" id="kodform" data-en-gang>
                                 <input type="hidden" name="csrf_token" value="<?= generateCsrfToken() ?>">
                                 <p class="text-start mb-2">Skriv in koden vi skickade till <strong><?= htmlspecialchars($kodEpost) ?></strong>.</p>
                                 <div class="form-floating mb-2">
@@ -196,7 +198,7 @@ if (!$isLoggedIn):
                             </form>
                             <div class="d-flex justify-content-between mt-3 small">
                                 <a href="index.php?ny=1">Använd en annan adress</a>
-                                <form action="index.php" method="post" class="d-inline">
+                                <form action="index.php" method="post" class="d-inline" data-en-gang>
                                     <input type="hidden" name="csrf_token" value="<?= generateCsrfToken() ?>">
                                     <input type="hidden" name="email" value="<?= htmlspecialchars($kodEpost) ?>">
                                     <input type="hidden" name="remember_me" value="<?= !empty($_SESSION['pending_remember_me']) ? '1' : '0' ?>">
@@ -212,7 +214,7 @@ if (!$isLoggedIn):
                                 </div>
                             <?php endif; ?>
                             
-                            <form action="index.php" method="post" class="form">
+                            <form action="index.php" method="post" class="form" data-en-gang>
                                 <input type="hidden" name="csrf_token" value="<?= generateCsrfToken() ?>">
                                 <div class="form-floating mb-3">
                                     <input type="email" class="form-control" id="email" name="email" placeholder="namn@alingsas.se" autocomplete="email" required>
@@ -247,6 +249,23 @@ if (!$isLoggedIn):
             </div>
         </div>
     </div>
+    <script>
+    // Inloggningsformulären postas bara en gång (dubbelklick gav två koder 2026-11-02)
+    document.querySelectorAll('form[data-en-gang]').forEach(function (f) {
+        f.addEventListener('submit', function (e) {
+            if (f.dataset.skickad) { e.preventDefault(); return; }
+            f.dataset.skickad = '1';
+            f.querySelectorAll('button[type="submit"]').forEach(function (b) { b.disabled = true; });
+        });
+    });
+    // Bakåtknappen kan visa sidan ur cachen med inaktiva knappar
+    window.addEventListener('pageshow', function () {
+        document.querySelectorAll('form[data-en-gang]').forEach(function (f) {
+            delete f.dataset.skickad;
+            f.querySelectorAll('button[type="submit"]').forEach(function (b) { b.disabled = false; });
+        });
+    });
+    </script>
 <?php
     // Include footer
     require_once 'include/footer.php';
