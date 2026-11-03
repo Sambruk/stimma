@@ -2255,8 +2255,9 @@ function savePubAgreementArtifact($data) {
         "INSERT INTO " . DB_DATABASE . ".pub_agreement_artifacts
          (agreement_id, version, pdf_filename, pdf_hash, signed_at, ip_address,
           user_id, user_email, user_name, user_title, user_phone,
-          domain, organization_id, org_name, org_number, agreement_email, certification_text)
-         VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          domain, organization_id, org_name, org_number, agreement_email, certification_text,
+          org_address, org_postal_address, peppol_id, invoice_reference, contact_name, contact_email, contact_phone)
+         VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
             $data['agreement_id'],
             $data['version'] ?? '1.0',
@@ -2273,7 +2274,15 @@ function savePubAgreementArtifact($data) {
             $data['org_name'],
             $data['org_number'],
             $data['agreement_email'],
-            $data['certification_text']
+            $data['certification_text'],
+            // Partstabellen (migration 054, 2026-11-03)
+            $data['org_address'] ?? null,
+            $data['org_postal_address'] ?? null,
+            $data['peppol_id'] ?? null,
+            $data['invoice_reference'] ?? null,
+            $data['contact_name'] ?? null,
+            $data['contact_email'] ?? null,
+            $data['contact_phone'] ?? null,
         ]
     );
 }
@@ -2438,8 +2447,27 @@ function buildSignedPubAgreementPdf($artifact) {
         'signed_at' => $artifact['signed_at'],
         'pdf_hash' => $artifact['pdf_hash'],
         'certification_text' => $artifact['certification_text'],
-    ], $sambruk);
+    ] + pubPartyFields($artifact), $sambruk);
     return $pdf ? ['pdf' => $pdf, 'error' => null] : ['pdf' => null, 'error' => 'stamp_failed'];
+}
+
+/**
+ * Användningspartens uppgifter för partstabellen (migration 054), ur en avtalsrad.
+ * Tom array för avtal tecknade före 2026-11-03 – de återskapas som de mejlades ut.
+ */
+function pubPartyFields($artifact) {
+    if (empty($artifact['org_address'])) {
+        return [];
+    }
+    return [
+        'org_address' => $artifact['org_address'],
+        'org_postal_address' => $artifact['org_postal_address'],
+        'peppol_id' => $artifact['peppol_id'],
+        'invoice_reference' => $artifact['invoice_reference'],
+        'contact_name' => $artifact['contact_name'],
+        'contact_email' => $artifact['contact_email'],
+        'contact_phone' => $artifact['contact_phone'],
+    ];
 }
 
 /** Filnamnet som i bekräftelsemejlet. */

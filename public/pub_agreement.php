@@ -88,6 +88,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sign_agreement'])) {
     $signerTitle = trim($_POST['signer_title'] ?? '');
     $signerEmail = trim($_POST['signer_email'] ?? '');
     $signerPhone = trim($_POST['signer_phone'] ?? '');
+    // Partstabellen (migration 054, 2026-11-03)
+    $orgAddress = trim($_POST['org_address'] ?? '');
+    $orgPostalAddress = trim($_POST['org_postal_address'] ?? '');
+    $peppolId = trim($_POST['peppol_id'] ?? '');
+    $invoiceReference = trim($_POST['invoice_reference'] ?? '');
+    $contactName = trim($_POST['contact_name'] ?? '');
+    $contactEmail = trim($_POST['contact_email'] ?? '');
+    $contactPhone = trim($_POST['contact_phone'] ?? '');
     $certification = isset($_POST['certification']) && $_POST['certification'] !== '' ? true : false;
 
     // Fallback: om JS inte synkade fälten, använd sessionsdata
@@ -111,6 +119,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sign_agreement'])) {
     }
     if (empty($orgNumber) || !preg_match('/^\d{6}-\d{4}$/', $orgNumber)) {
         $errors[] = 'Organisationsnummer måste anges i format NNNNNN-NNNN.';
+    }
+    if ($orgAddress === '') {
+        $errors[] = 'Organisationens adress måste anges.';
+    }
+    if ($orgPostalAddress === '') {
+        $errors[] = 'Postnummer och ort måste anges.';
+    }
+    if ($contactEmail !== '' && !filter_var($contactEmail, FILTER_VALIDATE_EMAIL)) {
+        $errors[] = 'Kontaktpersonens e-postadress är inte giltig.';
+    }
+    foreach ([$orgAddress, $orgPostalAddress, $peppolId, $invoiceReference, $contactName, $contactEmail, $contactPhone] as $falt) {
+        if (mb_strlen($falt) > 255) {
+            $errors[] = 'Något av organisationsfälten är för långt.';
+            break;
+        }
     }
     if (empty($agreementEmail) || !filter_var($agreementEmail, FILTER_VALIDATE_EMAIL)) {
         $errors[] = 'En giltig e-postadress för avtalskopia måste anges.';
@@ -169,7 +192,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sign_agreement'])) {
             'org_name' => $orgName,
             'org_number' => $orgNumber,
             'agreement_email' => $agreementEmail,
-            'certification_text' => $certificationText
+            'certification_text' => $certificationText,
+            'org_address' => $orgAddress,
+            'org_postal_address' => $orgPostalAddress,
+            'peppol_id' => $peppolId ?: null,
+            'invoice_reference' => $invoiceReference ?: null,
+            'contact_name' => $contactName ?: null,
+            'contact_email' => $contactEmail ?: null,
+            'contact_phone' => $contactPhone ?: null,
         ];
 
         $result = savePubAgreementArtifact($artifactData);
@@ -219,7 +249,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sign_agreement'])) {
                     'signed_at' => $signedAt,
                     'pdf_hash' => $pdfHash,
                     'certification_text' => $certificationText
-                ], $sambrukSignData);
+                ] + pubPartyFields($artifactData), $sambrukSignData);
             }
 
             // Skicka bekräftelsemail
@@ -243,6 +273,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sign_agreement'])) {
                         <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold; width: 40%;'>Avtals-ID</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($agreementId) . "</td></tr>
                         <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>Organisation</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($orgName) . "</td></tr>
                         <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>Org.nummer</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($orgNumber) . "</td></tr>
+                        <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>Adress</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($orgAddress) . ", " . e($orgPostalAddress) . "</td></tr>
+                        <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>Peppol-ID/GLN</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($peppolId ?: '-') . "</td></tr>
+                        <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>Fakturareferens</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($invoiceReference ?: '-') . "</td></tr>
+                        <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>Kontaktperson</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($contactName ?: $signerName) . ", " . e($contactEmail ?: $signerEmail) . ", " . e($contactPhone ?: $signerPhone) . "</td></tr>
                         <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>Domän</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($userDomain) . "</td></tr>
                         <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>Undertecknare</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($signerName) . ($signerTitle ? ' (' . e($signerTitle) . ')' : '') . "</td></tr>
                         <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>E-post</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($signerEmail) . "</td></tr>
@@ -528,6 +562,60 @@ require_once 'include/header.php';
                     <label for="org_number">Organisationsnummer (NNNNNN-NNNN) *</label>
                     <div class="form-text">Format: 123456-7890</div>
                 </div>
+
+                <p class="text-muted small">Uppgifterna nedan skrivs in i avtalets partstabell (avsnitt 1).</p>
+
+                <div class="form-floating mb-3">
+                    <input type="text" class="form-control" id="org_address" name="org_address" maxlength="255"
+                           placeholder="Adress" required autocomplete="street-address"
+                           value="<?= e($_POST['org_address'] ?? '') ?>">
+                    <label for="org_address">Adress *</label>
+                </div>
+
+                <div class="form-floating mb-3">
+                    <input type="text" class="form-control" id="org_postal_address" name="org_postal_address" maxlength="255"
+                           placeholder="Postnummer och ort" required
+                           value="<?= e($_POST['org_postal_address'] ?? '') ?>">
+                    <label for="org_postal_address">Postnummer och ort *</label>
+                </div>
+
+                <div class="form-floating mb-3">
+                    <input type="text" class="form-control" id="peppol_id" name="peppol_id" maxlength="100"
+                           placeholder="Peppol-ID/GLN" aria-describedby="peppol_hjalp"
+                           value="<?= e($_POST['peppol_id'] ?? '') ?>">
+                    <label for="peppol_id">Peppol-ID/GLN (valfritt)</label>
+                    <div class="form-text" id="peppol_hjalp">Till exempel 0007:2120000000</div>
+                </div>
+
+                <div class="form-floating mb-3">
+                    <input type="text" class="form-control" id="invoice_reference" name="invoice_reference" maxlength="255"
+                           placeholder="Fakturareferens"
+                           value="<?= e($_POST['invoice_reference'] ?? '') ?>">
+                    <label for="invoice_reference">Fakturareferens (valfritt)</label>
+                </div>
+
+                <fieldset class="mb-3">
+                    <legend class="h6">Kontaktperson</legend>
+                    <p class="form-text mt-0" id="kontakt_hjalp">Lämna tomt om kontaktpersonen är undertecknaren.</p>
+                    <div class="form-floating mb-2">
+                        <input type="text" class="form-control" id="contact_name" name="contact_name" maxlength="255"
+                               placeholder="Namn" autocomplete="name" aria-describedby="kontakt_hjalp"
+                               value="<?= e($_POST['contact_name'] ?? '') ?>">
+                        <label for="contact_name">Namn</label>
+                    </div>
+                    <div class="form-floating mb-2">
+                        <input type="email" class="form-control" id="contact_email" name="contact_email" maxlength="255"
+                               placeholder="E-post" autocomplete="email" aria-describedby="kontakt_hjalp"
+                               value="<?= e($_POST['contact_email'] ?? '') ?>">
+                        <label for="contact_email">E-post</label>
+                    </div>
+                    <div class="form-floating">
+                        <input type="tel" class="form-control" id="contact_phone" name="contact_phone" maxlength="50"
+                               placeholder="Telefon" autocomplete="tel" aria-describedby="kontakt_hjalp"
+                               value="<?= e($_POST['contact_phone'] ?? '') ?>">
+                        <label for="contact_phone">Telefon</label>
+                    </div>
+                </fieldset>
 
                 <div class="d-grid gap-2 d-md-flex justify-content-md-between mt-4">
                     <a href="index.php" class="btn btn-outline-secondary">

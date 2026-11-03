@@ -24,6 +24,48 @@ require_once '../include/auth.php';
 
 require_once 'include/auth_check.php';
 
+// Superadmin: mallen ifylld med exempeldata (2026-11-03). Partstabellens placering
+// gäller en viss mall (PUB_PARTY_TABLE i pdf_stamp.php) – kontrollera en ny mall här
+// innan den kontrasigneras och organisationer tecknar den.
+if (isset($_GET['forhandsgranska'])) {
+    $roll = queryOne("SELECT role FROM " . DB_DATABASE . ".users WHERE email = ?", [$_SESSION['user_email']]);
+    $mall = queryOne("SELECT * FROM " . DB_DATABASE . ".pub_agreement_documents WHERE id = ?", [(int)$_GET['forhandsgranska']]);
+    $mallPdf = $mall ? rtrim(getenv('PUB_PDF_DIR') ?: __DIR__ . '/../docs/pdf', '/') . '/' . basename($mall['filename']) : '';
+    if (!$roll || $roll['role'] !== 'super_admin' || !$mall || !is_file($mallPdf)) {
+        $_SESSION['message'] = 'Förhandsgranskningen kunde inte visas.';
+        $_SESSION['message_type'] = 'warning';
+        redirect('pub_documents.php');
+        exit;
+    }
+    require_once __DIR__ . '/../include/pdf_stamp.php';
+    $pdf = stampPubAgreementPdf($mallPdf, [
+        'agreement_id' => 'EXEMPEL-0000-0000-0000-000000000000',
+        'org_name' => 'Exempelstads kommun (EXEMPEL)',
+        'org_number' => '212000-0000',
+        'domain' => 'exempelstad.se',
+        'signer_name' => 'Anna Andersson',
+        'signer_title' => 'Kommundirektör',
+        'signer_email' => 'anna.andersson@exempelstad.se',
+        'signer_phone' => '070-123 45 67',
+        'ip_address' => '192.0.2.1',
+        'signed_at' => date('Y-m-d H:i:s'),
+        'pdf_hash' => $mall['file_hash'],
+        'certification_text' => 'EXEMPEL – inget tecknat avtal.',
+        'org_address' => 'Storgatan 1',
+        'org_postal_address' => '123 45 Exempelstad',
+        'peppol_id' => '0007:2120000000',
+        'invoice_reference' => 'PUB-Stimma 4711',
+        'contact_name' => 'Bertil Berg',
+        'contact_email' => 'bertil.berg@exempelstad.se',
+        'contact_phone' => '0300-12 34 56',
+    ], !empty($mall['sambruk_signed_at']) ? getSambrukSignatureData($mall['id']) : null);
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: inline; filename="EXEMPEL-PUB-avtal-version-' . preg_replace('/[^a-zA-Z0-9_-]/', '_', $mall['version']) . '.pdf"');
+    header('Cache-Control: no-store, private');
+    echo $pdf;
+    exit;
+}
+
 $artifact = queryOne(
     "SELECT * FROM " . DB_DATABASE . ".pub_agreement_artifacts WHERE id = ?",
     [(int)($_GET['id'] ?? 0)]

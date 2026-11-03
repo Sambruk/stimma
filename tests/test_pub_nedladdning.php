@@ -10,9 +10,13 @@
  *    den fanns när avtalet tecknades
  *  - mallen kontrolleras mot hashen från signeringen; ändrad eller saknad mall ger inget avtal
  *  - nedladdningen loggas och filen cachas inte
+ *  - partstabellen (migration 054): nya avtal får Användningspartens uppgifter ifyllda,
+ *    gamla avtal återskapas oförändrade; formuläret frågar efter fälten
+ *  - superadmin kan förhandsgranska en mall ifylld med exempeldata
  */
 require __DIR__ . '/lib.php';
 reseed();
+db()->exec(file_get_contents(__DIR__ . '/../migrations/054_pub_partsuppgifter.sql'));
 
 $mall = __DIR__ . '/fixtures/pub_mall_test.pdf';
 $hash = hash_file('sha256', $mall);
@@ -81,7 +85,7 @@ foreach (['00000000-0000-0000-0000-000000000001', 'Org 1', '212000-0001', 'Anna 
     check(strpos($text, $v) !== false, "avtalet innehåller $v");
 }
 check(strpos($text, 'Kontra Signerare') !== false, 'Sambruks kontrasignering med (gjordes före signeringen)');
-check(substr_count($a->body, '/Type /Page') - substr_count($a->body, '/Type /Pages') === 3, 'mallens 2 sidor + signeringsintyget');
+check(substr_count($a->body, '/Type /Page') - substr_count($a->body, '/Type /Pages') === 4, 'mallens 3 sidor + signeringsintyget');
 check((bool)dbOne("SELECT 1 FROM logs WHERE email = 'admin-a@orga.test' AND message LIKE 'Laddade ner PUB-avtal för Org 1%'"), 'nedladdningen loggas');
 
 $a->get('/admin/pub_download.php?id=3');
@@ -120,5 +124,56 @@ check($s->status === 302, 'okänt avtal nekas');
 $anon = new class extends Client { public function __construct() { $this->email = ''; } };
 $anon->get('/admin/pub_download.php?id=1');
 check(strncmp($anon->body, '%PDF', 4) !== 0, 'utloggad nekas');
+
+section('Partstabellen fylls i för avtal tecknade med de nya fälten (2026-11-03)');
+avtal(6, 'orga.test', 2, '2026-11-03 09:00:00', '9', $hash, 'Nya Ny');
+dbExec("UPDATE pub_agreement_artifacts SET org_address = 'Storgatan 1', org_postal_address = '123 45 Exempelstad',
+          peppol_id = '0007:2120000001', invoice_reference = 'Ref 4711', contact_name = 'Kalle Kontakt',
+          contact_email = 'kalle@orga.test', contact_phone = '0300-11 22 33' WHERE id = 6");
+$a->get('/admin/pub_download.php?id=6');
+$t6 = pdfText($a->body);
+foreach (['Storgatan 1', '123 45 Exempelstad', '0007:2120000001', 'Ref 4711', 'Kalle Kontakt', 'kalle@orga.test', '0300-11 22 33', 'Nya Ny, Kommundirektör'] as $v) {
+    check(strpos($t6, $v) !== false, "partstabellen har $v");
+}
+check(substr_count($t6, 'Org 6') >= 2, 'organisationens namn både i tabellen och i intyget');
+check(strpos($text, 'Storgatan') === false && substr_count($text, 'Anna Efter') === 1 && strpos($text, 'Anna Efter, Kommundirektör') === false, 'gammalt avtal återskapas utan ifylld tabell');
+dbExec("UPDATE pub_agreement_artifacts SET contact_name = NULL, contact_email = NULL, contact_phone = NULL WHERE id = 6");
+$a->get('/admin/pub_download.php?id=6');
+$t6b = pdfText($a->body);
+check(substr_count($t6b, 'Nya Ny') >= 3 && strpos($t6b, 'Kalle') === false, 'tom kontaktperson = undertecknaren');
+
+$ut = shell_exec('cd /var/www/html/public && php -r ' . escapeshellarg('
+    $_SERVER["HTTP_HOST"] = "stimma.test"; $_SESSION = [];
+    require "include/config.php"; require "include/database.php"; require "include/functions.php";
+    $id = savePubAgreementArtifact(["agreement_id" => "rundtur", "version" => "9", "pdf_filename" => "x.pdf", "pdf_hash" => "h",
+        "ip_address" => "192.0.2.9", "user_id" => 10, "user_email" => "admin-a@orga.test", "user_name" => "R", "domain" => "orga.test",
+        "org_name" => "R", "org_number" => "212000-0002", "agreement_email" => "r@orga.test", "certification_text" => "c",
+        "org_address" => "Väg 2", "org_postal_address" => "111 11 Ort", "peppol_id" => "P", "invoice_reference" => "F",
+        "contact_name" => "K", "contact_email" => "k@orga.test", "contact_phone" => "1"]);
+    $r = queryOne("SELECT org_address, org_postal_address, peppol_id, invoice_reference, contact_name, contact_email, contact_phone FROM " . DB_DATABASE . ".pub_agreement_artifacts WHERE id = ?", [$id]);
+    echo json_encode(array_values($r), JSON_UNESCAPED_UNICODE);
+') . ' 2>&1');
+check(trim((string)$ut) === '["Väg 2","111 11 Ort","P","F","K","k@orga.test","1"]', 'savePubAgreementArtifact sparar de nya fälten', (string)$ut);
+
+section('Formuläret frågar efter partsuppgifterna');
+dbExec("INSERT INTO organizations (id, name, has_pub_agreement) VALUES (4, 'Org Ny', 0)");
+dbExec("INSERT INTO organization_domains (organization_id, domain, is_primary) VALUES (4, 'ny.test', 1)");
+dbExec("INSERT INTO users (id, email, name, verified_at, role, is_admin) VALUES (40, 'admin@ny.test', 'Admin Ny', NOW(), 'student', 1)");
+$ny = new Client('admin@ny.test');
+$ny->get('/pub_agreement.php');
+foreach (['org_address" name="org_address"', 'org_postal_address" name="org_postal_address"', 'name="peppol_id"', 'name="invoice_reference"', 'name="contact_name"', 'name="contact_email"', 'name="contact_phone"'] as $f) {
+    check(strpos($ny->body, $f) !== false, "fältet $f finns", $ny->status . ' ' . snippet($ny->body));
+}
+check(preg_match('/id="org_address"[^>]*required/s', $ny->body) === 1 && preg_match('/id="org_postal_address"[^>]*required/s', $ny->body) === 1, 'adress och postadress obligatoriska');
+
+section('Superadmin förhandsgranskar mallen ifylld');
+$s->get('/admin/pub_documents.php');
+check(strpos($s->body, 'pub_download.php?forhandsgranska=1"') !== false, 'länk till förhandsgranskning');
+$s->get('/admin/pub_download.php?forhandsgranska=1');
+$tp = pdfText($s->body);
+check($s->status === 200 && strpos($tp, 'Storgatan 1') !== false && strpos($tp, 'EXEMPEL') !== false && strpos($tp, 'Kontra Signerare') !== false, 'exempeldata och kontrasignering', $s->status);
+check(strpos($s->headers['content-disposition'] ?? '', 'EXEMPEL-PUB-avtal') !== false, 'filnamnet säger EXEMPEL');
+$a->get('/admin/pub_download.php?forhandsgranska=1');
+check(strncmp($a->body, '%PDF', 4) !== 0, 'vanlig admin får inte förhandsgranska');
 
 done();

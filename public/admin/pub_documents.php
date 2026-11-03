@@ -647,6 +647,10 @@ require_once 'include/header.php';
                                         <?php endif; ?>
                                     </td>
                                     <td class="text-end">
+                                        <a href="pub_download.php?forhandsgranska=<?= (int)$udoc['id'] ?>" class="btn btn-outline-primary btn-sm me-1"
+                                           title="Mallen ifylld med exempeldata, för att kontrollera partstabellen">
+                                            <i class="bi bi-eye me-1" aria-hidden="true"></i>Förhandsgranska ifyllt
+                                        </a>
                                         <?php if (!$udoc['is_active']): ?>
                                         <form method="POST" action="pub_documents.php" class="d-inline">
                                             <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">

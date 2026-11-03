@@ -19,6 +19,105 @@ use setasign\Fpdi\Fpdi;
  * @param array|null $sambrukData Sambruks kontrasigneringsdata (från getSambrukSignatureData())
  * @return string|false Binärt PDF-innehåll eller false vid fel
  */
+/**
+ * Partstabellen i avsnitt 1 (2026-11-03): sida och mitten av varje rad i mm, för
+ * mallen "Personuppgiftsbiträdesavtal Version 2.1 (23.04.06)" (mallversion 3 och 4).
+ * Flyttar en ny mall tabellen måste värdena justeras – superadmin ser resultatet i
+ * förhandsgranskningen (pub_download.php?forhandsgranska=) innan mallen kontrasigneras.
+ */
+const PUB_PARTY_TABLE = [
+    'page' => 3,
+    'x' => 67.1,          // vänsterkant för text i Användningspartens kolumn
+    'width' => 51.5,      // till kolumnens högerkant (119.9 mm) minus marginal
+    'org_name' => 82.2,   // mellan "stimma.sambruk.se" och "Nedan kallad Användningspart"
+    'rows' => [
+        'org_number' => 96.6,
+        'org_address' => 106.1,
+        'org_postal_address' => 115.5,
+        'signer' => 127.7,
+        'signer_phone' => 139.8,
+        'signer_email' => 149.3,
+        'peppol_id' => 158.8,
+        'invoice_reference' => 168.2,
+    ],
+    'contact' => [177.7, 185.0, 190.3], // namn, e-post, telefon som i Sambruks kolumn
+];
+
+/**
+ * Skriv en rad i partstabellen. Krymper texten till som minst 7,5 pt; ryms den
+ * ändå inte bryts den på två rader (e-post vid @), så att inget kapas eller
+ * flödar ut i Sambruks kolumn.
+ */
+function pubPartyCell($pdf, float $yCenter, string $text, string $style = ''): void {
+    $text = iconv('UTF-8', 'ISO-8859-1//TRANSLIT', $text);
+    $w = PUB_PARTY_TABLE['width'];
+    for ($size = 10; $size >= 7.5; $size -= 0.5) {
+        $pdf->SetFont('Helvetica', $style, $size);
+        if ($pdf->GetStringWidth($text) <= $w) {
+            $pdf->SetXY(PUB_PARTY_TABLE['x'], $yCenter - 2.5);
+            $pdf->Cell($w, 5, $text, 0, 0, 'L');
+            return;
+        }
+    }
+    foreach (pubPartySplit($pdf, $text, $w) as $n => $rad) {
+        $pdf->SetXY(PUB_PARTY_TABLE['x'], $yCenter - 3.6 + $n * 3.6);
+        $pdf->Cell($w, 3.6, $rad, 0, 0, 'L');
+    }
+}
+
+/** Dela text i två rader som ryms (aktuellt typsnitt sänks vid behov). */
+function pubPartySplit($pdf, string $text, float $w): array {
+    $at = strpos($text, '@');
+    if ($at !== false && strpos($text, ' ') === false) {
+        $rader = [substr($text, 0, $at), substr($text, $at)];
+    } else {
+        $ord = explode(' ', $text);
+        $rader = [$text, ''];
+        for ($i = count($ord) - 1; $i > 0; $i--) {
+            $forsta = implode(' ', array_slice($ord, 0, $i));
+            if ($pdf->GetStringWidth($forsta) <= $w) {
+                $rader = [$forsta, implode(' ', array_slice($ord, $i))];
+                break;
+            }
+        }
+    }
+    $size = 7.5;
+    while ($size > 5 && max($pdf->GetStringWidth($rader[0]), $pdf->GetStringWidth($rader[1])) > $w) {
+        $size -= 0.5;
+        $pdf->SetFontSize($size);
+    }
+    return $rader;
+}
+
+/**
+ * Fyll Användningspartens kolumn med uppgifterna som lämnades vid signeringen.
+ * Ombud = undertecknaren. Kontaktperson faller tillbaka på undertecknaren.
+ */
+function fillPubPartyTable($pdf, array $d): void {
+    $pdf->SetTextColor(0, 0, 0);
+    $r = PUB_PARTY_TABLE['rows'];
+    pubPartyCell($pdf, PUB_PARTY_TABLE['org_name'], (string)($d['org_name'] ?? ''), 'B');
+    pubPartyCell($pdf, $r['org_number'], (string)($d['org_number'] ?? ''));
+    pubPartyCell($pdf, $r['org_address'], (string)($d['org_address'] ?? ''));
+    pubPartyCell($pdf, $r['org_postal_address'], (string)($d['org_postal_address'] ?? ''));
+    $titel = trim((string)($d['signer_title'] ?? ''));
+    pubPartyCell($pdf, $r['signer'], (string)($d['signer_name'] ?? '') . ($titel !== '' && $titel !== '-' ? ", $titel" : ''));
+    pubPartyCell($pdf, $r['signer_phone'], (string)($d['signer_phone'] ?? ''));
+    pubPartyCell($pdf, $r['signer_email'], (string)($d['signer_email'] ?? ''));
+    pubPartyCell($pdf, $r['peppol_id'], (string)($d['peppol_id'] ?? ''));
+    pubPartyCell($pdf, $r['invoice_reference'], (string)($d['invoice_reference'] ?? ''));
+    [$yNamn, $yEpost, $yTel] = PUB_PARTY_TABLE['contact'];
+    // Bryts e-postadressen på två rader flyttas namn och telefon isär
+    $pdf->SetFont('Helvetica', '', 7.5);
+    $kontaktEpost = (string)(($d['contact_email'] ?? '') ?: ($d['signer_email'] ?? ''));
+    if ($pdf->GetStringWidth(iconv('UTF-8', 'ISO-8859-1//TRANSLIT', $kontaktEpost)) > PUB_PARTY_TABLE['width']) {
+        [$yNamn, $yEpost, $yTel] = [$yNamn - 1.5, $yEpost, $yTel + 1.8];
+    }
+    pubPartyCell($pdf, $yNamn, (string)(($d['contact_name'] ?? '') ?: ($d['signer_name'] ?? '')));
+    pubPartyCell($pdf, $yEpost, $kontaktEpost);
+    pubPartyCell($pdf, $yTel, (string)(($d['contact_phone'] ?? '') ?: ($d['signer_phone'] ?? '')));
+}
+
 function stampPubAgreementPdf($sourcePdfPath, $signingData, $sambrukData = null) {
     if (!file_exists($sourcePdfPath)) {
         return false;
@@ -35,6 +134,9 @@ function stampPubAgreementPdf($sourcePdfPath, $signingData, $sambrukData = null)
             $size = $pdf->getTemplateSize($tplId);
             $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
             $pdf->useTemplate($tplId);
+            if ($i === PUB_PARTY_TABLE['page'] && !empty($signingData['org_address'])) {
+                fillPubPartyTable($pdf, $signingData);
+            }
         }
 
         // Har vi Sambruk-data? Då används tvåparts-layout
