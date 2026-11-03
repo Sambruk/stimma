@@ -347,7 +347,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
             <div class="container-fluid px-4">
                 <h5 class="mb-0"><?= htmlspecialchars($page_title ?? 'Administration') ?></h5>
                 <div class="d-flex align-items-center">
-                    <?php if ($userHasPubAgreement): ?>
+                    <?php if ($userHasPubAgreement && $isAdmin && pubNeedsResign($_SESSION['user_email'])): ?>
+                        <a href="../pub_agreement.php" class="badge bg-info text-dark text-decoration-none" title="PUB-avtalet har en ny version att teckna">
+                            <i class="bi bi-arrow-repeat me-1"></i>PUB-avtal: Ny version att teckna
+                        </a>
+                    <?php elseif ($userHasPubAgreement): ?>
                         <span class="badge bg-success" title="PUB-avtal tecknat för <?= htmlspecialchars($userDomain) ?>">
                             <i class="bi bi-file-earmark-check me-1"></i>PUB-avtal: Ja
                         </span>

@@ -362,6 +362,7 @@ if ($isSuperAdmin) {
                               LEFT JOIN " . DB_DATABASE . ".users u ON d.uploaded_by = u.id
                               ORDER BY d.created_at DESC");
     $signingArtifacts = query("SELECT * FROM " . DB_DATABASE . ".pub_agreement_artifacts ORDER BY signed_at DESC");
+    $allaErsatta = pubSupersededArtifactIds($signingArtifacts ?: []);
 }
 
 // Definiera tillgängliga dokument
@@ -402,6 +403,8 @@ $documents = [
 
 // Organisationens tecknade avtal att ladda ner (2026-11-03), se pub_download.php
 $egnaAvtal = getDownloadablePubArtifactsForAdmin($_SESSION['user_email']);
+$egnaErsatta = pubSupersededArtifactIds($egnaAvtal);
+$pubOmteckna = pubNeedsResign($_SESSION['user_email']);
 
 // Kontrollera vilka filer som faktiskt finns
 $docsPath = __DIR__ . '/../docs/pdf/';
@@ -447,6 +450,15 @@ require_once 'include/header.php';
                     <h2 class="h5 mb-0"><i class="bi bi-file-earmark-check me-2"></i>Ert tecknade PUB-avtal</h2>
                 </div>
                 <div class="card-body">
+                    <?php if ($pubOmteckna): ?>
+                        <div class="alert alert-info d-flex align-items-center justify-content-between flex-wrap gap-2">
+                            <div>
+                                <strong>Ny version att teckna.</strong>
+                                Avtalet har uppdaterats till version <?= e($pubOmteckna['document']['version']) ?>. Ert avtal från <?= e(date('Y-m-d', strtotime($pubOmteckna['artifact']['signed_at']))) ?> gäller tills det nya är tecknat.
+                            </div>
+                            <a href="../pub_agreement.php" class="btn btn-primary btn-sm"><i class="bi bi-pen me-1" aria-hidden="true"></i>Teckna ny version</a>
+                        </div>
+                    <?php endif; ?>
                     <?php if (empty($egnaAvtal)): ?>
                         <p class="mb-0 text-muted">Er organisation har inget digitalt tecknat PUB-avtal i Stimma.</p>
                     <?php else: ?>
@@ -475,6 +487,8 @@ require_once 'include/header.php';
                                         <td>
                                             <?php if (isPubArtifactInvalidated($avt)): ?>
                                                 <span class="badge bg-danger">Ogiltigt</span>
+                                            <?php elseif (isset($egnaErsatta[(int)$avt['id']])): ?>
+                                                <span class="badge bg-secondary">Ersatt av nyare avtal</span>
                                             <?php else: ?>
                                                 <span class="badge bg-success">Gäller</span>
                                             <?php endif; ?>
@@ -873,6 +887,8 @@ require_once 'include/header.php';
                                                     <i class="bi bi-x-circle me-1"></i>Ogiltigt
                                                 </span>
                                                 <br><small class="text-muted"><?= e(date('Y-m-d', strtotime($art['invalidated_at']))) ?></small>
+                                            <?php elseif (isset($allaErsatta[(int)$art['id']])): ?>
+                                                <span class="badge bg-secondary">Ersatt</span>
                                             <?php else: ?>
                                                 <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Gäller</span>
                                             <?php endif; ?>

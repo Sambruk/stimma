@@ -2452,6 +2452,89 @@ function buildSignedPubAgreementPdf($artifact) {
 }
 
 /**
+ * Senaste giltiga tecknade avtalet för användarens organisation (alla dess domäner,
+ * även avtal från innan domänen grupperades) eller, utan organisation, domänen.
+ *
+ * @param string $email
+ * @return array|null
+ */
+function getLatestValidPubArtifactForEmail($email) {
+    $domain = strtolower((string)getUserDomain($email));
+    if ($domain === '') {
+        return null;
+    }
+    $org = getOrganizationByDomain($domain);
+    $domains = $org ? array_map('strtolower', getOrganizationDomains($org['id'])) : [];
+    $domains[] = $domain;
+    $domains = array_values(array_unique($domains));
+    $ph = implode(',', array_fill(0, count($domains), '?'));
+    $params = $domains;
+    $orgVillkor = '';
+    if ($org) {
+        $orgVillkor = ' OR organization_id = ?';
+        $params[] = (int)$org['id'];
+    }
+    return queryOne(
+        "SELECT * FROM " . DB_DATABASE . ".pub_agreement_artifacts
+         WHERE invalidated_at IS NULL AND (LOWER(domain) IN ($ph)$orgVillkor)
+         ORDER BY signed_at DESC, id DESC LIMIT 1",
+        $params
+    );
+}
+
+/**
+ * Behöver organisationen teckna om PUB-avtalet? (2026-11-03, Thomas beslut)
+ *
+ * Ja när organisationens senaste giltiga avtal tecknades på en annan mall än den
+ * aktiva, kontrasignerade. Jämförelsen görs på mallens hash, inte versionsnumret:
+ * v3 och v4 är samma fil, och det är innehållet som tecknats. Det gamla avtalet
+ * gäller tills det nya är tecknat, så ingen förlorar sitt PUB-avtal under tiden.
+ * Avtal som registrerats för hand (flaggan utan tecknat avtal i Stimma) påverkas inte.
+ *
+ * @param string $email
+ * @return array|null ['artifact' => senaste giltiga avtalet, 'document' => aktiv mall] eller null
+ */
+function pubNeedsResign($email) {
+    $artifact = getLatestValidPubArtifactForEmail($email);
+    if (!$artifact) {
+        return null;
+    }
+    $doc = getActivePubDocument();
+    if (!$doc || empty($doc['sambruk_signed_at'])) {
+        return null;
+    }
+    if (hash_equals((string)$doc['file_hash'], (string)$artifact['pdf_hash'])) {
+        return null;
+    }
+    return ['artifact' => $artifact, 'document' => $doc];
+}
+
+/**
+ * Id:n på giltiga avtal som ersatts av ett senare giltigt avtal i samma organisation
+ * (eller domän utan organisation). Används bara för att visa status.
+ *
+ * @param array $artifacts Rader ur pub_agreement_artifacts
+ * @return array<int,true>
+ */
+function pubSupersededArtifactIds(array $artifacts) {
+    usort($artifacts, fn($a, $b) => [$b['signed_at'], $b['id']] <=> [$a['signed_at'], $a['id']]);
+    $sett = [];
+    $ersatta = [];
+    foreach ($artifacts as $a) {
+        if (isPubArtifactInvalidated($a)) {
+            continue;
+        }
+        $org = $a['organization_id'] ?: (getOrganizationByDomain($a['domain'])['id'] ?? null);
+        $nyckel = $org ? 'o' . $org : 'd' . strtolower($a['domain']);
+        if (isset($sett[$nyckel])) {
+            $ersatta[(int)$a['id']] = true;
+        }
+        $sett[$nyckel] = true;
+    }
+    return $ersatta;
+}
+
+/**
  * Användningspartens uppgifter för partstabellen (migration 054), ur en avtalsrad.
  * Tom array för avtal tecknade före 2026-11-03 – de återskapas som de mejlades ut.
  */

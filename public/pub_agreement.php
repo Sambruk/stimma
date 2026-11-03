@@ -42,8 +42,10 @@ if (!$currentUser || $currentUser['is_admin'] != 1) {
     exit;
 }
 
-// Kontrollera om organisationen (eller domänen, om ingen org finns) redan har PUB-avtal
-if (userHasPubAgreement($userEmail)) {
+// Kontrollera om organisationen (eller domänen, om ingen org finns) redan har PUB-avtal.
+// Undantag: avtalet tecknades på en äldre mall – då ska det tecknas om (2026-11-03).
+$omteckna = pubNeedsResign($userEmail);
+if (userHasPubAgreement($userEmail) && !$omteckna) {
     $_SESSION['message'] = 'Er organisation har redan ett tecknat PUB-avtal.';
     $_SESSION['message_type'] = 'info';
     redirect('index.php');
@@ -333,7 +335,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sign_agreement'])) {
                 $_SESSION['sms_send_count']
             );
 
-            $_SESSION['message'] = 'PUB-avtalet har tecknats! En bekräftelse med det stämplade avtalet har skickats till din e-post.';
+            $_SESSION['message'] = ($omteckna ? 'Den nya versionen av PUB-avtalet har tecknats och ersätter det tidigare.' : 'PUB-avtalet har tecknats!')
+                . ' En bekräftelse med det stämplade avtalet har skickats till din e-post.';
             $_SESSION['message_type'] = 'success';
             redirect('index.php');
             exit;
@@ -356,6 +359,15 @@ require_once 'include/header.php';
             <h4 class="m-0"><i class="bi bi-pen me-2"></i>Teckna PUB-avtal med Sambruk</h4>
         </div>
         <div class="card-body">
+            <?php if ($omteckna): ?>
+            <div class="alert alert-warning">
+                <i class="bi bi-arrow-repeat me-2" aria-hidden="true"></i>
+                <strong>Ny version av PUB-avtalet att teckna.</strong><br>
+                Er organisation tecknade version <?= e($omteckna['artifact']['version']) ?> den <?= e(date('Y-m-d', strtotime($omteckna['artifact']['signed_at']))) ?>.
+                Avtalet har uppdaterats till version <?= e($omteckna['document']['version']) ?> och behöver tecknas om.
+                Det tidigare avtalet gäller tills det nya är tecknat.
+            </div>
+            <?php endif; ?>
             <div class="alert alert-info">
                 <i class="bi bi-info-circle me-2"></i>
                 <strong>Varför behövs ett PUB-avtal?</strong><br>

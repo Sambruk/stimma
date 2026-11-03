@@ -119,6 +119,23 @@
         renderAnnouncementModal((int)$_SESSION['user_id'], generateCsrfToken());
     }
     ?>
+    <?php
+    // Ny version av PUB-avtalet att teckna (2026-11-03) – bara administratörer ser
+    // det; det gamla avtalet gäller tills vidare, så övriga användare berörs inte.
+    $pubOmteckna = ($userHasPubAgreementForBanner && $isPubAdmin && !$isHeaderPublicOnly) ? pubNeedsResign($_SESSION['user_email']) : null;
+    ?>
+    <?php if ($pubOmteckna): ?>
+    <div class="alert alert-info mb-0 rounded-0 py-2" role="status" style="z-index: 1031;">
+        <div class="container-fluid d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div>
+                <i class="bi bi-arrow-repeat me-2" aria-hidden="true"></i>
+                <strong>PUB-avtalet har uppdaterats till version <?= htmlspecialchars($pubOmteckna['document']['version']) ?>.</strong>
+                Teckna om avtalet för er organisation. Det tidigare avtalet gäller tills dess.
+            </div>
+            <a href="pub_agreement.php" class="btn btn-primary btn-sm text-nowrap"><i class="bi bi-pen me-1" aria-hidden="true"></i>Teckna ny version</a>
+        </div>
+    </div>
+    <?php endif; ?>
     <?php if (!$userHasPubAgreementForBanner && !$isHeaderPublicOnly): ?>
     <!-- PUB-avtalsvarning -->
     <div class="alert alert-<?= $isPubAdmin ? 'danger' : 'warning' ?> mb-0 rounded-0 py-2" role="alert" style="z-index: 1031;">
