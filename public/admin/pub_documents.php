@@ -400,6 +400,9 @@ $documents = [
     ]
 ];
 
+// Organisationens tecknade avtal att ladda ner (2026-11-03), se pub_download.php
+$egnaAvtal = getDownloadablePubArtifactsForAdmin($_SESSION['user_email']);
+
 // Kontrollera vilka filer som faktiskt finns
 $docsPath = __DIR__ . '/../docs/pdf/';
 foreach ($documents as &$doc) {
@@ -435,6 +438,58 @@ require_once 'include/header.php';
                             <i class="bi bi-file-earmark-lock2"></i>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Organisationens tecknade PUB-avtal -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h2 class="h5 mb-0"><i class="bi bi-file-earmark-check me-2"></i>Ert tecknade PUB-avtal</h2>
+                </div>
+                <div class="card-body">
+                    <?php if (empty($egnaAvtal)): ?>
+                        <p class="mb-0 text-muted">Er organisation har inget digitalt tecknat PUB-avtal i Stimma.</p>
+                    <?php else: ?>
+                        <p class="text-muted small">Avtalet med signeringsintyg, samma som skickades med e-post när det tecknades. Filen innehåller undertecknarens kontaktuppgifter.</p>
+                        <div class="table-responsive">
+                            <table class="table align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Organisation</th>
+                                        <th>Domän</th>
+                                        <th>Undertecknare</th>
+                                        <th>Tecknat</th>
+                                        <th>Version</th>
+                                        <th>Status</th>
+                                        <th><span class="visually-hidden">Ladda ner</span></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($egnaAvtal as $avt): ?>
+                                    <tr>
+                                        <td><?= e($avt['org_name']) ?></td>
+                                        <td><?= e($avt['domain']) ?></td>
+                                        <td><?= e($avt['user_name']) ?></td>
+                                        <td><?= e(date('Y-m-d', strtotime($avt['signed_at']))) ?></td>
+                                        <td><?= e($avt['version']) ?></td>
+                                        <td>
+                                            <?php if (isPubArtifactInvalidated($avt)): ?>
+                                                <span class="badge bg-danger">Ogiltigt</span>
+                                            <?php else: ?>
+                                                <span class="badge bg-success">Gäller</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="text-end">
+                                            <a href="pub_download.php?id=<?= (int)$avt['id'] ?>" class="btn btn-primary btn-sm">
+                                                <i class="bi bi-download me-1" aria-hidden="true"></i>Ladda ner<span class="visually-hidden"> PUB-avtal för <?= e($avt['org_name']) ?>, tecknat <?= e(date('Y-m-d', strtotime($avt['signed_at']))) ?></span>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
 
@@ -790,6 +845,7 @@ require_once 'include/header.php';
                                         <th>Datum</th>
                                         <th>Version</th>
                                         <th>Status</th>
+                                        <th><span class="visually-hidden">Ladda ner</span></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -816,6 +872,11 @@ require_once 'include/header.php';
                                             <?php else: ?>
                                                 <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Gäller</span>
                                             <?php endif; ?>
+                                        </td>
+                                        <td class="text-end">
+                                            <a href="pub_download.php?id=<?= (int)$art['id'] ?>" class="btn btn-outline-primary btn-sm" onclick="event.stopPropagation()" title="Ladda ner avtalet">
+                                                <i class="bi bi-download" aria-hidden="true"></i><span class="visually-hidden">Ladda ner PUB-avtal för <?= e($art['org_name']) ?></span>
+                                            </a>
                                         </td>
                                     </tr>
                                     <?php endforeach; ?>

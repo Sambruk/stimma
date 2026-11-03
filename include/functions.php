@@ -2313,6 +2313,141 @@ function isPubArtifactInvalidated($artifact) {
 }
 
 /**
+ * Får användaren ladda ner det tecknade PUB-avtalet? (2026-11-03)
+ *
+ * Superadmin får alla. En administratör får avtal som tillhör hens organisation:
+ * avtalets organization_id, eller avtalets domän om den är en av organisationens
+ * domäner (täcker avtal som tecknades innan domänen grupperades, t.ex. sater.se).
+ * Utan organisation gäller bara den egna domänen. Thomas beslut: alla admins i
+ * organisationen, så att avtalet finns kvar när den som tecknade slutar.
+ *
+ * @param array $artifact Rad ur pub_agreement_artifacts
+ * @param string $email Inloggad användares e-post
+ * @return bool
+ */
+function canDownloadPubArtifact($artifact, $email) {
+    if (empty($artifact) || empty($email)) {
+        return false;
+    }
+    $user = queryOne("SELECT role, is_admin FROM " . DB_DATABASE . ".users WHERE email = ?", [$email]);
+    if (!$user) {
+        return false;
+    }
+    if ($user['role'] === 'super_admin') {
+        return true;
+    }
+    if ((int)$user['is_admin'] !== 1) {
+        return false;
+    }
+    $domain = strtolower((string)getUserDomain($email));
+    $artDomain = strtolower((string)$artifact['domain']);
+    if ($domain !== '' && $domain === $artDomain) {
+        return true;
+    }
+    $org = getOrganizationByDomain($domain);
+    if (!$org) {
+        return false;
+    }
+    if ((int)($artifact['organization_id'] ?? 0) === (int)$org['id']) {
+        return true;
+    }
+    return in_array($artDomain, array_map('strtolower', getOrganizationDomains($org['id'])), true);
+}
+
+/**
+ * Tecknade PUB-avtal som användaren får ladda ner, senaste först.
+ * Superadmin får inte alla här — den listan finns i superadmins avtalstabell.
+ *
+ * @param string $email
+ * @return array Rader ur pub_agreement_artifacts
+ */
+function getDownloadablePubArtifactsForAdmin($email) {
+    $domain = strtolower((string)getUserDomain($email));
+    if ($domain === '') {
+        return [];
+    }
+    $org = getOrganizationByDomain($domain);
+    $domains = $org ? array_map('strtolower', getOrganizationDomains($org['id'])) : [];
+    $domains[] = $domain;
+    $domains = array_values(array_unique($domains));
+    $ph = implode(',', array_fill(0, count($domains), '?'));
+    $params = $domains;
+    $orgVillkor = '';
+    if ($org) {
+        $orgVillkor = ' OR organization_id = ?';
+        $params[] = (int)$org['id'];
+    }
+    $rader = query(
+        "SELECT * FROM " . DB_DATABASE . ".pub_agreement_artifacts
+         WHERE LOWER(domain) IN ($ph)$orgVillkor ORDER BY signed_at DESC",
+        $params
+    ) ?: [];
+    return array_values(array_filter($rader, fn($a) => canDownloadPubArtifact($a, $email)));
+}
+
+/**
+ * Återskapa det stämplade PUB-avtalet som mejlades vid signeringen.
+ *
+ * Det stämplade avtalet sparades aldrig, men allt som stämplades finns på
+ * avtalsraden. Originalmallen hittas via version + hash, och dess hash
+ * kontrolleras mot den som sparades vid signeringen; stämmer den inte lämnas
+ * inget ut (då vore det inte samma avtal). Sambruks kontrasignering tas med
+ * bara om den gjordes före signeringen, som i det mejlade avtalet.
+ *
+ * @param array $artifact Rad ur pub_agreement_artifacts
+ * @return array ['pdf' => ?string, 'error' => ?string] error: 'no_source', 'hash_mismatch', 'stamp_failed'
+ */
+function buildSignedPubAgreementPdf($artifact) {
+    if (empty($artifact['pdf_hash'])) {
+        return ['pdf' => null, 'error' => 'no_source'];
+    }
+    $doc = queryOne(
+        "SELECT * FROM " . DB_DATABASE . ".pub_agreement_documents
+         WHERE version = ? AND file_hash = ? ORDER BY id DESC LIMIT 1",
+        [$artifact['version'], $artifact['pdf_hash']]
+    );
+    if (!$doc) {
+        return ['pdf' => null, 'error' => 'no_source'];
+    }
+    // PUB_PDF_DIR bara för testmiljön (koden är skrivskyddad där); standard som i pub_agreement.php
+    $pdfDir = rtrim(getenv('PUB_PDF_DIR') ?: __DIR__ . '/../public/docs/pdf', '/') . '/';
+    $pdfPath = $pdfDir . basename($doc['filename']);
+    if (!is_file($pdfPath)) {
+        return ['pdf' => null, 'error' => 'no_source'];
+    }
+    if (!hash_equals($artifact['pdf_hash'], hash_file('sha256', $pdfPath))) {
+        return ['pdf' => null, 'error' => 'hash_mismatch'];
+    }
+
+    $sambruk = null;
+    if (!empty($doc['sambruk_signed_at']) && strtotime($doc['sambruk_signed_at']) <= strtotime($artifact['signed_at'])) {
+        $sambruk = getSambrukSignatureData($doc['id']);
+    }
+
+    require_once __DIR__ . '/pdf_stamp.php';
+    $pdf = stampPubAgreementPdf($pdfPath, [
+        'agreement_id' => $artifact['agreement_id'],
+        'org_name' => $artifact['org_name'],
+        'org_number' => $artifact['org_number'],
+        'domain' => $artifact['domain'],
+        'signer_name' => $artifact['user_name'],
+        'signer_title' => $artifact['user_title'] ?: '-',
+        'signer_email' => $artifact['user_email'],
+        'signer_phone' => $artifact['user_phone'],
+        'ip_address' => $artifact['ip_address'],
+        'signed_at' => $artifact['signed_at'],
+        'pdf_hash' => $artifact['pdf_hash'],
+        'certification_text' => $artifact['certification_text'],
+    ], $sambruk);
+    return $pdf ? ['pdf' => $pdf, 'error' => null] : ['pdf' => null, 'error' => 'stamp_failed'];
+}
+
+/** Filnamnet som i bekräftelsemejlet. */
+function signedPubAgreementFilename($artifact) {
+    return 'PUB-avtal-' . preg_replace('/[^a-zA-Z0-9_-]/', '_', (string)$artifact['org_name']) . '-signerat.pdf';
+}
+
+/**
  * Hämta det senaste GILTIGA PUB-avtalet för en domän.
  *
  * Skiljer sig från getPubAgreementArtifact(), som hämtar det senaste avtalet
