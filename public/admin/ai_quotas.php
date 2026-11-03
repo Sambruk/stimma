@@ -218,6 +218,13 @@ require_once 'include/header.php';
     <div class="card-header"><strong>Modellval per funktion</strong></div>
     <div class="card-body">
         <p class="text-muted small mb-3">Dyrare modeller (gpt-4o, gpt-4-turbo) ger högre kvalitet men förbrukar kvoten snabbare. För chat räcker oftast gpt-4o-mini.</p>
+        <?php $tutorLeverantor = getAiTutorProvider(); if ($tutorLeverantor): ?>
+        <div class="alert alert-info small">
+            <strong>AI-tutorn går via <?= htmlspecialchars(parse_url($tutorLeverantor['server'], PHP_URL_HOST)) ?></strong>
+            med modellen <code><?= htmlspecialchars($tutorLeverantor['model']) ?></code> (AI_TUTOR_* i .env).
+            Valet för "AI-chat per lektion" nedan används inte så länge AI_TUTOR_API_KEY är satt.
+        </div>
+        <?php endif; ?>
         <form method="post">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
             <input type="hidden" name="action" value="save_models">

@@ -162,6 +162,22 @@ function mailSinkStart(): void {
     foreach (glob('/tmp/stimma-mail/*.eml') ?: [] as $f) unlink($f);
 }
 
+/** Starta den falska inferensservern (tests/ai_stub.php) och töm anropen. */
+function aiStubStart(): void {
+    if (!@fsockopen('127.0.0.1', 2626, $e, $s, 0.2)) {
+        exec('php -S 127.0.0.1:2626 ' . escapeshellarg(__DIR__ . '/ai_stub.php') . ' > /dev/null 2>&1 &');
+        for ($i = 0; $i < 50 && !@fsockopen('127.0.0.1', 2626, $e, $s, 0.1); $i++) usleep(100000);
+    }
+    foreach (glob('/tmp/ai-stub/*.json') ?: [] as $f) unlink($f);
+}
+
+/** Anropen som den falska inferensservern tagit emot, äldst först. */
+function aiStubRequests(): array {
+    $f = glob('/tmp/ai-stub/*.json') ?: [];
+    sort($f);
+    return array_map(fn($x) => json_decode(file_get_contents($x), true), $f);
+}
+
 /** Textinnehållet (avkodat) i alla mejl till adressen, äldst först. */
 function mailsTo(string $email): array {
     $ut = [];

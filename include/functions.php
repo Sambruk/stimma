@@ -479,6 +479,26 @@ function isImpersonating() {
     return isset($_SESSION['impersonator_user_id']);
 }
 
+/**
+ * Egen inferensleverantör för AI-tutorn (2026-11-03): Berget AI, modeller i Sverige.
+ * Aktiv när AI_TUTOR_API_KEY är satt; annars går tutorn via AI_* som förut.
+ * Modellen styrs då av AI_TUTOR_MODEL, inte av modellvalet i superadmins vy
+ * (det listar OpenAI-modeller som Berget inte har).
+ *
+ * @return array|null ['server' => string, 'key' => string, 'model' => string]
+ */
+function getAiTutorProvider() {
+    $key = trim((string)getenv('AI_TUTOR_API_KEY'));
+    if ($key === '') {
+        return null;
+    }
+    return [
+        'server' => getenv('AI_TUTOR_SERVER') ?: 'https://api.berget.ai/v1/chat/completions',
+        'key' => $key,
+        'model' => getenv('AI_TUTOR_MODEL') ?: 'mistralai/Mistral-Small-3.2-24B-Instruct-2506',
+    ];
+}
+
 function sendOpenAIRequest($messages, array $context = []) {
     // Hämta API-konfiguration från .env
     $provider = getenv('AI_PROVIDER') ?: 'openai';
@@ -493,6 +513,14 @@ function sendOpenAIRequest($messages, array $context = []) {
     $featureForModel = $context['feature'] ?? 'chat';
     $defaultModel = getenv('AI_MODEL') ?: 'gpt-4o-mini';
     $model = getModelForFeature($featureForModel, $defaultModel);
+
+    // AI-tutorn (bara uttryckliga chattanrop, inte t.ex. anslutningstestet)
+    $tutor = ($context['feature'] ?? null) === 'chat' ? getAiTutorProvider() : null;
+    if ($tutor) {
+        $apiServer = $tutor['server'];
+        $apiKey = $tutor['key'];
+        $model = $tutor['model'];
+    }
     $maxTokens = (int)(getenv('AI_MAX_COMPLETION_TOKENS') ?: 4096);
     $temperature = (float)(getenv('AI_TEMPERATURE') ?: 0.7);
     $topP = (float)(getenv('AI_TOP_P') ?: 0.9);
