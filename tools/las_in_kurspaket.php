@@ -140,7 +140,7 @@ function genereraKursomslag(int $courseId, array $c, string $email): array {
     $prompt = aiImageBuildPrompt('kurs', $c['title'], $c['description'], $c['image_style'] ?? 'illustration', (string)($c['image_wish'] ?? ''));
     $payload = aiImageBuildPayload($model, $prompt, aiImageSizeFor('kurs'), aiImageQualityFor('kurs'));
 
-    $ch = curl_init('https://api.openai.com/v1/images/generations');
+    $ch = curl_init(OPENAI_API_BASE . '/images/generations');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST => true,

@@ -881,7 +881,7 @@ function parseAIJson($responseText) {
  */
 function callOpenAI($systemPrompt, $userPrompt, $maxTokens = 16384, array $context = []) {
     // Use defined constants from config.php
-    $apiServer = defined('AI_SERVER') && AI_SERVER ? AI_SERVER : 'https://api.openai.com/v1/chat/completions';
+    $apiServer = defined('AI_SERVER') && AI_SERVER ? AI_SERVER : OPENAI_API_BASE . '/chat/completions';
     $apiKey = defined('AI_API_KEY') ? AI_API_KEY : '';
 
     if (empty($apiKey)) {
@@ -1007,7 +1007,7 @@ function searchImage($query) {
  */
 function generateAIImageWithPrompt($prompt, $size = '1024x1024', array $context = []) {
     $apiKey = defined('AI_API_KEY') ? AI_API_KEY : '';
-    $imageApiServer = 'https://api.openai.com/v1/images/generations';
+    $imageApiServer = OPENAI_API_BASE . '/images/generations';
 
     if (empty($apiKey)) {
         echo "  - No API key for image generation\n";

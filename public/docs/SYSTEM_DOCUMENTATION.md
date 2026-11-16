@@ -247,7 +247,7 @@ chown www-data:www-data upload/
 | Variabel | Beskrivning | Standard |
 |----------|-------------|----------|
 | `AI_API_KEY` | OpenAI API-nyckel | - |
-| `AI_SERVER` | API-server | api.openai.com |
+| `AI_SERVER` | API-server | tom = eu.api.openai.com (OpenAI-projekt med EU-lagring, nyckel OPENAI_EU) |
 | `AI_MODEL` | AI-modell | gpt-4 |
 | `AI_TEMPERATURE` | Temperatur (kreativitet) | 0.7 |
 | `AI_TOP_P` | Top-p sampling | 0.9 |

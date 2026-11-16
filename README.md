@@ -66,7 +66,7 @@ DB_HOST=localhost
 DB_DATABASE=stimma
 DB_USERNAME=stimma
 DB_PASSWORD=your_password
-AI_API_KEY=your_openai_api_key
+OPENAI_EU=your_openai_eu_project_api_key
 ```
 
 4. Starta med Docker Compose:
@@ -91,8 +91,8 @@ mysql -u root -p stimma < init.sql
 | `DB_DATABASE` | Databasnamn |
 | `DB_USERNAME` | Databasanvändare |
 | `DB_PASSWORD` | Databaslösenord |
-| `AI_API_KEY` | OpenAI API-nyckel |
-| `AI_API_SERVER` | OpenAI API-server (standard: api.openai.com) |
+| `OPENAI_EU` | OpenAI API-nyckel för projektet med EU-datalagring (eu.api.openai.com) |
+| `AI_SERVER` | Annan chattserver än OpenAI (tom = eu.api.openai.com) |
 | `AI_MODEL` | AI-modell för kursgenerering (standard: gpt-4) |
 | `SMTP_HOST` | SMTP-server för e-post |
 | `SMTP_PORT` | SMTP-port |

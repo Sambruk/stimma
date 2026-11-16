@@ -110,7 +110,7 @@ if ($result['success']) {
  */
 function generateAIImage($courseTitle, $courseDescription, $courseId = null, $imageStyle = 'illustration', $imageWish = '') {
     $apiKey = defined('AI_API_KEY') ? AI_API_KEY : '';
-    $imageApiServer = 'https://api.openai.com/v1/images/generations';
+    $imageApiServer = OPENAI_API_BASE . '/images/generations';
 
     if (empty($apiKey)) {
         return ['success' => false, 'error' => 'API-nyckel saknas.'];

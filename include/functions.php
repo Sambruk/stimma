@@ -91,7 +91,7 @@ function secureUrlFetch($url, $allowedDomains = [], $timeout = 30) {
  */
 function getDefaultApiUrl($provider) {
     $urls = [
-        'openai' => 'https://api.openai.com/v1/chat/completions',
+        'openai' => OPENAI_API_BASE . '/chat/completions',
         'anthropic' => 'https://api.anthropic.com/v1/messages',
         'google' => 'https://generativelanguage.googleapis.com/v1beta/models',
         'openrouter' => 'https://openrouter.ai/api/v1/chat/completions',
@@ -506,7 +506,7 @@ function sendOpenAIRequest($messages, array $context = []) {
     if (empty($apiServer)) {
         $apiServer = getDefaultApiUrl($provider);
     }
-    $apiKey = getenv('AI_API_KEY') ?: '';
+    $apiKey = AI_API_KEY; // OPENAI_EU, se config.php
     // Modell väljs i superadmin-UI per feature (chat är default-fallback för
     // sendOpenAIRequest eftersom det är den generella anrops-funktionen).
     require_once __DIR__ . '/ai_quota.php';

@@ -49,10 +49,10 @@ try {
         $apiServer = getDefaultApiUrl($provider);
     }
     $model = getenv('AI_MODEL') ?: 'gpt-4';
-    $apiKey = getenv('AI_API_KEY') ?: '';
+    $apiKey = AI_API_KEY; // OPENAI_EU, se config.php
 
     if (empty($apiKey)) {
-        throw new Exception('API-nyckel saknas i konfigurationen (.env). Kontrollera att AI_API_KEY är konfigurerad.');
+        throw new Exception('API-nyckel saknas i konfigurationen (.env). Kontrollera att OPENAI_EU (nyckel till OpenAI-projektet med EU-lagring) är konfigurerad.');
     }
 
     // Skapa ett enkelt testmeddelande

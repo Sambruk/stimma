@@ -79,8 +79,13 @@ define('MAIL_FROM_NAME', getenv('MAIL_FROM_NAME') ?: 'Stimma');
 define('MAIL_ALLOWED_RECIPIENTS', getenv('MAIL_ALLOWED_RECIPIENTS') ?: '');
 
 // AI Configuration
+// OpenAI anropas via projektet med EU-datalagring sedan 2026-11-16 (PUB-avtalets bilaga 2).
+// Nyckeln OPENAI_EU fungerar bara mot eu.api.openai.com – mot api.openai.com svarar OpenAI
+// 401 "outside project geography EU". En missad adress ger alltså fel, inte behandling utanför EU.
+// Den gamla nyckeln AI_API_KEY (projekt utan EU-lagring) används inte längre.
+define('OPENAI_API_BASE', 'https://eu.api.openai.com/v1');
 define('AI_SERVER', getenv('AI_SERVER') ?: '');
-define('AI_API_KEY', getenv('AI_API_KEY') ?: '');
+define('AI_API_KEY', getenv('OPENAI_EU') ?: '');
 define('AI_MODEL', getenv('AI_MODEL') ?: '');
 define('AI_MAX_COMPLETION_TOKENS', getenv('AI_MAX_COMPLETION_TOKENS') ?: 4096);
 define('AI_TEMPERATURE', getenv('AI_TEMPERATURE') ?: 0.7);

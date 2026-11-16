@@ -21,7 +21,7 @@ if (!function_exists('aiLessonGenerateContent')) {
  * @throws Exception vid nätverks-, auth- eller parserfel
  */
 function aiLessonCallOpenAI(string $systemPrompt, string $userPrompt, int $maxTokens = 8192, array $context = []): string {
-    $apiServer = defined('AI_SERVER') && AI_SERVER ? AI_SERVER : 'https://api.openai.com/v1/chat/completions';
+    $apiServer = defined('AI_SERVER') && AI_SERVER ? AI_SERVER : OPENAI_API_BASE . '/chat/completions';
     $apiKey    = defined('AI_API_KEY') ? AI_API_KEY : '';
 
     if (empty($apiKey)) {
@@ -508,7 +508,7 @@ function aiGenerateLessonImage(string $lessonTitle, ?string $courseName, ?int $c
     $prompt = aiImageBuildPrompt('lektion', $lessonTitle, $courseName, $imageStyle, (string)$imageWish);
     $data = aiImageBuildPayload($imageModel, $prompt, aiImageSizeFor('lektion'), aiImageQualityFor('lektion'));
 
-    $ch = curl_init('https://api.openai.com/v1/images/generations');
+    $ch = curl_init(OPENAI_API_BASE . '/images/generations');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST           => true,

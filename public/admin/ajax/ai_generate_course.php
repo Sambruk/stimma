@@ -216,7 +216,7 @@ Svara ENDAST med giltig JSON, ingen annan text. Formatet ska vara en array med o
  * Call OpenAI API with GPT-4o-mini for quick tasks
  */
 function callOpenAIMini($systemPrompt, $userPrompt, array $context = []) {
-    $apiServer = defined('AI_SERVER') && AI_SERVER ? AI_SERVER : 'https://api.openai.com/v1/chat/completions';
+    $apiServer = defined('AI_SERVER') && AI_SERVER ? AI_SERVER : OPENAI_API_BASE . '/chat/completions';
     $apiKey = defined('AI_API_KEY') ? AI_API_KEY : '';
 
     if (empty($apiKey)) {
