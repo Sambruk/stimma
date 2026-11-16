@@ -54,6 +54,26 @@ if [ -z "${RESTIC_REPOSITORY:-}" ] || [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
 fi
 export RESTIC_CACHE_DIR="$LOKAL/.restic-cache"
 
+# Påminnelse innan S3-nyckeln går ut (2026-11-11). Nyckeln (Scaleway IAM-applikationen backup-s3)
+# delas med Årshjul, så varningen finns bara här. Mejl 30, 14, 7, 3, 2, 1 och 0 dagar före – och
+# varje natt efteråt. Varningen stoppar inte backupen.
+if [ -n "${BACKUP_S3_KEY_EXPIRES:-}" ]; then
+    if utgang=$(date -d "$BACKUP_S3_KEY_EXPIRES" +%s 2>/dev/null); then
+        # Hela dagar från midnatt i dag; ±12 h avrundar så att sommartid inte ger fel dag
+        skillnad=$(( utgang - $(date -d "$(date +%F)" +%s) ))
+        if [ "$skillnad" -ge 0 ]; then dagar=$(( (skillnad + 43200) / 86400 )); else dagar=$(( (skillnad - 43200) / 86400 )); fi
+        case "$dagar" in
+            30|14|7|3|2|1|0|-*)
+                logga "VARNING: S3-nyckeln går ut $BACKUP_S3_KEY_EXPIRES ($dagar dagar kvar)"
+                skicka_larm "S3-nyckeln går ut $BACKUP_S3_KEY_EXPIRES" "$(printf 'Backupens S3-nyckel (Scaleway, IAM-applikationen backup-s3) går ut %s – %s dagar kvar.\r\nNär den gått ut slutar backupen för både Stimma och Årshjul att nå S3.\r\n\r\nSå förnyar du:\r\n1. Scaleway: IAM -> Applications -> backup-s3 -> API keys -> Generate API key (Object Storage: Yes, projektet med bucketen sambruk-backup).\r\n2. Byt BACKUP_S3_ACCESS_KEY_ID och BACKUP_S3_SECRET_ACCESS_KEY i /opt/app/stimma/.env och /opt/app/yearwheel/.env.\r\n3. Sätt BACKUP_S3_KEY_EXPIRES till det nya datumet i /opt/app/stimma/.env.\r\n4. docker compose up -d backup i båda katalogerna.\r\n5. Radera den gamla nyckeln i Scaleway.' "$BACKUP_S3_KEY_EXPIRES" "$dagar")" \
+                    || logga "Kunde inte skicka påminnelsen om S3-nyckeln"
+                ;;
+        esac
+    else
+        logga "BACKUP_S3_KEY_EXPIRES är inte ett datum: $BACKUP_S3_KEY_EXPIRES"
+    fi
+fi
+
 FELORSAK="restic kunde inte nå eller initiera förrådet i S3"
 if ! restic cat config >/dev/null 2>&1; then
     logga "Initierar restic-förrådet i $RESTIC_REPOSITORY"
