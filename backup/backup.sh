@@ -86,7 +86,9 @@ restic backup --tag nightly --host stimma \
     "$FIL" /data/upload /data/docs /data/config /data/env 2>&1 | tail -5 | while read -r rad; do logga "  $rad"; done
 
 FELORSAK="restic forget/prune (gallring) misslyckades"
-restic forget --host stimma --keep-daily 7 --keep-weekly 4 --keep-monthly 3 --prune 2>&1 \
+# --group-by host,tags (2026-11-16): utan den grupperar restic på sökvägarna, och dumpens filnamn
+# byts varje natt → varje kopia blev en egen grupp och INGEN gallrades (13 st kvar på fem dygn).
+restic forget --host stimma --group-by host,tags --keep-daily 7 --keep-weekly 4 --keep-monthly 3 --prune 2>&1 \
     | tail -3 | while read -r rad; do logga "  $rad"; done
 
 # Söndagar: kontrollera förrådet och läs en tiondel av datat

@@ -2,6 +2,117 @@
 
 ## Pågående
 
+## Ny PUB-mall (v8) med kontaktperson för dataskyddsarbetet (2026-11-16, beställt av Thomas)
+- [x] Jämfört nya PDF:en (SHA-256 114f2ff6…) med v7: partstabellen har raderna Undertecknare / mobil (ej växel) / e-post + ny rad "Kontaktperson för dataskyddsarbetet, e-post"; signatursidan säger att den fylls i formuläret
+- [x] Layout v8 i pubPartyLayout() (radpositioner uppmätta ur PDF:en) + v8 som standard för okända mallar
+- [x] Formuläret: obligatoriskt fält e-post till kontaktperson för dataskyddsarbetet (sparas i contact_email, ingen migrering)
+- [x] Bekräftelsemejlet visar dataskydds-e-posten
+- [x] Tester uppdaterade (v8): test_pub_nedladdning.php 91 ok
+- [x] Hela sviten grön: 490 ok, 0 fel
+- [x] Mallen i pub_docs/inkommande/PUB-avtal_Stimma_v8.pdf; stämplad med exempeldata och granskad som bild – alla rader rätt, lång e-post bryts vid @
+- [x] Prod påverkas inte förrän mallen aktiveras (aktiv mall är fortfarande v4, hash 20c4675d…, som känns igen)
+- [ ] Commit + push (väntar på Thomas, tillsammans med PUB-ändringarna från 2026-11-09)
+- [ ] Thomas: ladda upp mallen i prod → Förhandsgranska ifyllt → aktivera → kontrasignera (då uppmanas de tio admins att teckna om)
+- [x] Avtalstexten granskad mot koden (2026-11-16): fler avvikelser än de tre kända – se docs/PUB-v9-andringar.md
+- [x] Ändringsunderlag docs/PUB-v9-andringar.md (ny text att klistra in i Word-originalet, som inte finns på servern)
+- [ ] Thomas: beslut om p. 12.1 (val vid uppsägning), OpenAI-EU-adressen och gallring
+- [x] 🔴 Gallring saknades (byggd 2026-11-16, cron/gallring.php): bilaga 1 p. 3.2 lovar aktivitetsloggar 12 mån / påminnelsehistorik 6 mån, inget jobb raderar. sequential_reminder_log: 74 rader äldre än 6 mån (124 totalt sedan 2026-03-03; 124 var fel siffra); logs äldsta 2025-12-02 (passerar 12 mån 2026-12-02)
+  - [x] Återkoppling 2026-11-16: ai_usage_log 24 mån ska med; kontrollera efter första körningen; bilder via EU (klart); restic --prune (finns, backup.sh rad 89)
+  - [x] Fälla 1: send_reminders.php räknar påminnelser med MAX(reminder_number) ur reminder_log → rakt raderande ger nya påminnelser. Behåll senaste raden per deltagare+kurs
+  - [x] Fälla 2: insyns-API:t (insynCopySources) läser "Kopierade kurs | Kontext:" ur logs för all tid → avpersonifiera (bara kurs-id + måldomän) i stället för att radera
+  - [x] sequential_reminder_log används bara som logg/statistik (utskicken styrs av sequential_email_queue/notified_at) → kan raderas
+  - [x] cron/gallring.php (PDO med undantag, inte query() som sväljer fel; --torrkorning)
+  - [x] tests/test_gallring.php 27 ok (torrkörning, gallring, andra körningen, inte nåbar via webb); hela sviten 517 ok
+  - [x] Ofelia-jobb stimma-gallring på scheduler-containern 02:00 UTC (före backupen 02:30, samma Ofelia); scheduler omstartad, web orörd, jobbet registrerat
+  - [x] Torrkörning i prod 2026-11-16 18:11: sequential_reminder_log 74, övrigt 0 (stämmer med egen räkning)
+  - [ ] 🔔 2026-11-17: kontrollera nattens körning – `docker logs stimma-scheduler-1 | grep gallring`, logs-raden "Gallring:", 0 rader i sequential_reminder_log äldre än 6 mån
+  - [x] 🔴 restic gallrade INGET: grupperar på sökvägar och dumpens filnamn byts varje natt → 13 kopior, 0 borttagna. --group-by host,tags i stimma/ och yearwheel/backup/backup.sh, båda backup-containrarna ombyggda. Torrkörning: Stimma 7 kvar/6 bort, Årshjul 6 kvar/1 bort
+  - [ ] 🔔 2026-11-17: kontrollera att restic-kopiorna blivit färre (`restic snapshots --host stimma --compact` i stimma-backup-1)
+  - [x] Ändringsunderlaget p. 3.2: senaste påminnelsen sparas, kopieringsloggen avpersonifieras, backupgallringen rättad
+- [x] 🔴 Bilaga 2 säger OpenAI via eu.api.openai.com – koden anropade api.openai.com (text- och bildgenerering) → åtgärdat 2026-11-16
+  - [x] Thomas har lagt nyckeln OPENAI_EU i .env (EU-projekt) 2026-11-16
+  - [x] Kartlagt: 7 hårdkodade api.openai.com (functions.php, ai_lesson_helper.php ×2, process_ai_jobs.php ×2, generate_course_image.php, ai_generate_course.php) + nyckeln läses på 7 ställen; appen läser .env själv (ingen omstart)
+  - [x] Provat: gpt-4o, gpt-4o-mini och gpt-image-2 svarar 200 på eu.api.openai.com; nyckeln får 401 "outside project geography EU" mot api.openai.com
+  - [x] Bytt: OPENAI_API_BASE + AI_API_KEY = OPENAI_EU i config.php; alla 7 adresser och 2 nyckelläsningar pekar dit; README + tests/env.test
+  - [x] Tester 490 ok; riktigt anrop med appens konfiguration från prod-containern: eu.api.openai.com HTTP 200 (gpt-4o)
+  - [ ] Thomas: återkalla gamla nyckeln (AI_API_KEY, projekt utan EU-lagring) i OpenAI och ta bort raden ur .env
+  - [ ] DB-inställningen ai_settings.ai_server_url pekar på api.openai.com men läses inte av koden – lämnad orörd
+- [ ] Thomas: Word-originalet → v9-PDF → ny layout i pubPartyLayout() om tabellen flyttas (hashen ändras ändå → lägg in v9-hashen)
+
+## PUB-filer stängda + tecknade avtal sparas som dokument (2026-11-09, beställt av Thomas)
+- [x] Utrett: public/docs/pdf/ (7 filer: 4 Word-mallar, 2 PDF-mallar, 1 kontrasignerad mall) nåddes utan inloggning (200). Medlemmarnas avtal sparades aldrig – återskapades vid nedladdning
+- [x] Mallarna flyttade till pub_docs/ utanför webbroten (pubDocsDir()); gamla katalogen borttagen efter cmp-kontroll; .htaccess: RedirectMatch 404 ^/docs/
+- [x] public/pub_dokument.php: ?id=N mallen före tecknande (inloggad), ?mall=NAMN Word-mallar (admin/superadmin, vitlista)
+- [x] Migration 056: signed_pdf_file/hash/source/saved_at – körd i prod
+- [x] Signering sparar exakt den mejlade filen i pub_docs/signerade/<avtals-id>.pdf (skrivs aldrig över), SHA-256 i mejlet
+- [x] pub_download.php lämnar ut sparad fil efter hashkontroll; ändrad fil nekas
+- [x] Adminvyn: SHA-256-kolumn för org-admins, hela hashen i superadmins detaljvy, märkning "Återskapad"
+- [x] Backfill: 10 befintliga avtal sparade som 'aterskapad' (migrations/backfill_pub_signerade.php), alla hashar verifierade
+- [x] Backup-montering /data/docs → pub_docs/ (backup-containern omstartad); pub_docs/ i .gitignore
+- [x] Tester: test_pub_nedladdning.php 79 ok (PUB_SIGNED_DIR i testmiljön); hela sviten grön
+- [x] Verifierat utifrån: docs/pdf/* 404, pub_dokument.php utan inloggning → 302
+- [x] Gamla avtal (10 st, tecknade före 2026-11-03) behålls oförändrade med tom partstabell – beslut Thomas 2026-11-09; fylls vid omtecknande
+- [x] Formuläret: Peppol-ID/GLN och fakturareferens borttagna (raderna i partstabellen lämnas tomma); kontaktperson för personuppgiftsarbete obligatorisk (namn + e-post, telefon valfri); undertecknaren = ombud (avtalsansvarig) förklaras i steg 2. Tester 81 ok
+- [ ] Commit + push (väntar på Thomas)
+- [ ] Thomas: prova att ladda ner ett avtal i adminvyn och se hashen
+- [x] pub_docs/ säkerhetskopieras till S3 sedan 2026-11-11
+
+## Frågor om pris, PowerPoint-tokens och kryptering (2026-11-09)
+- [x] Prismodell: 6 tokenpaket (90–7 000 kr), gratisbas 50 000 tokens/mån per org (73 st), en org 500 000
+- [x] PowerPoint-import drar tokens oavsett AI-tutor (1 strukturanrop + 1 per bild/lektion, ~2 800 tokens/anrop)
+- [x] Kryptering: TLS 1.3 ja (1.2 accepteras också); i vila NEJ – MariaDB-kryptering av, Hetzner-disken okrypterad
+- [x] Backup till S3 konfigurerad 2026-11-11 (Scaleway `sambruk-backup`, nl-ams, förråd `stimma/`)
+- [ ] Beslut Thomas: kryptering i vila (MariaDB file_key_management eller LUKS-volym) – behövs om svaret ska bli "ja"
+
+## AI-tutorn via Berget AI (2026-11-03, 6dc5537)
+- [x] AI_TUTOR_API_KEY / AI_TUTOR_SERVER / AI_TUTOR_MODEL; bara feature=chat (tutorn), tom nyckel = som förut
+- [x] Modellval: Mistral-Small-3.2-24B (1–4 s, bra svenska, håller ämnesgränsen); gemma-4-31B bättre svar men 19–23 s; GLM-5.3-Flash läcker resonemang på engelska – olämplig
+- [x] Migration 055: Bergets priser i ai_pricing (EUR→USD 1,15, uppskattning) – körd i prod
+- [x] Variablerna i prod-.env med tom nyckel (backup .env.bak-2026-11-03-berget); tests 463 ok
+- [x] AI_TUTOR_API_KEY ifylld (Thomas 2026-11-03); Berget svarar 200 med nyckeln, getAiTutorProvider() aktiv i prod
+- [ ] Efter nyckeln: prova tutorn i en lektion och kontrollera ai_usage_log (model = Mistral-Small, cost_cents > 0)
+- [ ] 🔴 PUB-bilaga 2 (underbiträden) anger OpenAI för AI-tutorn – lägg till Berget AI i nya mallen; OpenAI kvar för kurs-/bildgenerering
+  - Rättat 2026-11-10: aktiva v4-PDF:en (sid 22) listar BARA Elestio och Hetzner – inte OpenAI. "OpenAI" står bara som platshållare i Word-mallen PUB_BILAGA_2_UNDERBITRADEN.docx. Instruktionen (sid 20, avsnitt 11) säger att all behandling sker inom EU/EES.
+  - Ingen ny PDF finns (sökt i pub_docs/, hela disken och sessionsloggarna 2026-11-10) – v5 är inte skapad
+  - [ ] Ta fram v5: bilaga 2 med Elestio, Hetzner, Berget AI (AI-tutor), Scaleway (e-post sedan 2026-10-16), ev. OpenAI/fal.ai om personuppgifter skickas dit; se över avsnitt 11 tredjeland
+
+## Användningspartens uppgifter i partstabellen (2026-11-03)
+- [x] Fynd (Thomas): Användningspartens kolumn i avsnitt 1 (mallens sida 3) var tom i alla tecknade avtal
+- [x] Migration 054 (org_address, org_postal_address, peppol_id, invoice_reference, contact_*) – körd i prod 2026-11-03, backup backups/fore-054-20261103-085031.sql.gz
+- [x] Formuläret steg 3: adress + postadress obligatoriska, Peppol-ID, fakturaref, kontaktperson valfria (tom = undertecknaren); med i bekräftelsemejlet
+- [x] Stämpeln fyller tabellen (PUB_PARTY_TABLE i pdf_stamp.php, mall Version 2.1); lång text bryts i stället för att flöda ut
+- [x] Gamla avtal (utan adress) återskapas oförändrade – de ska tecknas om (Thomas)
+- [x] Superadmin: "Förhandsgranska ifyllt" per mall med exempeldata
+- [x] Tester 64 ok i test_pub_nedladdning.php, hela sviten 431 ok; driftsatt och pushad (030868f)
+- [ ] 🔔 Ny mall med nya underbiträden: förhandsgranska ifyllt INNAN kontrasignering – flyttas tabellen ska PUB_PARTY_TABLE justeras
+- [x] Beslut (Thomas): ny version kräver omtecknande – byggt 2026-11-03 (54b9c9a), se nedan
+
+## Omtecknande vid ny mall (2026-11-03, 54b9c9a)
+- [x] `pubNeedsResign()`: senaste giltiga avtalets mallhash ≠ aktiv kontrasignerad mall → admins får besked (sidhuvud, adminvyns märke, kortet) och kan teckna om
+- [x] Hash, inte versionsnummer (v3 = v4 = samma fil); gamla avtalet gäller tills det nya är tecknat; vanliga användare märker inget
+- [x] "Ersatt av nyare avtal" i listorna; PUB registrerat för hand påverkas inte
+- [x] tests/test_pub_omteckning.php 20 ok (motprov: versionsjämförelse, kontrasigneringskrav), hela sviten 451 ok
+- [x] Kontrollerat i prod: ingen av de nio organisationerna uppmanas i dag (alla på samma mallhash)
+- [ ] 🔔 Gång när nya underbiträden är klara: ladda upp ny mall → "Förhandsgranska ifyllt" → aktivera → kontrasignera → då får de tio admins beskedet
+
+## Ladda ner tecknat PUB-avtal i adminvyn (2026-11-03)
+- [x] Utrett: det stämplade avtalet skickades bara med e-post och sparades aldrig; admins såg bara Word-mallarna
+- [x] Beslut (Thomas): alla administratörer i organisationen (alla dess domäner) + superadmin
+- [x] `buildSignedPubAgreementPdf()` återskapar avtalet ur avtalsraden; mallens hash kontrolleras, Sambruks kontrasignering bara om den fanns vid signeringen
+- [x] `admin/pub_download.php` (behörighet, loggning, no-store, sparas aldrig på disk); kortet "Ert tecknade PUB-avtal" + nedladdning i superadmins lista
+- [x] tests/test_pub_nedladdning.php 40 ok (motprov: behörighet, kontrasigneringstid, hash), hela sviten 407 ok
+- [x] Driftsatt och pushad (15b52ff); alla 10 avtal i prod återskapas (v3 utan, v4 med kontrasignering)
+- [ ] Thomas: jämför ett nedladdat avtal (t.ex. sambruk.se 2026-02-12) med bilagan i bekräftelsemejlet
+
+## Dubbla inloggningskoder vid dubbelklick (2026-11-02)
+- [x] Utrett: två koder 11:44:21/22 till samma webbläsare (login_codes 248/249), den andra användes – ofarligt
+- [x] Samma webbläsare får ingen ny kod inom 30 s (`LOGIN_CODE_DUPLICATE_SECONDS`), besked "redan skickat en kod"
+- [x] Inloggningsformulären postas bara en gång (`data-en-gang`), knapparna återställs vid bakåtknappen
+- [x] Tester i test_inloggning.php (motprov: 3 fel utan skyddet), hela sviten 367 ok
+- [x] Driftsatt och pushad (bf3caad)
+- [x] Thomas har svarat användaren (2026-11-02)
+
+
 ### AI-förbrukning över 100 % (Säter, Störningsjouren) 2026-10-19
 Störningsjouren visade 202 %: 5 stoppade bildanrop loggades som `blocked` med 10 000 tokens vardera
 och räknades som förbrukning. Säter visade 220 % av gratisbasen men hade sparat saldo (111 114 → 1 114).
@@ -275,11 +386,13 @@ Beslut (Thomas): S3-lagring i EU, lagringstid 7 dagliga + 4 veckovisa + 3 månat
       återställningstest 58/58 tabeller, 977 användare, 140 kurser, testdatabasen borttagen.
       Framkallat fel (DB_DATABASE=finns_inte_test) → larm loggat, .tmp städad, larmmejl skickat.
       Fälla: Postal erbjuder CRAM-MD5 först men nekar det (535) → curl tvingas till AUTH=LOGIN.
-- [ ] Thomas: spara RESTIC_PASSWORD (i .env) utanför servern, t.ex. i lösenordshanteraren — utan det går
-      S3-backupen inte att läsa. Bekräfta att testlarmet kom fram.
+- [x] Thomas: RESTIC_PASSWORD sparat i lösenordshanteraren utanför servern (2026-11-11)
+- [ ] Bekräfta att testlarmet från backupen kom fram (öppen sedan 2026-10-06)
 - [x] .env.bak* i .gitignore (.env.bak-before-backup-20261006 skapad innan RESTIC_*-raderna lades till)
-- [ ] Väntar på Thomas: S3-bucket + åtkomstnyckel (endpoint, bucket, key id, secret) → in i .env
-- [ ] Första S3-körningen + återställningstest mot S3
+- [x] S3-bucket + nyckel i .env (2026-11-11): Scaleway `sambruk-backup` nl-ams, IAM-applikation `backup-s3` (delas med Årshjul, annan mapp). Säkerhetskopia: backups/env-fore-s3-20261111.bak
+- [x] Första S3-körningen (787 MiB, snapshot 7adeae78) + återställningstest mot S3: 62/62 tabeller, 1093 användare, 162 kurser, 1050 uppladdade filer
+- [x] Påminnelse före S3-nyckelns utgång (2026-11-11): `BACKUP_S3_KEY_EXPIRES=2027-11-11` i .env → backup.sh mejlar 30/14/7/3/2/1/0 dagar före och varje natt efteråt (gäller även Årshjuls nyckel, samma nyckel). Provad med påhittade datum. Säkerhetskopior: backups/backup.sh-fore-nyckelvarning-20261111.bak, backups/docker-compose-fore-nyckelvarning-20261111.yml.bak
+- [ ] **Förnya S3-nyckeln före 2027-11-11** (Scaleway IAM → backup-s3 → API keys), byt i båda .env, uppdatera BACKUP_S3_KEY_EXPIRES
 - [ ] Därefter: radera stimma-backups/ och stimma-git-backup-20260821/
 
 ### Nya kurstitlar, Junglemap-kurserna (2026-10-04)
@@ -1371,3 +1484,15 @@ lektionsbilden (image_file) är kvar. Tidigare stoppade importen allt <img>.
 ### Tydligare väg tillbaka till Mina kurser (2026-10-30, Thomas)
 - [x] course.php: knappen "Mina kurser" i sidhuvudet (inloggad), "Tillbaka till Mina kurser" som huvudknapp i "Kursen är klar", och längst ner i stället för "Till Stimma"
 - [x] course_complete.php: "Tillbaka till Mina kurser" först och primär, "Till kursens innehåll" sekundär
+
+## PUB-avtal v7 (2026-11-13)
+Mall: pub_docs/inkommande/PUB-avtal_Stimma_v7.pdf (26 s., SHA-256 8332e149…). Partstabellen (s. 3) har nu bara
+Organisationsnr, Adress, Postadress, Kontaktperson för administration av PUB-avtalet, Mobiltelefonnr, E-post.
+**Thomas (rättat 2026-11-13): kontaktpersonen = den som tecknar avtalet** (namn, mobil, e-post). Ingen separat kontaktperson.
+- [x] Partstabellens placering per mall: pubPartyLayout() i include/functions.php väljer på mallens SHA-256 (v4 20c4675d… → v4, v7 8332e149… och okända → v7). Långa organisationsnamn i v7 bryts tätt (bara 4,8 mm fritt)
+- [x] v7: undertecknarens namn, SMS-verifierade mobil och e-post skrivs i kontaktpersonsraderna; contact_* sparas = undertecknaren
+- [x] Formuläret följer den aktiva mallen: v7 = ingen separat kontaktperson, texten "Du skrivs in i avtalets partstabell som kontaktperson för administration av PUB-avtalet …"; v4 som förut (egen kontaktperson, ombud)
+- [x] Tester: test_pub_nedladdning 84/84, test_pub_omteckning 20/20. Provstämplad v7 granskad visuellt. Inga tecknade avtal i prod har partsuppgifter → gamla avtal påverkas inte
+- [ ] Thomas laddar upp v7 i Admin → PUB-dokument, förhandsgranskar ifyllt och kontrasignerar
+- [ ] När v7 kontrasigneras ombeds de 10 organisationerna med v3/v4-avtal att teckna om (pubNeedsResign: annan fil-hash)
+Säkerhetskopior: backups/*-fore-v7-20261113.bak
