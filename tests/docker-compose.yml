@@ -14,6 +14,7 @@ services:
       - /opt/app/stimma/tests/allowed_domains.test.txt:/var/www/html/allowed_domains.txt:ro
       - /opt/app/stimma/tests/runtime/upload:/var/www/html/public/upload
       - /opt/app/stimma/tests/runtime/logs:/var/www/html/logs
+      - /opt/app/stimma/tests/runtime/pub_signerade:/var/www/html/tests/runtime/pub_signerade
       - /opt/app/stimma/config/vhost.conf:/etc/apache2/sites-enabled/000-default.conf:ro
   db:
     image: mariadb:10.11

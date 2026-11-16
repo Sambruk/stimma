@@ -54,6 +54,8 @@ if (userHasPubAgreement($userEmail) && !$omteckna) {
 
 // Hämta aktivt PUB-dokument
 $activePubDoc = getActivePubDocument();
+// Partstabellen i den aktiva mallen styr rubriker och vilka uppgifter som krävs (2026-11-13)
+$pubLayout = pubPartyLayout($activePubDoc['file_hash'] ?? null);
 
 // Kontrollera om mallen är kontrasignerad av Sambruk
 $sambrukSigned = $activePubDoc ? isSambrukSigned($activePubDoc['id']) : false;
@@ -93,8 +95,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sign_agreement'])) {
     // Partstabellen (migration 054, 2026-11-03)
     $orgAddress = trim($_POST['org_address'] ?? '');
     $orgPostalAddress = trim($_POST['org_postal_address'] ?? '');
-    $peppolId = trim($_POST['peppol_id'] ?? '');
-    $invoiceReference = trim($_POST['invoice_reference'] ?? '');
+    // Peppol-ID/GLN och fakturareferens efterfrågas inte (Thomas 2026-11-09);
+    // raderna i avtalets partstabell lämnas tomma.
+    $peppolId = '';
+    $invoiceReference = '';
     $contactName = trim($_POST['contact_name'] ?? '');
     $contactEmail = trim($_POST['contact_email'] ?? '');
     $contactPhone = trim($_POST['contact_phone'] ?? '');
@@ -114,6 +118,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sign_agreement'])) {
         // Om SMS verifierat har användaren redan intygat i steg 2
         $certification = true;
     }
+    // Mallen avgör vilka kontaktfält som efterfrågas (pubPartyLayout: contact_inputs).
+    // v7: undertecknaren är kontaktperson för administration av PUB-avtalet (2026-11-13).
+    // v8: bara e-post till kontaktpersonen för dataskyddsarbetet (2026-11-16).
+    $kontaktFalt = $pubLayout['contact_inputs'];
+    if (!$kontaktFalt) {
+        $contactName = $signerName;
+        $contactEmail = $signerEmail;
+        $contactPhone = $signerPhone;
+    } else {
+        if (!in_array('name', $kontaktFalt, true)) { $contactName = ''; }
+        if (!in_array('email', $kontaktFalt, true)) { $contactEmail = ''; }
+        if (!in_array('phone', $kontaktFalt, true)) { $contactPhone = ''; }
+    }
 
     // Validering
     if (empty($orgName)) {
@@ -128,10 +145,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sign_agreement'])) {
     if ($orgPostalAddress === '') {
         $errors[] = 'Postnummer och ort måste anges.';
     }
-    if ($contactEmail !== '' && !filter_var($contactEmail, FILTER_VALIDATE_EMAIL)) {
-        $errors[] = 'Kontaktpersonens e-postadress är inte giltig.';
+    if (in_array('name', $kontaktFalt, true) && $contactName === '') {
+        $errors[] = $pubLayout['contact_label'] . ' måste anges.';
     }
-    foreach ([$orgAddress, $orgPostalAddress, $peppolId, $invoiceReference, $contactName, $contactEmail, $contactPhone] as $falt) {
+    if (in_array('email', $kontaktFalt, true) && ($contactEmail === '' || !filter_var($contactEmail, FILTER_VALIDATE_EMAIL))) {
+        $errors[] = 'E-postadressen till ' . mb_strtolower($pubLayout['contact_label']) . ' måste anges och vara giltig.';
+    }
+    foreach ([$orgAddress, $orgPostalAddress, $contactName, $contactEmail, $contactPhone] as $falt) {
         if (mb_strlen($falt) > 255) {
             $errors[] = 'Något av organisationsfälten är för långt.';
             break;
@@ -161,7 +181,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sign_agreement'])) {
         $pdfPath = null;
 
         if ($activePubDoc) {
-            $pdfPath = __DIR__ . '/docs/pdf/' . $activePubDoc['filename'];
+            $pdfPath = pubDocsDir() . basename($activePubDoc['filename']);
             if (file_exists($pdfPath)) {
                 $pdfHash = hash_file('sha256', $pdfPath);
                 $pdfFilename = $activePubDoc['original_filename'];
@@ -254,6 +274,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sign_agreement'])) {
                 ] + pubPartyFields($artifactData), $sambrukSignData);
             }
 
+            // Spara exakt den fil som mejlas, med SHA-256 (2026-11-09). Admins i
+            // organisationen och superadmin laddar ner den i adminvyn.
+            $signedPdfHash = null;
+            if ($stampedPdf) {
+                $sparadRad = queryOne("SELECT id, agreement_id FROM " . DB_DATABASE . ".pub_agreement_artifacts WHERE agreement_id = ?", [$agreementId]);
+                $signedPdfHash = $sparadRad ? storeSignedPubAgreementPdf($sparadRad, $stampedPdf, 'signering') : null;
+                if ($signedPdfHash === null) {
+                    error_log("PUB: tecknat avtal {$agreementId} kunde inte sparas som fil");
+                }
+            }
+
             // Skicka bekräftelsemail
             $siteName = defined('SITE_NAME') ? SITE_NAME : 'Stimma';
             $subject = "Bekräftelse: PUB-avtal tecknat för {$orgName} - {$siteName}";
@@ -276,9 +307,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sign_agreement'])) {
                         <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>Organisation</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($orgName) . "</td></tr>
                         <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>Org.nummer</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($orgNumber) . "</td></tr>
                         <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>Adress</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($orgAddress) . ", " . e($orgPostalAddress) . "</td></tr>
-                        <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>Peppol-ID/GLN</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($peppolId ?: '-') . "</td></tr>
-                        <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>Fakturareferens</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($invoiceReference ?: '-') . "</td></tr>
-                        <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>Kontaktperson</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($contactName ?: $signerName) . ", " . e($contactEmail ?: $signerEmail) . ", " . e($contactPhone ?: $signerPhone) . "</td></tr>
+                        <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>" . e($pubLayout['contact_label']) . "</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e(implode(', ', array_filter([$contactName, $contactEmail, $contactPhone], 'strlen'))) . "</td></tr>
                         <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>Domän</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($userDomain) . "</td></tr>
                         <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>Undertecknare</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($signerName) . ($signerTitle ? ' (' . e($signerTitle) . ')' : '') . "</td></tr>
                         <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>E-post</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($signerEmail) . "</td></tr>
@@ -286,6 +315,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sign_agreement'])) {
                         <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>Datum</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($signedAt) . "</td></tr>
                         <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>IP-adress</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>" . e($_SERVER['REMOTE_ADDR'] ?? '') . "</td></tr>
                         <tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>SMS-verifierad</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6;'>Ja</td></tr>
+                        " . ($signedPdfHash ? "<tr><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;'>SHA-256 för det tecknade avtalet (bifogad PDF)</td><td style='padding: 8px; border-bottom: 1px solid #dee2e6; font-family: monospace; font-size: 12px; word-break: break-all;'>" . e($signedPdfHash) . "</td></tr>" : "") . "
                     </table>
 
                     <div style='background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin: 20px 0; border-left: 4px solid #007bff;'>
@@ -382,12 +412,9 @@ require_once 'include/header.php';
                 <div class="card-body">
                     <p class="mb-3">Innan du kan teckna avtalet måste du granska PUB-avtalet. Klicka på knappen nedan för att öppna dokumentet i en ny flik.</p>
                     <?php if ($activePubDoc):
-                        // Visa kontrasignerad version om den finns, annars original
-                        $countersignedFilename = preg_replace('/\.pdf$/i', '_kontrasignerad.pdf', $activePubDoc['filename']);
-                        $countersignedPath = __DIR__ . '/docs/pdf/' . $countersignedFilename;
-                        $pdfToShow = file_exists($countersignedPath) ? $countersignedFilename : $activePubDoc['filename'];
+                        // pub_dokument.php visar den kontrasignerade versionen om den finns
                     ?>
-                    <a href="docs/pdf/<?= e($pdfToShow) ?>" target="_blank" class="btn btn-primary" id="viewPdfBtn">
+                    <a href="pub_dokument.php?id=<?= (int)$activePubDoc['id'] ?>" target="_blank" class="btn btn-primary" id="viewPdfBtn">
                         <i class="bi bi-file-earmark-pdf me-2"></i>Visa PUB-avtalet (PDF)
                     </a>
                     <small class="text-muted ms-2">Version <?= e($activePubDoc['version']) ?></small>
@@ -429,6 +456,13 @@ require_once 'include/header.php';
                     <p class="mb-3">Fyll i dina uppgifter som undertecknare och verifiera dig via SMS.</p>
 
                     <h5 class="mb-3"><i class="bi bi-person me-2"></i>Undertecknare</h5>
+                    <?php if (in_array('name', $pubLayout['contact_inputs'], true)): ?>
+                    <p class="text-muted small">Undertecknaren skrivs in som ombud (avtalsansvarig) i avtalets partstabell, med namn, titel, mobilnummer och e-post.</p>
+                    <?php elseif ($pubLayout['contact_inputs']): ?>
+                    <p class="text-muted small">Du skrivs in i avtalets partstabell som undertecknare, med namn, mobilnummer (det som verifieras via SMS, inte ett växelnummer) och e-post.</p>
+                    <?php else: ?>
+                    <p class="text-muted small">Du skrivs in i avtalets partstabell som kontaktperson för administration av PUB-avtalet, med namn, mobilnummer (det som verifieras via SMS) och e-post.</p>
+                    <?php endif; ?>
 
                     <div class="form-floating mb-3">
                         <input type="text" class="form-control" id="step2_signer_name"
@@ -548,7 +582,7 @@ require_once 'include/header.php';
 
                 <!-- Sammanfattning från steg 2 -->
                 <div class="alert alert-light border mb-4" id="step2Summary">
-                    <h6 class="mb-2"><i class="bi bi-person-check me-1"></i>Undertecknare</h6>
+                    <h6 class="mb-2"><i class="bi bi-person-check me-1"></i>Undertecknare – <?= e($pubLayout['signer_label']) ?></h6>
                     <div class="row">
                         <div class="col-sm-6"><strong>Namn:</strong> <span id="summaryName">-</span></div>
                         <div class="col-sm-6"><strong>Titel:</strong> <span id="summaryTitle">-</span></div>
@@ -591,43 +625,34 @@ require_once 'include/header.php';
                     <label for="org_postal_address">Postnummer och ort *</label>
                 </div>
 
-                <div class="form-floating mb-3">
-                    <input type="text" class="form-control" id="peppol_id" name="peppol_id" maxlength="100"
-                           placeholder="Peppol-ID/GLN" aria-describedby="peppol_hjalp"
-                           value="<?= e($_POST['peppol_id'] ?? '') ?>">
-                    <label for="peppol_id">Peppol-ID/GLN (valfritt)</label>
-                    <div class="form-text" id="peppol_hjalp">Till exempel 0007:2120000000</div>
-                </div>
-
-                <div class="form-floating mb-3">
-                    <input type="text" class="form-control" id="invoice_reference" name="invoice_reference" maxlength="255"
-                           placeholder="Fakturareferens"
-                           value="<?= e($_POST['invoice_reference'] ?? '') ?>">
-                    <label for="invoice_reference">Fakturareferens (valfritt)</label>
-                </div>
-
+                <?php if ($pubLayout['contact_inputs']): ?>
                 <fieldset class="mb-3">
-                    <legend class="h6">Kontaktperson</legend>
-                    <p class="form-text mt-0" id="kontakt_hjalp">Lämna tomt om kontaktpersonen är undertecknaren.</p>
+                    <legend class="h6"><?= e($pubLayout['contact_label']) ?></legend>
+                    <p class="form-text mt-0" id="kontakt_hjalp"><?= e($pubLayout['contact_help']) ?></p>
+                    <?php if (in_array('name', $pubLayout['contact_inputs'], true)): ?>
                     <div class="form-floating mb-2">
                         <input type="text" class="form-control" id="contact_name" name="contact_name" maxlength="255"
-                               placeholder="Namn" autocomplete="name" aria-describedby="kontakt_hjalp"
+                               placeholder="Namn" autocomplete="name" aria-describedby="kontakt_hjalp" required
                                value="<?= e($_POST['contact_name'] ?? '') ?>">
-                        <label for="contact_name">Namn</label>
+                        <label for="contact_name">Namn *</label>
                     </div>
+                    <?php endif; ?>
                     <div class="form-floating mb-2">
                         <input type="email" class="form-control" id="contact_email" name="contact_email" maxlength="255"
-                               placeholder="E-post" autocomplete="email" aria-describedby="kontakt_hjalp"
+                               placeholder="E-post" autocomplete="email" aria-describedby="kontakt_hjalp" required
                                value="<?= e($_POST['contact_email'] ?? '') ?>">
-                        <label for="contact_email">E-post</label>
+                        <label for="contact_email">E-post *</label>
                     </div>
+                    <?php if (in_array('phone', $pubLayout['contact_inputs'], true)): ?>
                     <div class="form-floating">
                         <input type="tel" class="form-control" id="contact_phone" name="contact_phone" maxlength="50"
                                placeholder="Telefon" autocomplete="tel" aria-describedby="kontakt_hjalp"
                                value="<?= e($_POST['contact_phone'] ?? '') ?>">
-                        <label for="contact_phone">Telefon</label>
+                        <label for="contact_phone">Telefon (valfritt)</label>
                     </div>
+                    <?php endif; ?>
                 </fieldset>
+                <?php endif; ?>
 
                 <div class="d-grid gap-2 d-md-flex justify-content-md-between mt-4">
                     <a href="index.php" class="btn btn-outline-secondary">

@@ -31,7 +31,7 @@ $isSuperAdmin = $currentUser && $currentUser['role'] === 'super_admin';
 
 // Sätt sidtitel
 $page_title = 'PUB-avtal & Bilagor';
-$pdfDir = __DIR__ . '/../docs/pdf/';
+$pdfDir = pubDocsDir();
 
 // Hantera POST (superadmin-funktionalitet)
 if ($isSuperAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -407,7 +407,7 @@ $egnaErsatta = pubSupersededArtifactIds($egnaAvtal);
 $pubOmteckna = pubNeedsResign($_SESSION['user_email']);
 
 // Kontrollera vilka filer som faktiskt finns
-$docsPath = __DIR__ . '/../docs/pdf/';
+$docsPath = pubDocsDir();
 foreach ($documents as &$doc) {
     $doc['exists'] = file_exists($docsPath . $doc['filename']);
     if ($doc['exists']) {
@@ -462,7 +462,7 @@ require_once 'include/header.php';
                     <?php if (empty($egnaAvtal)): ?>
                         <p class="mb-0 text-muted">Er organisation har inget digitalt tecknat PUB-avtal i Stimma.</p>
                     <?php else: ?>
-                        <p class="text-muted small">Avtalet med signeringsintyg, samma som skickades med e-post när det tecknades. Filen innehåller undertecknarens kontaktuppgifter.</p>
+                        <p class="text-muted small">Avtalet med signeringsintyg, samma fil som skickades med e-post när det tecknades. SHA-256 är filens kontrollsumma: samma värde betyder samma fil, byte för byte. Filen innehåller undertecknarens kontaktuppgifter.</p>
                         <div class="table-responsive">
                             <table class="table align-middle mb-0">
                                 <thead class="table-light">
@@ -472,6 +472,7 @@ require_once 'include/header.php';
                                         <th>Undertecknare</th>
                                         <th>Tecknat</th>
                                         <th>Version</th>
+                                        <th>SHA-256</th>
                                         <th>Status</th>
                                         <th><span class="visually-hidden">Ladda ner</span></th>
                                     </tr>
@@ -484,6 +485,7 @@ require_once 'include/header.php';
                                         <td><?= e($avt['user_name']) ?></td>
                                         <td><?= e(date('Y-m-d', strtotime($avt['signed_at']))) ?></td>
                                         <td><?= e($avt['version']) ?></td>
+                                        <td><?= pubSignedHashCell($avt) ?></td>
                                         <td>
                                             <?php if (isPubArtifactInvalidated($avt)): ?>
                                                 <span class="badge bg-danger">Ogiltigt</span>
@@ -550,7 +552,7 @@ require_once 'include/header.php';
                                     <?= date('Y-m-d', $doc['modified']) ?>
                                 </span>
                             </div>
-                            <a href="../docs/pdf/<?= urlencode($doc['filename']) ?>"
+                            <a href="../pub_dokument.php?mall=<?= urlencode($doc['filename']) ?>"
                                class="btn btn-<?= $doc['recommended'] ? $doc['color'] : 'outline-' . $doc['color'] ?> w-100"
                                download>
                                 <i class="bi bi-download me-2"></i>Ladda ner
@@ -631,9 +633,8 @@ require_once 'include/header.php';
                                         <?php
                                         $csFilename = preg_replace('/\.pdf$/i', '_kontrasignerad.pdf', $udoc['filename']);
                                         $csExists = !empty($udoc['sambruk_signed_at']) && file_exists($docsPath . $csFilename);
-                                        $linkFile = $csExists ? $csFilename : $udoc['filename'];
                                         ?>
-                                        <a href="../docs/pdf/<?= e($linkFile) ?>" target="_blank" title="<?= e($udoc['original_filename']) ?>">
+                                        <a href="../pub_dokument.php?id=<?= (int)$udoc['id'] ?>" target="_blank" title="<?= e($udoc['original_filename']) ?>">
                                             <i class="bi bi-file-earmark-pdf text-danger me-1"></i><?= e($udoc['original_filename']) ?>
                                         </a>
                                         <?php if ($csExists): ?>
@@ -1053,9 +1054,13 @@ require_once 'include/header.php';
                                                 <p class="mb-1"><strong>IP-adress:</strong></p>
                                                 <p class="text-muted"><code><?= e($art['ip_address']) ?></code></p>
                                             </div>
+                                            <div class="col-md-12">
+                                                <p class="mb-1"><strong>SHA-256 för det tecknade avtalet:</strong></p>
+                                                <p class="text-muted"><?= pubSignedHashCell($art, true) ?></p>
+                                            </div>
                                             <?php if (!empty($art['pdf_hash'])): ?>
                                             <div class="col-md-12">
-                                                <p class="mb-1"><strong>PDF SHA-256:</strong></p>
+                                                <p class="mb-1"><strong>SHA-256 för mallen som tecknades:</strong></p>
                                                 <p class="text-muted"><code style="font-size: 0.8em;"><?= e($art['pdf_hash']) ?></code></p>
                                             </div>
                                             <?php endif; ?>

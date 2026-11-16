@@ -64,3 +64,6 @@ public/api/baskurser.php
 # Lokala databasdumpar från backup-tjänsten (personuppgifter — aldrig i git)
 backups/
 .env.bak*
+
+# PUB-mallar och tecknade avtal (personuppgifter) – utanför webbroten sedan 2026-11-09
+pub_docs/

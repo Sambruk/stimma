@@ -2446,9 +2446,7 @@ function buildSignedPubAgreementPdf($artifact) {
     if (!$doc) {
         return ['pdf' => null, 'error' => 'no_source'];
     }
-    // PUB_PDF_DIR bara för testmiljön (koden är skrivskyddad där); standard som i pub_agreement.php
-    $pdfDir = rtrim(getenv('PUB_PDF_DIR') ?: __DIR__ . '/../public/docs/pdf', '/') . '/';
-    $pdfPath = $pdfDir . basename($doc['filename']);
+    $pdfPath = pubDocsDir() . basename($doc['filename']);
     if (!is_file($pdfPath)) {
         return ['pdf' => null, 'error' => 'no_source'];
     }
@@ -2579,6 +2577,203 @@ function pubPartyFields($artifact) {
         'contact_email' => $artifact['contact_email'],
         'contact_phone' => $artifact['contact_phone'],
     ];
+}
+
+/**
+ * Partstabellen i avsnitt 1: var Användningspartens uppgifter skrivs in, per mall (2026-11-13).
+ * Mått i mm (sida, vänsterkant, bredd och mitten av varje rad). Väljs på mallens SHA-256 så
+ * att ett avtal alltid återskapas med samma placering som när det tecknades. En okänd mall får
+ * den senaste layouten – superadmin kontrollerar den i förhandsgranskningen
+ * (admin/pub_download.php?forhandsgranska=) innan mallen kontrasigneras.
+ *
+ * rows: fältnyckel => y. Nycklarna contact_* faller tillbaka på undertecknarens uppgifter;
+ * signer_name är bara namnet, signer namn + titel.
+ * contact_inputs: vilka kontaktfält (name/email/phone) formuläret frågar efter; tom = undertecknaren.
+ */
+function pubPartyLayout($fileHash = null) {
+    // "Personuppgiftsbiträdesavtal Version 2.1 (23.04.06)", mallversion 3 och 4
+    $v4 = [
+        'namn' => 'v4',
+        'page' => 3,
+        'x' => 67.1,
+        'width' => 51.5,
+        'org_name' => 82.2,
+        'rows' => [
+            'org_number' => 96.6,
+            'org_address' => 106.1,
+            'org_postal_address' => 115.5,
+            'signer' => 127.7,
+            'signer_phone' => 139.8,
+            'signer_email' => 149.3,
+            'peppol_id' => 158.8,
+            'invoice_reference' => 168.2,
+        ],
+        // namn, e-post, telefon tätt i en och samma rad, som i Sambruks kolumn
+        'contact_stack' => [177.7, 185.0, 190.3],
+        'contact_label' => 'Kontaktperson för personuppgiftsarbete',
+        'contact_help' => 'Den som Sambruk kontaktar i frågor om personuppgiftsbehandlingen. Kan vara undertecknaren.',
+        'contact_inputs' => ['name', 'email', 'phone'], // egen kontaktperson i formuläret
+        'signer_label' => 'ombud (avtalsansvarig)',
+    ];
+    // "PUB-avtal Stimma v7" (2026-11-13): undertecknaren ÄR kontaktpersonen för administration av
+    // PUB-avtalet (Thomas 2026-11-13) – namn, SMS-verifierad mobil och e-post. Inga rader för Peppol/faktura.
+    $v7 = [
+        'namn' => 'v7',
+        'page' => 3,
+        'x' => 64.9,          // kolumnen 63,0–118,0 mm
+        'width' => 50.5,      // Cell() lägger 1 mm marginal – annars når långa namn kolumnlinjen
+        'org_name' => 96.4,   // mellan "stimma.sambruk.se" och "Nedan kallad Användningspart"
+        'org_name_line' => 2.4, // radhöjd om namnet bryts – bara 4,8 mm fritt (94,0–98,8)
+        'rows' => [
+            'org_number' => 115.9,
+            'org_address' => 125.45,
+            'org_postal_address' => 134.95,
+            'signer_name' => 149.55,
+            'signer_phone' => 164.15,
+            'signer_email' => 173.65,
+        ],
+        'contact_stack' => null,
+        'contact_label' => 'Kontaktperson för administration av PUB-avtalet',
+        'contact_help' => '',
+        'contact_inputs' => [],         // kontaktpersonen = undertecknaren, ingen egen fråga
+        'signer_label' => 'kontaktperson för administration av PUB-avtalet',
+    ];
+    // PUB-avtal Stimma, bilaga 1 version 1.4 (2026-11-13, laddad 2026-11-16): raderna Undertecknare,
+    // Undertecknarens mobiltelefonnr (ej växelnummer), Undertecknarens e-post och en ny rad
+    // "Kontaktperson för dataskyddsarbetet, e-post" som fylls i formuläret (signatursidan).
+    // Positionerna uppmätta ur PDF:en: Sambruks värden står på baslinje 145,6 / 160,3 / 177,4 / 194,6 mm,
+    // raderna nedan ligger 1,2 mm ovanför som i v7. Organisationsraderna är oförändrade sedan v7.
+    $v8 = [
+        'namn' => 'v8',
+        'page' => 3,
+        'x' => 64.9,
+        'width' => 50.5,
+        'org_name' => 96.4,
+        'org_name_line' => 2.4,
+        'rows' => [
+            'org_number' => 115.9,
+            'org_address' => 125.45,
+            'org_postal_address' => 134.95,
+            'signer_name' => 144.4,
+            'signer_phone' => 159.1,
+            'signer_email' => 176.2,
+            'contact_email' => 193.4,
+        ],
+        'contact_stack' => null,
+        'contact_label' => 'Kontaktperson för dataskyddsarbetet',
+        'contact_help' => 'E-postadress till den som Sambruk kontaktar i frågor om dataskydd och personuppgiftsbehandlingen, till exempel dataskyddsombudet eller en funktionsbrevlåda. Kan vara undertecknarens adress.',
+        'contact_inputs' => ['email'],  // bara e-post, inget namn eller telefon i tabellen
+        'signer_label' => 'behörig företrädare',
+    ];
+    $kanda = [
+        '20c4675da51fe02e2aa63404cd54f1fcb9617d3959fe027f34170f9f84d3b1e0' => $v4,
+        '8332e149c6b0460711d8f632b50aa907d52561b1b69e8b9f3ab995300cb3a45f' => $v7, // PUB-avtal_Stimma_v7.pdf
+        '114f2ff6b6b88025da67a0f432195c25c0213bf5825d853409563de94aacfff0' => $v8, // PUB-avtal_Stimma_v8.pdf
+    ];
+    return $kanda[(string)$fileHash] ?? $v8;
+}
+
+/**
+ * Katalogen med PUB-mallarna (PDF och Word), med avslutande snedstreck.
+ *
+ * Ligger UTANFÖR webbroten sedan 2026-11-09 (förut public/docs/pdf/, som gick att
+ * hämta utan inloggning). Filerna lämnas ut av pub_dokument.php efter inloggning.
+ * PUB_PDF_DIR bara för testmiljön (koden är skrivskyddad där).
+ */
+function pubDocsDir() {
+    return rtrim(getenv('PUB_PDF_DIR') ?: dirname(__DIR__) . '/pub_docs', '/') . '/';
+}
+
+/** Katalogen med tecknade avtal (pub_docs/signerade/). PUB_SIGNED_DIR för testmiljön. */
+function pubSignedDir() {
+    return rtrim(getenv('PUB_SIGNED_DIR') ?: pubDocsDir() . 'signerade', '/') . '/';
+}
+
+/**
+ * Spara ett tecknat avtal som fil och skriv dess SHA-256 på avtalsraden.
+ * Skriver aldrig över en redan sparad fil – det tecknade dokumentet ändras inte.
+ *
+ * @param array  $artifact Rad ur pub_agreement_artifacts (id, agreement_id)
+ * @param string $pdf      Det stämplade avtalet
+ * @param string $source   'signering' (filen som mejlades) eller 'aterskapad'
+ * @return string|null SHA-256, eller null om filen inte kunde sparas
+ */
+function storeSignedPubAgreementPdf($artifact, $pdf, $source) {
+    if (empty($artifact['id']) || empty($artifact['agreement_id']) || $pdf === '' || $pdf === null) {
+        return null;
+    }
+    $dir = pubSignedDir();
+    if (!is_dir($dir) && !@mkdir($dir, 0750, true)) {
+        error_log('PUB: kunde inte skapa ' . $dir);
+        return null;
+    }
+    $fil = preg_replace('/[^a-zA-Z0-9-]/', '', (string)$artifact['agreement_id']) . '.pdf';
+    $sokvag = $dir . $fil;
+    // 'x' = skapa ny fil, misslyckas om den finns
+    $fh = @fopen($sokvag, 'x');
+    if ($fh === false) {
+        error_log('PUB: ' . $sokvag . ' finns redan eller kan inte skapas');
+        return null;
+    }
+    fwrite($fh, $pdf);
+    fclose($fh);
+    @chmod($sokvag, 0640);
+    $hash = hash('sha256', $pdf);
+    execute(
+        "UPDATE " . DB_DATABASE . ".pub_agreement_artifacts
+         SET signed_pdf_file = ?, signed_pdf_hash = ?, signed_pdf_source = ?, signed_pdf_saved_at = NOW()
+         WHERE id = ? AND signed_pdf_file IS NULL",
+        [$fil, $hash, $source, (int)$artifact['id']]
+    );
+    return $hash;
+}
+
+/**
+ * Det tecknade avtalet att lämna ut: den sparade filen, kontrollerad mot hashen.
+ * Avtal utan sparad fil (tecknade före 2026-11-09) återskapas en gång och sparas.
+ *
+ * @param array $artifact Rad ur pub_agreement_artifacts
+ * @return array ['pdf' => ?string, 'hash' => ?string, 'error' => ?string]
+ *               error: 'missing', 'tampered' eller buildSignedPubAgreementPdf():s fel
+ */
+function getSignedPubAgreementPdf($artifact) {
+    if (!empty($artifact['signed_pdf_file'])) {
+        $sokvag = pubSignedDir() . basename($artifact['signed_pdf_file']);
+        if (!is_file($sokvag)) {
+            return ['pdf' => null, 'hash' => null, 'error' => 'missing'];
+        }
+        $pdf = file_get_contents($sokvag);
+        if (!hash_equals((string)$artifact['signed_pdf_hash'], hash('sha256', $pdf))) {
+            return ['pdf' => null, 'hash' => null, 'error' => 'tampered'];
+        }
+        return ['pdf' => $pdf, 'hash' => $artifact['signed_pdf_hash'], 'error' => null];
+    }
+    $resultat = buildSignedPubAgreementPdf($artifact);
+    if ($resultat['pdf'] === null) {
+        return ['pdf' => null, 'hash' => null, 'error' => $resultat['error']];
+    }
+    $hash = storeSignedPubAgreementPdf($artifact, $resultat['pdf'], 'aterskapad');
+    return ['pdf' => $resultat['pdf'], 'hash' => $hash ?? hash('sha256', $resultat['pdf']), 'error' => null];
+}
+
+/**
+ * HTML för det tecknade avtalets SHA-256 i adminvyn.
+ *
+ * @param array $artifact Rad ur pub_agreement_artifacts
+ * @param bool  $full     Hela hashen (detaljvyn) i stället för de första 12 tecknen
+ */
+function pubSignedHashCell($artifact, $full = false) {
+    $hash = (string)($artifact['signed_pdf_hash'] ?? '');
+    if ($hash === '') {
+        return '<span class="text-muted small">Sparas vid första nedladdningen</span>';
+    }
+    $html = $full
+        ? '<code style="font-size: 0.8em; word-break: break-all;">' . e($hash) . '</code>'
+        : '<code title="' . e($hash) . '">' . e(substr($hash, 0, 12)) . '…</code>';
+    if (($artifact['signed_pdf_source'] ?? '') === 'aterskapad') {
+        $html .= ' <span class="badge bg-light text-dark border" title="Avtalet tecknades innan avtalen sparades som filer (2026-11-09). Filen är återskapad ur avtalsraden och har samma innehåll, men är inte byte för byte den som mejlades.">Återskapad</span>';
+    }
+    return $html;
 }
 
 /** Filnamnet som i bekräftelsemejlet. */

@@ -16,8 +16,7 @@ SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
     Require all denied
 </FilesMatch>
 
-# Markdown: docs/ ligger i public/ eftersom docs/pdf/ serveras över HTTP,
-# men dokumentationen i .md ska inte vara publik.
+# Markdown: dokumentationen i docs/*.md ska inte vara publik.
 <FilesMatch "\.(md|markdown)$">
     Require all denied
 </FilesMatch>
@@ -34,3 +33,7 @@ Options -Indexes
 # resurser. include/css/style.css, include/css/redesign.css och include/js/ laddas
 # av sidorna över HTTP — en total blockering av /include/ tar bort all styling.
 RedirectMatch 404 ^/(include|lib)/.*\.(php|phtml|inc|sql|md)$
+
+# PUB-mallarna flyttades 2026-11-09 till pub_docs/ utanför webbroten och lämnas
+# ut av pub_dokument.php efter inloggning. Inget under docs/ ska serveras direkt.
+RedirectMatch 404 ^/docs/

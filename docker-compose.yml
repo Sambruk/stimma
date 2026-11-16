@@ -109,7 +109,7 @@ services:
     volumes:
       - /opt/app/stimma/backups:/backup/local
       - /opt/app/stimma/public/upload:/data/upload:ro
-      - /opt/app/stimma/public/docs:/data/docs:ro
+      - /opt/app/stimma/pub_docs:/data/docs:ro
       - /opt/app/stimma/config:/data/config:ro
       - /opt/app/stimma/.env:/data/env/.env:ro
     labels:
